@@ -1103,7 +1103,14 @@ startxref
   async getAllFacultyMiniProjects(
     tenantSlug: string,
     facultyId?: string,
-    queryFilters: { courseId?: string; batchId?: string; branchId?: string } = {},
+    queryFilters: {
+      courseId?: string;
+      batchId?: string;
+      branchId?: string;
+      semesterId?: string;
+      section?: string;
+      subjectId?: string;
+    } = {},
   ) {
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
@@ -1151,6 +1158,18 @@ startxref
       )`;
     }
 
+    if (queryFilters.batchId && queryFilters.batchId !== 'all') {
+      params.push(queryFilters.batchId);
+      const bIdx = params.length;
+      sql += ` AND (p.batch_id IS NULL OR p.batch_id = 'all' OR p.batch_id::text = $${bIdx}::text)`;
+    }
+
+    if (queryFilters.branchId && queryFilters.branchId !== 'all') {
+      params.push(queryFilters.branchId);
+      const brIdx = params.length;
+      sql += ` AND (p.branch_id IS NULL OR p.branch_id = 'all' OR p.branch_id::text = $${brIdx}::text)`;
+    }
+
     sql += ` ORDER BY COALESCE(p.id::text, p.title), p.created_at DESC`;
     return this.tenantSchemaService.queryInTenant(tenantSlug, sql, params);
   }
@@ -1158,7 +1177,14 @@ startxref
   async getMiniProjectApplicants(
     tenantSlug: string,
     projectId?: string,
-    queryFilters: { courseId?: string; batchId?: string; branchId?: string } = {},
+    queryFilters: {
+      courseId?: string;
+      batchId?: string;
+      branchId?: string;
+      semesterId?: string;
+      section?: string;
+      subjectId?: string;
+    } = {},
   ) {
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
@@ -1223,6 +1249,19 @@ startxref
       params.push(queryFilters.branchId);
       const pIdx = params.length;
       sql += ` AND (st.branch_id::text = $${pIdx}::text)`;
+    }
+
+    if (queryFilters.semesterId && queryFilters.semesterId !== 'all') {
+      const cleanSem = String(queryFilters.semesterId).replace(/\D/g, '');
+      params.push(cleanSem);
+      const sIdx = params.length;
+      sql += ` AND (st.semester::text = $${sIdx}::text OR st.sem_cd::text = $${sIdx}::text)`;
+    }
+
+    if (queryFilters.section && queryFilters.section !== 'all') {
+      params.push(queryFilters.section);
+      const secIdx = params.length;
+      sql += ` AND (st.section::text ILIKE $${secIdx}::text)`;
     }
 
     sql += `
@@ -2478,7 +2517,18 @@ startxref
 
   async getSubmissions(
     tenantSlug: string,
-    query: { topicId?: string; status?: string; search?: string; courseId?: string; facultyId?: string } = {},
+    query: {
+      topicId?: string;
+      status?: string;
+      search?: string;
+      courseId?: string;
+      branchId?: string;
+      batchId?: string;
+      semesterId?: string;
+      section?: string;
+      subjectId?: string;
+      facultyId?: string;
+    } = {},
   ) {
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
     const params: any[] = [];
@@ -2489,6 +2539,12 @@ startxref
              s.file_type, s.marks_awarded, s.remarks AS submission_remarks, s.evaluated_at AS submission_evaluated_at,
              s.annotations,
              st.name AS student_name, st.rollno, st.registration_no, st.photo_url,
+             COALESCE(st.course_cd, t.course_id) AS course_cd,
+             COALESCE(st.branch_cd, t.branch_id) AS branch_cd,
+             COALESCE(st.batch_cd, t.batch_id) AS batch_cd,
+             COALESCE(st.semester, st.sem_cd, t.semester_id) AS sem_cd,
+             COALESCE(st.section, t.section) AS section,
+             COALESCE(t.subject_id, '') AS subject_id,
              cr.name AS course_name,
              COALESCE(b.name, CASE WHEN b.year IS NOT NULL THEN 'Batch ' || b.year::text ELSE NULL END, st.batch_cd) AS batch_name,
              t.title AS topic_title, t.max_marks, t.submission_deadline,
@@ -2547,6 +2603,32 @@ startxref
                  WHEN $${pIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR st.course_cd = '2' OR t.course_id = '2'
                  ELSE false END)
       )`;
+    }
+    if (query.branchId && query.branchId !== 'all') {
+      params.push(query.branchId);
+      const bIdx = params.length;
+      sql += ` AND (st.branch_cd::text = $${bIdx}::text OR t.branch_id::text = $${bIdx}::text)`;
+    }
+    if (query.batchId && query.batchId !== 'all') {
+      params.push(query.batchId);
+      const batIdx = params.length;
+      sql += ` AND (st.batch_cd::text = $${batIdx}::text OR t.batch_id::text = $${batIdx}::text OR b.batch_cd::text = $${batIdx}::text OR b.name ILIKE '%' || $${batIdx}::text || '%')`;
+    }
+    if (query.semesterId && query.semesterId !== 'all') {
+      const cleanSem = String(query.semesterId).replace(/\D/g, '');
+      params.push(cleanSem);
+      const sIdx = params.length;
+      sql += ` AND (st.semester::text = $${sIdx}::text OR st.sem_cd::text = $${sIdx}::text OR t.semester_id::text = $${sIdx}::text OR t.semester_id::text ILIKE '%' || $${sIdx}::text || '%')`;
+    }
+    if (query.section && query.section !== 'all') {
+      params.push(query.section);
+      const secIdx = params.length;
+      sql += ` AND (st.section::text ILIKE $${secIdx}::text OR t.section::text ILIKE $${secIdx}::text)`;
+    }
+    if (query.subjectId && query.subjectId !== 'all') {
+      params.push(query.subjectId);
+      const subIdx = params.length;
+      sql += ` AND (t.subject_id::text = $${subIdx}::text OR t.title ILIKE '%' || $${subIdx}::text || '%' OR t.description ILIKE '%' || $${subIdx}::text || '%')`;
     }
     if (query.search) {
       params.push(`%${query.search}%`);

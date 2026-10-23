@@ -119,7 +119,29 @@ export class CreateExamPaperDto {
 
   @IsString()
   @IsOptional()
+  facultyId?: string;
+
+  @IsString()
+  @IsOptional()
+  role?: string;
+
+  @IsString()
+  @IsOptional()
   notes?: string;
+
+  @IsString()
+  @IsOptional()
+  paperSet?: string;
+
+  @IsString()
+  @IsOptional()
+  paper_set?: string;
+
+  @IsOptional()
+  targetSections?: any;
+
+  @IsOptional()
+  target_sections?: any;
 }
 
 export class SubmitResultDto {
@@ -280,6 +302,14 @@ export class CreateQuestionDto {
   @IsString()
   @IsOptional()
   subTopicCode?: string;
+
+  @IsString()
+  @IsOptional()
+  imageUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  image_url?: string;
 }
 
 export class CreatePaperDesignDto {

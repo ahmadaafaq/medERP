@@ -418,12 +418,21 @@ export default function TheoryResultReportPage() {
       };
       const parse = (j: any) => Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
 
-      const [cRes, srmsCRes, dRes, sRes, pRes] = await Promise.all([
+      let facIdParam = '';
+      if (typeof window !== 'undefined') {
+        try {
+          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          facIdParam = u.emp_id || u.faculty_id || u.id || u.sub || localStorage.getItem('empid') || '';
+        } catch {}
+      }
+
+      const [cRes, srmsCRes, dRes, sRes, pRes, facSubRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers }).catch(() => null),
         fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null),
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}${facIdParam ? `&facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers }).catch(() => null),
+        facIdParam ? fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${slug}&facultyId=${encodeURIComponent(facIdParam)}`, { headers }).catch(() => null) : Promise.resolve(null),
       ]);
 
       // 1. Courses
@@ -490,7 +499,26 @@ export default function TheoryResultReportPage() {
 
       // 5. Subjects
       if (sRes && sRes.ok) {
-        const sList: Subject[] = parse(await sRes.json());
+        let sList: Subject[] = parse(await sRes.json());
+        let linkedItems: any[] = [];
+        if (facSubRes && facSubRes.ok) {
+          linkedItems = parse(await facSubRes.json());
+        }
+        if (linkedItems.length > 0) {
+          const linkedKeys = new Set(linkedItems.map((l: any) => String(l.subject_code || l.subject_id || '').toLowerCase()));
+          const filtered = sList.filter((s: any) =>
+            linkedKeys.has(String(s.code || '').toLowerCase()) ||
+            linkedKeys.has(String(s.id || '').toLowerCase()) ||
+            linkedKeys.has(String(s.subject_cd || '').toLowerCase()) ||
+            linkedKeys.has(String(s.name || '').toLowerCase())
+          );
+          sList = filtered.length > 0 ? filtered : linkedItems.map((l: any) => ({
+            id: String(l.subject_id || l.id),
+            code: String(l.subject_code || 'SUB'),
+            name: String(l.subject_name || 'Subject'),
+            subject_cd: String(l.subject_code || l.subject_id),
+          }));
+        }
         setAllSubjects(sList);
       }
 

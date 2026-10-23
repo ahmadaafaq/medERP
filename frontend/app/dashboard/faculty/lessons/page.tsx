@@ -3,6 +3,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
 
 interface AcademicCourse {
   code: string;
@@ -29,6 +32,7 @@ interface Lesson {
   branch_cd: string;
   batch_cd: string;
   sem_cd: string;
+  section?: string;
   subject_id?: string;
   unit_id?: string;
   topic_id?: string;
@@ -220,6 +224,9 @@ function generateSyllabusSubtopics(topicCode: string): CurriculumSubtopic[] {
 }
 
 export default function FacultyLessonsPage() {
+  // Academic Hierarchy Cascading State (Faculty Linked)
+  const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
+
   const [colgCd, setColgCd] = useState<string>('1');
   const [colgName, setColgName] = useState<string>('SRMS College of Engineering & Technology (CET Bareilly)');
 
@@ -229,11 +236,11 @@ export default function FacultyLessonsPage() {
   const [batchesList, setBatchesList] = useState<AcademicBatch[]>([]);
   const [semestersList, setSemestersList] = useState<{ code: string; label: string }[]>([]);
 
-  const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
-  const [selectedBranch, setSelectedBranch] = useState<string>('1');
-  const [selectedBatch, setSelectedBatch] = useState<string>('2');
-  const [selectedSem, setSelectedSem] = useState<string>('3');
-  const [selectedSection, setSelectedSection] = useState<string>('1'); // Section 1 = A, 2 = B, 3 = C, 4 = D
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [selectedBatch, setSelectedBatch] = useState<string>('');
+  const [selectedSem, setSelectedSem] = useState<string>('');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
 
   // Curriculum State
   const [rawSubjects, setRawSubjects] = useState<any[]>([]);
@@ -253,6 +260,33 @@ export default function FacultyLessonsPage() {
   const [loadingUnits, setLoadingUnits] = useState<boolean>(false);
   const [loadingTopics, setLoadingTopics] = useState<boolean>(false);
   const [loadingSubtopics, setLoadingSubtopics] = useState<boolean>(false);
+
+  // Cascading Context Selector Handler
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setAcademicCascade(state);
+    const newColgCd = state.college?.colg_cd || colgCd || '1';
+    const newColgName = state.college?.colg_name || colgName;
+    const newCourseCd = state.course?.course_cd || '';
+    const newBranchCd = state.branch?.branch_cd || '';
+    const newBatchCd = state.batch?.batch_cd ? String(state.batch.batch_cd) : '';
+    const newSemCd = state.semester?.sem_cd ? String(state.semester.sem_cd) : '';
+    const newSecCd = state.section || 'all';
+    const newSubjectCd = state.subject?.code || state.subject?.id || '';
+
+    setColgCd(newColgCd);
+    if (newColgName) setColgName(newColgName);
+    setSelectedCourse(newCourseCd);
+    setSelectedBranch(newBranchCd);
+    setSelectedBatch(newBatchCd);
+    setSelectedSem(newSemCd);
+    setSelectedSection(newSecCd);
+
+    if (newSubjectCd !== selectedSubject) {
+      handleSubjectChange(newSubjectCd, state.subject);
+    }
+
+    fetchLessons(newCourseCd, newBranchCd, newBatchCd, newSemCd, newSubjectCd, newSecCd);
+  };
   const [firmMode, setFirmMode] = useState<string>('NONMED');
 
   const isNonMed = firmMode === 'NONMED';
@@ -319,8 +353,10 @@ export default function FacultyLessonsPage() {
 
   const formatAcademicScope = (item: Lesson) => {
     // 1. Course Name
-    const courseMatch = coursesList.find((c) => String(c.code) === String(item.course_cd));
-    let courseName = courseMatch?.name;
+    let courseName =
+      academicCascade?.course && String(academicCascade.course.course_cd) === String(item.course_cd)
+        ? academicCascade.course.course_name
+        : coursesList.find((c) => String(c.code) === String(item.course_cd))?.name;
     if (!courseName) {
       if (item.course_cd === '13') courseName = 'BCA';
       else if (item.course_cd === '1') courseName = 'B.Tech';
@@ -331,8 +367,10 @@ export default function FacultyLessonsPage() {
     }
 
     // 2. Branch Name (Format short code in parentheses like BCA • (CSE))
-    const branchMatch = branchesList.find((b) => String(b.code) === String(item.branch_cd));
-    let branchName = branchMatch?.name;
+    let branchName =
+      academicCascade?.branch && String(academicCascade.branch.branch_cd) === String(item.branch_cd)
+        ? academicCascade.branch.branch_name
+        : branchesList.find((b) => String(b.code) === String(item.branch_cd))?.name;
     if (!branchName) {
       if (item.course_cd === '13') branchName = '(CSE)';
       else if (item.course_cd === '3') branchName = '(MCA)';
@@ -354,8 +392,10 @@ export default function FacultyLessonsPage() {
     }
 
     // 3. Batch Name
-    const batchMatch = batchesList.find((b) => String(b.code) === String(item.batch_cd));
-    let batchName = batchMatch?.name;
+    let batchName =
+      academicCascade?.batch && String(academicCascade.batch.batch_cd) === String(item.batch_cd)
+        ? academicCascade.batch.batch_name
+        : batchesList.find((b) => String(b.code) === String(item.batch_cd))?.name;
     if (!batchName) {
       if (item.batch_cd === '2' || item.batch_cd === '18') batchName = '2025';
       else if (item.batch_cd === '15' || item.batch_cd === '17') batchName = '2024';
@@ -369,7 +409,7 @@ export default function FacultyLessonsPage() {
 
     return {
       primary: `${courseName} • ${branchName}`,
-      secondary: `Batch ${batchName} • ${semLabel}`,
+      secondary: `Batch ${batchName} • ${semLabel}${item.section ? ` • Sec ${item.section}` : ''}`,
     };
   };
 
@@ -519,11 +559,27 @@ export default function FacultyLessonsPage() {
       };
 
       // A. Fetch from Curriculum Subject Master in PostgreSQL
-      const subjRes = await fetch(`${API_BASE}/admin-master/subjects?tenant=${tenant}`, { headers }).catch(() => null);
+      let facIdParam = '';
+      if (typeof window !== 'undefined') {
+        try {
+          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          facIdParam = u.faculty_id || u.profile?.id || u.id || u.sub || u.emp_id || localStorage.getItem('empid') || '';
+        } catch {}
+      }
+
+      const [subjRes, facSubRes] = await Promise.all([
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${tenant}${facIdParam ? `&facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers }).catch(() => null),
+        facIdParam ? fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${tenant}&facultyId=${encodeURIComponent(facIdParam)}`, { headers }).catch(() => null) : Promise.resolve(null),
+      ]);
       let backendSubjects: any[] = [];
       if (subjRes && subjRes.ok) {
         const j = await subjRes.json();
         backendSubjects = Array.isArray(j.data) ? j.data : Array.isArray(j) ? j : [];
+      }
+      let linkedItems: any[] = [];
+      if (facSubRes && facSubRes.ok) {
+        const fj = await facSubRes.json();
+        linkedItems = Array.isArray(fj.data) ? fj.data : Array.isArray(fj) ? fj : [];
       }
 
       // B. Fetch from live SRMS portal proxy
@@ -585,7 +641,7 @@ export default function FacultyLessonsPage() {
         }
       });
 
-      const subjectsList = Array.from(mergedMap.values())
+      let subjectsList = Array.from(mergedMap.values())
         .filter((s: any) => getNumericSubCd(s) !== null)
         .map((s: any) => {
           const numCode = getNumericSubCd(s)!;
@@ -598,6 +654,16 @@ export default function FacultyLessonsPage() {
           };
         })
         .sort((a, b) => Number(a.code) - Number(b.code));
+
+      if (linkedItems.length > 0) {
+        const linkedKeys = new Set(linkedItems.map((l: any) => String(l.subject_code || l.subject_id || '').toLowerCase()));
+        subjectsList = subjectsList.filter((s: any) =>
+          linkedKeys.has(String(s.code || '').toLowerCase()) ||
+          linkedKeys.has(String(s.id || '').toLowerCase()) ||
+          linkedKeys.has(String(s.sub_cd || '').toLowerCase()) ||
+          linkedKeys.has(String(s.name || '').toLowerCase())
+        );
+      }
 
       setRawSubjects(subjectsList);
       setSubjectsLoaded(true);
@@ -629,7 +695,7 @@ export default function FacultyLessonsPage() {
   };
 
   // 2. On subject select: dynamically fetch & load units specifically for the selected subject
-  const handleSubjectChange = async (newSubjectCode: string) => {
+  const handleSubjectChange = async (newSubjectCode: string, passedSubObj?: any) => {
     setSelectedSubject(newSubjectCode);
     setSelectedUnit('');
     setSelectedTopic('');
@@ -646,11 +712,17 @@ export default function FacultyLessonsPage() {
       const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
       const headers = { 'Authorization': `Bearer ${token}` };
 
-      // Find subject details from loaded rawSubjects
-      const subjObj = rawSubjects.find(
-        (s: any) => String(s.code).toLowerCase() === String(newSubjectCode).toLowerCase() ||
-                    String(s.id).toLowerCase() === String(newSubjectCode).toLowerCase()
-      );
+      // Find subject details from passed subject or academicCascade or rawSubjects
+      const subjObj = passedSubObj ||
+        (academicCascade?.allSubjects || []).find(
+          (s: any) => String(s.code).toLowerCase() === String(newSubjectCode).toLowerCase() ||
+                      String(s.id).toLowerCase() === String(newSubjectCode).toLowerCase()
+        ) ||
+        academicCascade?.subject ||
+        rawSubjects.find(
+          (s: any) => String(s.code).toLowerCase() === String(newSubjectCode).toLowerCase() ||
+                      String(s.id).toLowerCase() === String(newSubjectCode).toLowerCase()
+        );
       const subName = (subjObj?.name || '').trim();
       const subCode = (subjObj?.code || newSubjectCode).trim();
       const subId = subjObj?.id || '';
@@ -1012,42 +1084,6 @@ export default function FacultyLessonsPage() {
     };
 
     detectFirmMode();
-
-    const initAcademicMetadata = async () => {
-      try {
-        const courses = await fetchCourses(cd, slug);
-        setCoursesList(courses);
-
-        const defaultCourse = courses.find((c) => c.code === '13' || c.name.toLowerCase().includes('bca')) || courses[0];
-        const initialCourseCd = defaultCourse ? defaultCourse.code : '13';
-        setSelectedCourse(initialCourseCd);
-
-        const [branches, batches] = await Promise.all([
-          fetchBranches(cd, initialCourseCd, slug, courses),
-          fetchBatches(cd, initialCourseCd, slug),
-        ]);
-
-        setBranchesList(branches);
-        setBatchesList(batches);
-
-        const sems = getSemestersForCourse(initialCourseCd, defaultCourse?.name);
-        setSemestersList(sems);
-
-        const defaultBranch = branches[0]?.code || '1';
-        const defaultBatch = batches.find((b) => b.name === '2025' || b.name === '2026' || b.year === 2025 || b.year === 2026)?.code || batches[0]?.code || '1';
-        const defaultSem = sems.some((s) => s.code === '3') ? '3' : (sems[0]?.code || '1');
-
-        setSelectedBranch(defaultBranch);
-        setSelectedBatch(defaultBatch);
-        setSelectedSem(defaultSem);
-
-        fetchLessons(initialCourseCd, defaultBranch, defaultBatch, defaultSem, '', '1');
-      } catch (err) {
-        console.warn('Error loading academic metadata:', err);
-      }
-    };
-
-    initAcademicMetadata();
   }, []);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1198,274 +1234,133 @@ export default function FacultyLessonsPage() {
             </div>
           )}
 
-          {/* STEP 1: Academic & Semester Scoping with Section Dropdown & Get Subject Button */}
-          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-5">
+          {/* STEP 1: Faculty Academic Hierarchy Cascading (College -> Course -> Branch -> Batch -> Semester -> Subject -> Section) */}
+          <FacultyAcademicCascadingDropdown
+            onSelectionChange={handleAcademicCascadeChange}
+            selectedCollegeCd={academicCascade?.college?.colg_cd}
+            selectedCourseCd={academicCascade?.course?.course_cd}
+            selectedBranchCd={academicCascade?.branch?.branch_cd}
+            selectedBatchCd={academicCascade?.batch?.batch_cd ? String(academicCascade.batch.batch_cd) : undefined}
+            selectedSemCd={academicCascade?.semester?.sem_cd}
+            selectedSecCd={selectedSection}
+            selectedSubjectCd={selectedSubject}
+            showSubject={true}
+            showSection={true}
+            onlyLinkedSubjects={true}
+            title="🎓 Academic & Subject Scoping (Faculty Linked)"
+            subtitle="College → Course → Branch → Batch → Semester → Subject → Section"
+          />
+
+          {/* STEP 2: Curriculum Topic Mapping (Unit ➔ Topic ➔ Sub-Topic / Competency) */}
+          <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
             <div className="border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <h3 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <span>🎓</span>
-                <span>STEP 1: ACADEMIC & SEMESTER SCOPING</span>
-              </h3>
-              <p className="text-xs text-[#7B8794] mt-0.5 font-medium">
-                Select target Academic Hierarchy (College, Course, Branch, Batch, Semester, Section) then click &quot;Get Subject&quot;.
-              </p>
-            </div>
-
-            {/* Cascading Selectors: College, Course, Branch, Batch, Semester, Section, and Get Subject Button */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 text-xs items-end">
-
-              {/* 1. College (Locked to Active Tenant) */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block font-bold text-slate-700 dark:text-slate-300">1. College</label>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 rounded border border-emerald-200 dark:border-emerald-800">
-                    🔒 Active Tenant
-                  </span>
-                </div>
-                <select
-                  value={colgCd}
-                  disabled
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold cursor-not-allowed opacity-90 text-slate-800 dark:text-slate-200 shadow-sm"
-                >
-                  <option value={colgCd}>[{colgCd}] {colgName}</option>
-                </select>
-              </div>
-
-              {/* 2. Course */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">2. Course *</label>
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => handleCourseChange(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {coursesList.map((crs) => (
-                    <option key={crs.code} value={crs.code}>
-                      [#{crs.code}] {crs.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 3. Branch */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  3. Branch * <span className="text-[#F36C21]">({branchesList.length})</span>
-                </label>
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => handleBranchChange(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {branchesList.map((br) => (
-                    <option key={br.code} value={br.code}>
-                      [#{br.code}] {br.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 4. Batch */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">4. Batch *</label>
-                <select
-                  value={selectedBatch}
-                  onChange={(e) => handleBatchChange(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  {batchesList.map((bt) => (
-                    <option key={bt.code} value={bt.code}>
-                      [#{bt.code}] {bt.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 5. Semester */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">5. Semester *</label>
-                <select
-                  value={selectedSem}
-                  onChange={(e) => handleSemChange(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#F36C21] dark:text-orange-400 focus:outline-none focus:border-[#F36C21]"
-                >
-                  {semestersList.map((s) => (
-                    <option key={s.code} value={s.code}>
-                      {s.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 6. Section Dropdown (Right side of Semester) */}
-              <div>
-                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">6. Section *</label>
-                <select
-                  value={selectedSection}
-                  onChange={(e) => handleSectionChange(e.target.value)}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                >
-                  <option value="1">[#1] Section A</option>
-                  <option value="2">[#2] Section B</option>
-                  <option value="3">[#3] Section C</option>
-                  <option value="4">[#4] Section D</option>
-                  <option value="ALL">All Sections</option>
-                </select>
-              </div>
-
-              {/* 7. Get Subject Button */}
-              <div>
-                <button
-                  type="button"
-                  onClick={handleGetSubjects}
-                  disabled={loadingSubjects}
-                  className="w-full h-[42px] px-3 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-[#7867FF] hover:opacity-90 text-white font-black text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center gap-1.5 transition cursor-pointer disabled:opacity-60"
-                  title="Click to load subjects for selected course, branch, batch, semester, and section"
-                >
-                  <span>{loadingSubjects ? '⏳' : '📚'}</span>
-                  <span>{loadingSubjects ? 'Loading...' : 'Get Subject'}</span>
-                </button>
-              </div>
-
-            </div>
-
-            {/* STEP 2: Curriculum Topic Mapping (Subject ➔ Unit ➔ Topic ➔ Sub-Topic) */}
-            <div className="border-t border-[#E7EAF3] dark:border-slate-800 pt-4 space-y-3">
               <h4 className="text-xs font-black uppercase text-[#F36C21] tracking-wider flex items-center gap-2">
                 <span>📖</span>
                 <span>STEP 2: CURRICULUM TOPIC MAPPING</span>
               </h4>
+              <p className="text-xs text-[#7B8794] mt-0.5 font-medium">
+                Map Unit, Topic, and {subtopicLabel} for <span className="font-bold text-[#1B1E28] dark:text-white">{academicCascade?.subject?.name ? `[#${academicCascade.subject.code}] ${academicCascade.subject.name}` : selectedSubject ? `Subject #${selectedSubject}` : 'the selected subject in Step 1'}</span>.
+              </p>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
 
-                {/* 1. Subject Dropdown (Loads on Get Subject button press) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Subject * {subjectsLoaded ? (
-                      <span className="text-[#5B4BFF]">({rawSubjects.length})</span>
-                    ) : (
-                      <span className="text-[#F36C21] font-semibold text-[10px]">(Click &quot;Get Subject&quot; Above)</span>
-                    )}
-                  </label>
-                  <select
-                    value={selectedSubject}
-                    onChange={(e) => handleSubjectChange(e.target.value)}
-                    disabled={!subjectsLoaded || rawSubjects.length === 0}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] disabled:opacity-60 disabled:cursor-not-allowed"
-                  >
-                    {!subjectsLoaded ? (
-                      <option value="">-- Click &quot;Get Subject&quot; button above to load --</option>
-                    ) : rawSubjects.length === 0 ? (
-                      <option value="">-- No subjects found for this selection --</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select Curriculum Subject --</option>
-                        {rawSubjects.map((sub) => (
-                          <option key={sub.id || sub.code} value={sub.code}>
-                            [#{sub.code}] {sub.name}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* 2. Unit Dropdown (Loads dynamically on Subject selection) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Unit {selectedSubject && (
-                      <span className="text-[#5B4BFF]">({subjectUnits.length})</span>
-                    )}
-                  </label>
-                  <select
-                    value={selectedUnit}
-                    onChange={(e) => handleUnitChange(e.target.value)}
-                    disabled={!selectedSubject || loadingUnits}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                  >
-                    {loadingUnits ? (
-                      <option value="">⏳ Loading units for {selectedSubject}...</option>
-                    ) : !selectedSubject ? (
-                      <option value="">-- Select Subject First --</option>
-                    ) : subjectUnits.length === 0 ? (
-                      <option value="">-- No units available --</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select Curriculum Unit / Chapter --</option>
-                        {subjectUnits.map((u) => (
-                          <option key={u.id || u.code} value={u.code}>
-                            [{u.code}] {u.name}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* 3. Topic Dropdown (Loads dynamically on Unit selection) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Topic {selectedUnit && (
-                      <span className="text-[#5B4BFF]">({unitTopics.length})</span>
-                    )}
-                  </label>
-                  <select
-                    value={selectedTopic}
-                    onChange={(e) => handleTopicChange(e.target.value)}
-                    disabled={!selectedUnit || loadingTopics}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                  >
-                    {loadingTopics ? (
-                      <option value="">⏳ Loading topics...</option>
-                    ) : !selectedUnit ? (
-                      <option value="">-- Select Unit First --</option>
-                    ) : unitTopics.length === 0 ? (
-                      <option value="">-- No topics available --</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select Teaching Topic --</option>
-                        {unitTopics.map((t) => (
-                          <option key={t.id || t.code} value={t.code}>
-                            [{t.code}] {t.name}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
-
-                {/* 4. Sub-Topic / Competency Dropdown (Loads dynamically on Topic selection from DB) */}
-                <div>
-                  <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    {subtopicLabel} {selectedTopic && (
-                      <span className="text-[#5B4BFF]">({topicSubtopics.length})</span>
-                    )}
-                  </label>
-                  <select
-                    value={selectedSubtopic}
-                    onChange={(e) => setSelectedSubtopic(e.target.value)}
-                    disabled={!selectedTopic || loadingSubtopics}
-                    className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
-                  >
-                    {!selectedTopic ? (
-                      <option value="">-- Select Topic First --</option>
-                    ) : loadingSubtopics ? (
-                      <option value="">⏳ Loading {subtopicLabel}s...</option>
-                    ) : topicSubtopics.length === 0 ? (
-                      <option value="">-- No {subtopicLabel.toLowerCase()}s available --</option>
-                    ) : (
-                      <>
-                        <option value="">-- Select {subtopicLabel} --</option>
-                        {topicSubtopics.map((st) => (
-                          <option key={st.id || st.code} value={st.code}>
-                            [{st.code}] {st.name}
-                          </option>
-                        ))}
-                      </>
-                    )}
-                  </select>
-                </div>
-
+              {/* 1. Unit Dropdown (Loads dynamically on Subject selection) */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Unit {selectedSubject && (
+                    <span className="text-[#5B4BFF]">({subjectUnits.length})</span>
+                  )}
+                </label>
+                <select
+                  value={selectedUnit}
+                  onChange={(e) => handleUnitChange(e.target.value)}
+                  disabled={!selectedSubject || loadingUnits}
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {loadingUnits ? (
+                    <option value="">⏳ Loading units for {selectedSubject}...</option>
+                  ) : !selectedSubject ? (
+                    <option value="">-- Select Subject First in Step 1 --</option>
+                  ) : subjectUnits.length === 0 ? (
+                    <option value="">-- No units available --</option>
+                  ) : (
+                    <>
+                      <option value="">-- Select Curriculum Unit / Chapter --</option>
+                      {subjectUnits.map((u) => (
+                        <option key={u.id || u.code} value={u.code}>
+                          [{u.code}] {u.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
               </div>
+
+              {/* 2. Topic Dropdown (Loads dynamically on Unit selection) */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Topic {selectedUnit && (
+                    <span className="text-[#5B4BFF]">({unitTopics.length})</span>
+                  )}
+                </label>
+                <select
+                  value={selectedTopic}
+                  onChange={(e) => handleTopicChange(e.target.value)}
+                  disabled={!selectedUnit || loadingTopics}
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {loadingTopics ? (
+                    <option value="">⏳ Loading topics...</option>
+                  ) : !selectedUnit ? (
+                    <option value="">-- Select Unit First --</option>
+                  ) : unitTopics.length === 0 ? (
+                    <option value="">-- No topics available --</option>
+                  ) : (
+                    <>
+                      <option value="">-- Select Teaching Topic --</option>
+                      {unitTopics.map((t) => (
+                        <option key={t.id || t.code} value={t.code}>
+                          [{t.code}] {t.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+              </div>
+
+              {/* 3. Sub-Topic / Competency Dropdown (Loads dynamically on Topic selection from DB) */}
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  {subtopicLabel} {selectedTopic && (
+                    <span className="text-[#5B4BFF]">({topicSubtopics.length})</span>
+                  )}
+                </label>
+                <select
+                  value={selectedSubtopic}
+                  onChange={(e) => setSelectedSubtopic(e.target.value)}
+                  disabled={!selectedTopic || loadingSubtopics}
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold disabled:opacity-50 disabled:cursor-not-allowed text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {!selectedTopic ? (
+                    <option value="">-- Select Topic First --</option>
+                  ) : loadingSubtopics ? (
+                    <option value="">⏳ Loading {subtopicLabel}s...</option>
+                  ) : topicSubtopics.length === 0 ? (
+                    <option value="">-- No {subtopicLabel.toLowerCase()}s available --</option>
+                  ) : (
+                    <>
+                      <option value="">-- Select {subtopicLabel} --</option>
+                      {topicSubtopics.map((st) => (
+                        <option key={st.id || st.code} value={st.code}>
+                          [{st.code}] {st.name}
+                        </option>
+                      ))}
+                    </>
+                  )}
+                </select>
+              </div>
+
             </div>
           </div>
 

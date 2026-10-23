@@ -46,7 +46,7 @@ export default function ClerkDashboardPage() {
           </div>
 
           {/* Quick Action Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 sm:gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4 sm:gap-5">
             <Link
               href="/dashboard/clerk/staff-master"
               className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/50 transition-all group shadow-sm hover:shadow-lg space-y-3"
@@ -120,6 +120,21 @@ export default function ClerkDashboardPage() {
               <div>
                 <h3 className="font-extrabold text-sm text-[#1B1E28] dark:text-white group-hover:text-purple-500 transition-colors">Assessment Marks Entry</h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Input internal assessments, formative test marks, and scores.</p>
+              </div>
+            </Link>
+
+            <Link
+              href="/dashboard/clerk/subject-linker"
+              className="p-5 rounded-2xl bg-white dark:bg-slate-900/80 hover:bg-slate-50 dark:hover:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 hover:border-emerald-500/50 transition-all group shadow-sm hover:shadow-lg space-y-3"
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 group-hover:bg-emerald-600 group-hover:text-white flex items-center justify-center transition-all">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-extrabold text-sm text-[#1B1E28] dark:text-white group-hover:text-emerald-500 transition-colors">Course & Subject Linker</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Map faculty members with curriculum subjects, branches & batches.</p>
               </div>
             </Link>
           </div>

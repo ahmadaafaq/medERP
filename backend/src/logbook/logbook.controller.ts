@@ -178,9 +178,12 @@ export class LogbookController {
     @Query('courseId') courseId?: string,
     @Query('batchId') batchId?: string,
     @Query('branchId') branchId?: string,
+    @Query('semesterId') semesterId?: string,
+    @Query('section') section?: string,
+    @Query('subjectId') subjectId?: string,
   ) {
     const facultyId = queryFacultyId === 'all' ? undefined : (queryFacultyId || user?.profile?.id || user?.userId || user?.id);
-    return this.logbookService.getAllFacultyMiniProjects(tenantSlug, facultyId, { courseId, batchId, branchId });
+    return this.logbookService.getAllFacultyMiniProjects(tenantSlug, facultyId, { courseId, batchId, branchId, semesterId, section, subjectId });
   }
 
   @Public()
@@ -192,8 +195,11 @@ export class LogbookController {
     @Query('courseId') courseId?: string,
     @Query('batchId') batchId?: string,
     @Query('branchId') branchId?: string,
+    @Query('semesterId') semesterId?: string,
+    @Query('section') section?: string,
+    @Query('subjectId') subjectId?: string,
   ) {
-    return this.logbookService.getMiniProjectApplicants(tenantSlug, projectId, { courseId, batchId, branchId });
+    return this.logbookService.getMiniProjectApplicants(tenantSlug, projectId, { courseId, batchId, branchId, semesterId, section, subjectId });
   }
 
   @Public()
@@ -616,9 +622,25 @@ export class LogbookController {
     @Query('status') status?: string,
     @Query('search') search?: string,
     @Query('courseId') courseId?: string,
+    @Query('branchId') branchId?: string,
+    @Query('batchId') batchId?: string,
+    @Query('semesterId') semesterId?: string,
+    @Query('section') section?: string,
+    @Query('subjectId') subjectId?: string,
     @Query('facultyId') facultyId?: string,
   ) {
-    return this.logbookService.getSubmissions(tenantSlug, { topicId, status, search, courseId, facultyId });
+    return this.logbookService.getSubmissions(tenantSlug, {
+      topicId,
+      status,
+      search,
+      courseId,
+      branchId,
+      batchId,
+      semesterId,
+      section,
+      subjectId,
+      facultyId,
+    });
   }
 
   @Public()

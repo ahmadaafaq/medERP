@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 
@@ -110,6 +110,12 @@ interface FacultySubjectLink {
   batch_cd?: string;
   sem_cd?: string;
   section?: string;
+  resolved_course_cd?: string;
+  resolved_course_name?: string;
+  resolved_branch_cd?: string;
+  resolved_branch_name?: string;
+  resolved_batch_cd?: string;
+  resolved_sem_cd?: string;
   college_id?: string;
   college_name?: string;
   college_code?: string;
@@ -140,6 +146,29 @@ export default function SubjectLinkerPage() {
   const [selectedSubjectId, setSelectedSubjectId] = useState('');
   const [selectedFacultyId, setSelectedFacultyId] = useState('');
   const [facultySearchTerm, setFacultySearchTerm] = useState('');
+  const [isFacultyDropdownOpen, setIsFacultyDropdownOpen] = useState(false);
+  const facultyDropdownRef = useRef<HTMLDivElement>(null);
+  const [sidebarRole, setSidebarRole] = useState<'admin' | 'clerk'>('admin');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const r = (localStorage.getItem('role') || localStorage.getItem('userRole') || '').toLowerCase();
+      if (r === 'clerk' || window.location.pathname.includes('/clerk')) {
+        setSidebarRole('clerk');
+      }
+    }
+  }, []);
+
+  // Handle click outside faculty autocomplete dropdown
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (facultyDropdownRef.current && !facultyDropdownRef.current.contains(event.target as Node)) {
+        setIsFacultyDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // Edit mode state
   const [editingLinkId, setEditingLinkId] = useState<string | null>(null);
@@ -832,12 +861,20 @@ export default function SubjectLinkerPage() {
     const targetSemCd = selectedSemCd !== 'all' ? selectedSemCd : (subObj?.sem_cd || subObj?.semester || '');
     const targetSection = selectedSection || 'All Sections';
 
-    // Duplicate check
+    // Duplicate check: Allow faculty to link across different academic scopes (course, branch, batch, semester, section)
     const isDup = links.some(
-      (l) => l.faculty_id === realFacId && l.subject_id === realSubId && l.id !== editingLinkId
+      (l) =>
+        (l.faculty_id === realFacId || l.faculty_code === facObj?.emp_id) &&
+        (l.subject_id === realSubId || l.subject_code === subObj?.code) &&
+        l.id !== editingLinkId &&
+        String(l.course_cd || l.resolved_course_cd || '') === String(targetCourseCd || '') &&
+        String(l.branch_cd || l.resolved_branch_cd || '') === String(targetBranchCd || '') &&
+        String(l.batch_cd || l.resolved_batch_cd || '') === String(targetBatchCd || '') &&
+        String(l.sem_cd || l.resolved_sem_cd || '').replace(/\D/g, '') === String(targetSemCd || '').replace(/\D/g, '') &&
+        String(l.section || 'All Sections') === String(targetSection || 'All Sections')
     );
     if (isDup) {
-      showAlert('error', 'This faculty member is already linked to this subject.');
+      showAlert('error', 'This faculty member is already linked to this subject under this exact academic scope.');
       return;
     }
 
@@ -922,6 +959,10 @@ export default function SubjectLinkerPage() {
     .map(f => {
       const sub = subjects.find(s => s.id === f.subject_id || s.code === f.subject_code);
       const facCol = colleges.find(c => c.slug === f.college_slug || String(c.code) === String(f.college_code) || c.id === f.college_id);
+      const rawCrs = sub?.course_cd;
+      const matchedCrs = courses.find(c => String(c.code) === String(rawCrs) || String(c.course_cd) === String(rawCrs) || String(c.id) === String(rawCrs));
+      const rawDept = sub?.branch_cd || f.department_code;
+      const matchedDept = departments.find(d => String(d.branch_cd) === String(rawDept) || String(d.code) === String(rawDept) || String(d.id) === String(rawDept));
 
       return {
         id: `primary-${f.id}`,
@@ -937,12 +978,18 @@ export default function SubjectLinkerPage() {
         subject_department_name: sub?.department_name || f.department_name,
         subject_department_code: sub?.department_code || f.department_code,
         course_cd: sub?.course_cd,
-        course_name: sub?.course_name,
+        course_name: matchedCrs?.name || sub?.course_name,
         branch_cd: sub?.branch_cd || f.department_code,
-        branch_name: sub?.department_name || f.department_name,
+        branch_name: matchedDept?.name || sub?.department_name || f.department_name,
         batch_cd: sub?.batch_cd,
         sem_cd: sub?.sem_cd || sub?.semester,
         section: 'All Sections',
+        resolved_course_cd: sub?.course_cd,
+        resolved_course_name: matchedCrs?.name || sub?.course_name,
+        resolved_branch_cd: sub?.branch_cd || f.department_code,
+        resolved_branch_name: matchedDept?.name || sub?.department_name || f.department_name,
+        resolved_batch_cd: sub?.batch_cd,
+        resolved_sem_cd: sub?.sem_cd || sub?.semester,
         college_id: facCol?.id || f.college_id,
         college_name: facCol?.name || f.college_name || (typeof window !== 'undefined' ? (localStorage.getItem('college_name') || localStorage.getItem('tenantName')) : '') || 'Institution',
         college_code: facCol?.code || f.college_code || '1',
@@ -952,31 +999,10 @@ export default function SubjectLinkerPage() {
       };
     });
 
-  // Merge explicit links with primary registered links and deduplicate
+  // Right side roster table: Show linked faculties only (from PostgreSQL faculty_subjects)
   const allDisplayLinks = useMemo(() => {
-    const combined: FacultySubjectLink[] = [...links];
-
-    primaryRegisteredLinks.forEach(pLink => {
-      const existsInExplicit = combined.some(
-        e => (e.faculty_id === pLink.faculty_id || e.faculty_code === pLink.faculty_code) &&
-             (e.subject_id === pLink.subject_id || e.subject_code === pLink.subject_code)
-      );
-      if (!existsInExplicit) {
-        combined.push(pLink);
-      }
-    });
-
-    const seen = new Set<string>();
-    const uniqueLinks: FacultySubjectLink[] = [];
-    for (const l of combined) {
-      const key = `${l.faculty_code || l.faculty_id}-${l.subject_code || l.subject_id}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        uniqueLinks.push(l);
-      }
-    }
-    return uniqueLinks;
-  }, [links, primaryRegisteredLinks]);
+    return links;
+  }, [links]);
 
   // Filter available departments dynamically from actual linked items + department master
   const availableFilterDepartments = useMemo(() => {
@@ -1035,11 +1061,15 @@ export default function SubjectLinkerPage() {
         const targetColSlug = targetCol?.slug || selectedCollegeFilter;
         const targetColId = targetCol?.id || selectedCollegeFilter;
 
+        const linkColCd = link.college_code ? String(link.college_code) : (userColgCd || '1');
+        const linkColSlug = link.college_slug || userTenantSlug || 'srms-cet-bareilly';
+        const linkColId = link.college_id || targetCol?.id;
+
         const isColMatch =
-          String(link.college_code) === String(targetColCode) ||
-          link.college_slug === targetColSlug ||
-          link.college_id === targetColId ||
-          (targetCol && (link.college_id === targetCol.id || link.college_slug === targetCol.slug || String(link.college_code) === String(targetCol.code)));
+          String(linkColCd) === String(targetColCode) ||
+          linkColSlug === targetColSlug ||
+          linkColId === targetColId ||
+          (targetCol && (linkColId === targetCol.id || linkColSlug === targetCol.slug || String(linkColCd) === String(targetCol.code)));
         if (!isColMatch) return false;
       }
 
@@ -1050,15 +1080,18 @@ export default function SubjectLinkerPage() {
           String(c.course_cd) === String(selectedCourseFilter) ||
           String(c.id) === String(selectedCourseFilter)
         );
-        const targetCd = targetCourse?.course_cd || targetCourse?.code || selectedCourseFilter;
+        const targetCd = String(targetCourse?.course_cd || targetCourse?.code || selectedCourseFilter).trim().toLowerCase();
+        const targetId = String(targetCourse?.id || '').trim().toLowerCase();
         const targetName = (targetCourse?.name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
-        const linkCourseCd = String(link.course_cd || '');
-        const linkCourseName = (link.course_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+        const linkCourseCd = String(link.course_cd || link.resolved_course_cd || '').trim().toLowerCase();
+        const linkCourseName = (link.course_name || link.resolved_course_name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
         const isCourseMatch =
-          linkCourseCd === String(targetCd) ||
-          (targetName && linkCourseName && (linkCourseName === targetName || linkCourseName.includes(targetName)));
+          linkCourseCd === targetCd ||
+          (targetId && linkCourseCd === targetId) ||
+          (targetCd && linkCourseCd.includes(targetCd)) ||
+          (targetName && linkCourseName && (linkCourseName === targetName || linkCourseName.includes(targetName) || targetName.includes(linkCourseName)));
 
         if (!isCourseMatch) return false;
       }
@@ -1068,16 +1101,21 @@ export default function SubjectLinkerPage() {
         const filterVal = selectedDeptFilter.toLowerCase().trim();
         const facDept = (link.faculty_department_name || '').toLowerCase().trim();
         const subDept = (link.subject_department_name || '').toLowerCase().trim();
+        const branchName = (link.branch_name || link.resolved_branch_name || '').toLowerCase().trim();
         const facDeptCode = (link.faculty_department_code || '').toLowerCase().trim();
         const subDeptCode = (link.subject_department_code || '').toLowerCase().trim();
+        const branchCd = String(link.branch_cd || link.resolved_branch_cd || '').toLowerCase().trim();
 
         const isDeptMatch =
           facDept === filterVal ||
           subDept === filterVal ||
+          branchName === filterVal ||
           facDeptCode === filterVal ||
           subDeptCode === filterVal ||
+          branchCd === filterVal ||
           (facDept && (facDept.includes(filterVal) || filterVal.includes(facDept))) ||
-          (subDept && (subDept.includes(filterVal) || filterVal.includes(subDept)));
+          (subDept && (subDept.includes(filterVal) || filterVal.includes(subDept))) ||
+          (branchName && (branchName.includes(filterVal) || filterVal.includes(branchName)));
 
         if (!isDeptMatch) return false;
       }
@@ -1091,6 +1129,9 @@ export default function SubjectLinkerPage() {
           link.subject_name.toLowerCase().includes(term) ||
           link.subject_code.toLowerCase().includes(term) ||
           (link.course_name && link.course_name.toLowerCase().includes(term)) ||
+          (link.resolved_course_name && link.resolved_course_name.toLowerCase().includes(term)) ||
+          (link.branch_name && link.branch_name.toLowerCase().includes(term)) ||
+          (link.resolved_branch_name && link.resolved_branch_name.toLowerCase().includes(term)) ||
           (link.faculty_department_name && link.faculty_department_name.toLowerCase().includes(term)) ||
           (link.college_name && link.college_name.toLowerCase().includes(term));
         if (!matchesSearch) return false;
@@ -1102,7 +1143,7 @@ export default function SubjectLinkerPage() {
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
-      <Sidebar role="admin" />
+      <Sidebar role={sidebarRole} />
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty Subject Linker" />
         <main className="p-6 space-y-6 flex-1 bg-[#F6F8FC] dark:bg-[#0F172A]">
@@ -1358,31 +1399,155 @@ export default function SubjectLinkerPage() {
                       )}
                     </div>
 
-                    <input
-                      type="text"
-                      placeholder="Search faculty name or staff code..."
-                      value={facultySearchTerm}
-                      onChange={(e) => setFacultySearchTerm(e.target.value)}
-                      className="w-full px-3.5 py-1.5 mb-1 text-[11px] rounded-lg bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-slate-900 dark:text-white placeholder:text-slate-400"
-                    />
+                    {/* Selected Faculty Spotlight Card if already chosen */}
+                    {activeFaculty && (
+                      <div className="flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-[#5B4BFF]/10 to-indigo-500/10 border border-[#5B4BFF]/30 mb-2 shadow-sm">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+                            {activeFaculty.photo_url ? (
+                              <img src={activeFaculty.photo_url} alt={activeFaculty.name} className="w-full h-full object-cover rounded-full" />
+                            ) : (
+                              activeFaculty.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-extrabold text-slate-900 dark:text-white text-xs truncate">{activeFaculty.name}</span>
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-[#5B4BFF]/20 text-[#5B4BFF]">
+                                {activeFaculty.emp_id}
+                              </span>
+                            </div>
+                            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate">
+                              {activeFaculty.department_name || activeFaculty.designation || 'Faculty Member'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedFacultyId('');
+                            setFacultySearchTerm('');
+                            setIsFacultyDropdownOpen(true);
+                          }}
+                          className="text-slate-400 hover:text-rose-500 text-[11px] px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all font-bold shrink-0 ml-2"
+                          title="Change or pick another faculty"
+                        >
+                          ✕ Change
+                        </button>
+                      </div>
+                    )}
 
-                    {metadataLoading ? (
-                      <div className="h-10 w-full bg-slate-200 dark:bg-slate-800 animate-pulse rounded-xl"></div>
-                    ) : (
+                    {/* Faculty Autocomplete Typeahead Box */}
+                    <div ref={facultyDropdownRef} className="relative">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          placeholder={activeFaculty ? `Selected: ${activeFaculty.name} (type to search other)...` : "Search faculty name, staff ID or dept..."}
+                          value={facultySearchTerm}
+                          onFocus={() => setIsFacultyDropdownOpen(true)}
+                          onChange={(e) => {
+                            setFacultySearchTerm(e.target.value);
+                            setIsFacultyDropdownOpen(true);
+                          }}
+                          className="w-full px-3.5 py-2 pl-9 pr-8 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] focus:ring-2 focus:ring-[#5B4BFF]/20 text-slate-900 dark:text-white placeholder:text-slate-400 font-medium transition-all"
+                        />
+                        <div className="absolute left-3 top-2.5 text-slate-400 pointer-events-none">
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                          </svg>
+                        </div>
+                        {facultySearchTerm && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setFacultySearchTerm('');
+                            }}
+                            className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Autocomplete Dropdown Menu */}
+                      {isFacultyDropdownOpen && (
+                        <div className="absolute left-0 right-0 top-full mt-1.5 bg-white dark:bg-[#1B1E28] border border-[#5B4BFF]/30 dark:border-slate-700 rounded-xl shadow-xl z-50 max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 animate-in fade-in slide-in-from-top-1 duration-150">
+                          {metadataLoading ? (
+                            <div className="p-3 text-center text-xs text-slate-400">Loading faculty members...</div>
+                          ) : formAvailableFaculties.length === 0 ? (
+                            <div className="p-4 text-center">
+                              <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">No faculty found matching &ldquo;{facultySearchTerm}&rdquo;</p>
+                              {facultySearchTerm && (
+                                <button
+                                  type="button"
+                                  onClick={() => setFacultySearchTerm('')}
+                                  className="mt-1.5 text-[11px] font-bold text-[#5B4BFF] hover:underline"
+                                >
+                                  Clear search filter
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            formAvailableFaculties.map((fac) => {
+                              const isSelected = fac.id === selectedFacultyId || fac.emp_id === selectedFacultyId;
+                              return (
+                                <button
+                                  key={fac.id || fac.emp_id}
+                                  type="button"
+                                  onClick={() => {
+                                    handleFacultyChange(fac.id || fac.emp_id);
+                                    setIsFacultyDropdownOpen(false);
+                                    setFacultySearchTerm('');
+                                  }}
+                                  className={`w-full text-left px-3.5 py-2.5 flex items-center justify-between gap-2.5 transition-all hover:bg-[#5B4BFF]/10 ${
+                                    isSelected ? 'bg-[#5B4BFF]/15 border-l-4 border-[#5B4BFF]' : ''
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-[#5B4BFF] flex items-center justify-center font-black text-[10px] shrink-0">
+                                      {fac.photo_url ? (
+                                        <img src={fac.photo_url} alt={fac.name} className="w-full h-full object-cover rounded-full" />
+                                      ) : (
+                                        fac.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                                        {fac.name}
+                                      </p>
+                                      <p className="text-[10px] text-slate-500 dark:text-slate-400 truncate">
+                                        <span className="font-mono font-semibold text-slate-600 dark:text-slate-300">#{fac.emp_id}</span>
+                                        {fac.department_name ? ` • ${fac.department_name}` : ''}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  {isSelected && (
+                                    <span className="text-xs font-bold text-[#5B4BFF] shrink-0">✓ Selected</span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                        </div>
+                      )}
+
+                      {/* Native select as accessible/form fallback */}
                       <select
                         required
                         value={selectedFacultyId}
                         onChange={(e) => handleFacultyChange(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-[#5B4BFF] text-xs text-slate-900 dark:text-white font-bold transition-all"
+                        className="sr-only"
+                        aria-hidden="true"
+                        tabIndex={-1}
                       >
                         <option value="">-- Select Faculty Member --</option>
                         {formAvailableFaculties.map((fac) => (
                           <option key={fac.id} value={fac.id || fac.emp_id}>
-                            👤 {fac.name} ({fac.emp_id}) {fac.department_name ? `[${fac.department_name}]` : ''}
+                            {fac.name} ({fac.emp_id})
                           </option>
                         ))}
                       </select>
-                    )}
+                    </div>
                   </div>
 
                   {/* Active Selection Live Spotlight Card */}
@@ -1566,6 +1731,36 @@ export default function SubjectLinkerPage() {
                           const displayColName = matchedCol?.name || link.college_name || fallbackColg || 'Institution';
                           const displayColCode = matchedCol?.code || link.college_code || '1';
 
+                          const rawCourseCd = link.course_cd || link.resolved_course_cd;
+                          const matchedCourse = courses.find(c =>
+                            String(c.code) === String(rawCourseCd) ||
+                            String(c.course_cd) === String(rawCourseCd) ||
+                            String(c.id) === String(rawCourseCd)
+                          );
+                          const displayCourseName = matchedCourse?.name || link.resolved_course_name || link.course_name || (rawCourseCd ? `Course ${rawCourseCd}` : 'General Course');
+                          const displayCourseCode = matchedCourse?.course_cd || matchedCourse?.code || rawCourseCd;
+
+                          const rawBranchCd = link.branch_cd || link.resolved_branch_cd;
+                          const matchedDept = departments.find(d =>
+                            String(d.branch_cd) === String(rawBranchCd) ||
+                            String(d.code) === String(rawBranchCd) ||
+                            String(d.id) === String(rawBranchCd) ||
+                            (d.name && link.branch_name && d.name.toLowerCase() === link.branch_name.toLowerCase())
+                          );
+                          const displayBranchName = matchedDept?.name || link.resolved_branch_name || link.branch_name || link.faculty_department_name || (rawBranchCd ? `Branch ${rawBranchCd}` : 'All Branches');
+
+                          const rawBatchCd = link.batch_cd || link.resolved_batch_cd;
+                          const matchedBatch = batches.find(b =>
+                            String(b.code) === String(rawBatchCd) ||
+                            String(b.batch_cd) === String(rawBatchCd) ||
+                            String(b.year) === String(rawBatchCd)
+                          );
+                          const displayBatchName = matchedBatch?.name || (rawBatchCd ? (String(rawBatchCd).length === 4 ? `Batch ${rawBatchCd}` : `Batch ${rawBatchCd}`) : 'All Batches');
+
+                          const rawSemCd = link.sem_cd || link.resolved_sem_cd;
+                          const displaySemName = rawSemCd ? `Sem ${String(rawSemCd).replace(/\D/g, '') || rawSemCd}` : 'All Sems';
+                          const displaySecName = link.section && link.section !== 'All Sections' ? `Sec ${link.section}` : '';
+
                           return (
                             <tr key={link.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all group">
                               <td className="pl-6 py-4">
@@ -1581,19 +1776,19 @@ export default function SubjectLinkerPage() {
                                 <div className="space-y-1">
                                   <div className="flex items-center gap-1.5 flex-wrap">
                                     <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-[#5B4BFF] border border-[#5B4BFF]/25 font-black text-[9px] uppercase tracking-wide inline-block">
-                                      🎓 {link.course_name || link.course_cd || 'General Course'}
+                                      🎓 {displayCourseCode ? `[${displayCourseCode}] ` : ''}{displayCourseName}
                                     </span>
-                                    {link.section && link.section !== 'All Sections' && (
+                                    {displaySecName && (
                                       <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25 font-black text-[9px] inline-block">
-                                        🏷️ {link.section}
+                                        🏷️ {displaySecName}
                                       </span>
                                     )}
                                   </div>
                                   <p className="text-[10px] text-slate-600 dark:text-slate-300 font-bold">
-                                    {link.branch_name || link.faculty_department_name || link.branch_cd || 'All Branches'}
+                                    {displayBranchName}
                                   </p>
                                   <p className="text-[10px] text-slate-400 font-medium">
-                                    {link.batch_cd ? `Batch ${link.batch_cd}` : 'All Batches'} • {link.sem_cd ? `Sem ${link.sem_cd}` : 'All Sems'}
+                                    {displayBatchName} • {displaySemName}
                                   </p>
                                 </div>
                               </td>

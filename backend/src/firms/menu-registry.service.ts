@@ -276,6 +276,7 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.CLERK, menu_key: 'clerk_assessment', menu_label: 'Assessment & Marks Entry', route_path: '/dashboard/clerk/assessment', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_qp_designer', menu_label: 'Question Paper Designer', route_path: '/dashboard/clerk/qp-designer', sort_order: 42, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_timetable_designer', menu_label: 'Timetable Designer', route_path: '/dashboard/clerk/timetable-designer', sort_order: 45, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.CLERK, menu_key: 'clerk_subject_linker', menu_label: 'Course & Subject Linker', route_path: '/dashboard/clerk/subject-linker', sort_order: 48, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_placement', menu_label: 'Placement Drive Assistance', route_path: '/dashboard/clerk/placement', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.NONMED },
       { role: MenuRole.CLERK, menu_key: 'clerk_internships', menu_label: 'Internships & Certifications', route_path: '/dashboard/clerk/internships', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.CLERK, menu_key: 'clerk_library', menu_label: 'Digital Library', route_path: '/dashboard/clerk/library', sort_order: 65, applicable_firm_mode: ApplicableFirmMode.BOTH },

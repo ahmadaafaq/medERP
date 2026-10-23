@@ -8,6 +8,9 @@ import {
   BookOpen, BarChart2, Award, ChevronDown, ChevronRight,
   Loader2, RefreshCw, Save, FileText, Activity, Info, Sparkles,
 } from 'lucide-react';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
@@ -117,9 +120,13 @@ export default function FacultyObePage() {
   const [computing, setComputing] = useState(false);
   const [dashData, setDashData] = useState<any>(null);
   const [targets, setTargets] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
+
+  // Academic Cascading State from FacultyAcademicCascadingDropdown
+  const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
   const [selectedSubject, setSelectedSubject] = useState('');
   const [semester, setSemester] = useState('');
+  const [selectedSection, setSelectedSection] = useState('all');
+
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [editingAction, setEditingAction] = useState<{ id: string; value: string } | null>(null);
@@ -134,13 +141,22 @@ export default function FacultyObePage() {
   const tenant = getTenant();
   const facultyId = getFacultyId();
 
-  // Load dashboard data
-  const loadDashboard = useCallback(async () => {
+  // Load dashboard data with dynamic parameters
+  const loadDashboard = useCallback(async (customSubject?: string, customSemester?: string, customSection?: string) => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ tenant });
-      if (facultyId) params.append('facultyId', facultyId);
-      if (semester) params.append('semester', semester);
+      const activeTenant = getTenant();
+      const activeFacultyId = getFacultyId();
+      const params = new URLSearchParams({ tenant: activeTenant });
+      if (activeFacultyId) params.append('facultyId', activeFacultyId);
+
+      const targetSub = customSubject !== undefined ? customSubject : selectedSubject;
+      const targetSem = customSemester !== undefined ? customSemester : semester;
+      const targetSec = customSection !== undefined ? customSection : selectedSection;
+
+      if (targetSub) params.append('subjectCode', targetSub);
+      if (targetSem) params.append('semester', targetSem);
+      if (targetSec && targetSec !== 'all') params.append('section', targetSec);
 
       const res = await fetch(`${API_BASE}/obe/faculty-dashboard?${params}`, { headers: getHeaders() });
       if (res.ok) {
@@ -153,35 +169,25 @@ export default function FacultyObePage() {
     } finally {
       setLoading(false);
     }
-  }, [tenant, facultyId, semester]);
+  }, [selectedSubject, semester, selectedSection]);
 
-  // Load subjects for target declaration
+  // Handle live cascading change from FacultyAcademicCascadingDropdown
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setAcademicCascade(state);
+    const subCd = state.subject?.code || state.subject?.id || '';
+    const semVal = state.semester?.sem_cd ? String(state.semester.sem_cd) : state.semester?.code || '';
+    const secVal = state.section || 'all';
+
+    setSelectedSubject(subCd);
+    setSemester(semVal);
+    setSelectedSection(secVal);
+
+    // Live downstream refresh when active cascade state changes
+    loadDashboard(subCd, semVal, secVal);
+  };
+
+  // Initial dashboard load on mount
   useEffect(() => {
-    const loadSubjects = async () => {
-      try {
-        const res = await fetch(`${API_BASE}/admin-master/subjects?tenant=${encodeURIComponent(tenant)}`, { headers: getHeaders() });
-        if (res.ok) {
-          const json = await res.json();
-          const list: any[] = Array.isArray(json) ? json : json.data || [];
-          const normalized = list.map((s: any) => ({
-            code: String(s.code || s.sub_cd || s.id),
-            name: String(s.name || s.sub_name || s.mst_sub_name || s.code || 'Subject'),
-            sem_cd: s.sem_cd || s.semester,
-          }));
-          setSubjects(normalized);
-          if (normalized.length > 0) {
-            const preferred = normalized.find(s => s.code === '85185') || normalized[0];
-            setSelectedSubject(preferred.code);
-            if (preferred.sem_cd) {
-              setSemester(String(preferred.sem_cd).replace(/^Semester\s*/i, ''));
-            }
-          }
-        }
-      } catch (err) {
-        console.error('Failed to load subjects:', err);
-      }
-    };
-    loadSubjects();
     loadDashboard();
   }, [tenant, loadDashboard]);
 
@@ -189,22 +195,24 @@ export default function FacultyObePage() {
   useEffect(() => {
     if (activeTab !== 'surveys') return;
     const load = async () => {
-      const params = new URLSearchParams({ tenant });
+      const params = new URLSearchParams({ tenant: getTenant() });
       if (selectedSubject) params.append('subjectCode', selectedSubject);
       if (semester) params.append('semester', semester);
+      if (selectedSection && selectedSection !== 'all') params.append('section', selectedSection);
       const res = await fetch(`${API_BASE}/obe/surveys?${params}`, { headers: getHeaders() });
       if (res.ok) { const json = await res.json(); setSurveys(json.data || []); }
     };
     load();
-  }, [activeTab, tenant, selectedSubject, semester]);
+  }, [activeTab, selectedSubject, semester, selectedSection]);
 
   // Compute CO attainment for selected subject
   const computeAttainment = async () => {
     if (!selectedSubject) return showToast('Please select a subject first.', 'error');
     setComputing(true);
     try {
-      const params = new URLSearchParams({ tenant, subjectCode: selectedSubject });
+      const params = new URLSearchParams({ tenant: getTenant(), subjectCode: selectedSubject });
       if (semester) params.append('semester', semester);
+      if (selectedSection && selectedSection !== 'all') params.append('section', selectedSection);
       const res = await fetch(`${API_BASE}/obe/attainment/co?${params}`, { headers: getHeaders() });
       const json = await res.json();
       if (json.success) {
@@ -227,8 +235,9 @@ export default function FacultyObePage() {
         unit_code: unitCode,
         target_level: targetLevel,
         semester: semester || undefined,
+        section: selectedSection !== 'all' ? selectedSection : undefined,
       };
-      const res = await fetch(`${API_BASE}/obe/targets?tenant=${tenant}`, {
+      const res = await fetch(`${API_BASE}/obe/targets?tenant=${getTenant()}`, {
         method: 'POST', headers: getHeaders(), body: JSON.stringify(body),
       });
       const json = await res.json();
@@ -245,7 +254,7 @@ export default function FacultyObePage() {
   const batchDeclareTargets = async (subjectCode: string, defaultLevel: number = 2) => {
     try {
       for (const co of ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']) {
-        await fetch(`${API_BASE}/obe/targets?tenant=${tenant}`, {
+        await fetch(`${API_BASE}/obe/targets?tenant=${getTenant()}`, {
           method: 'POST', headers: getHeaders(),
           body: JSON.stringify({
             faculty_id: facultyId || undefined,
@@ -253,6 +262,7 @@ export default function FacultyObePage() {
             unit_code: co,
             target_level: defaultLevel,
             semester: semester || undefined,
+            section: selectedSection !== 'all' ? selectedSection : undefined,
           }),
         });
       }
@@ -266,7 +276,7 @@ export default function FacultyObePage() {
   // Save corrective action
   const saveCorrectiveAction = async (targetId: string, action: string) => {
     try {
-      const res = await fetch(`${API_BASE}/obe/targets/${targetId}/corrective-action?tenant=${tenant}`, {
+      const res = await fetch(`${API_BASE}/obe/targets/${targetId}/corrective-action?tenant=${getTenant()}`, {
         method: 'PATCH', headers: getHeaders(), body: JSON.stringify({ corrective_action: action }),
       });
       const json = await res.json();
@@ -278,9 +288,14 @@ export default function FacultyObePage() {
   const publishSurvey = async () => {
     if (!selectedSubject) return showToast('Select a subject first', 'error');
     try {
-      const res = await fetch(`${API_BASE}/obe/surveys?tenant=${tenant}`, {
+      const res = await fetch(`${API_BASE}/obe/surveys?tenant=${getTenant()}`, {
         method: 'POST', headers: getHeaders(),
-        body: JSON.stringify({ subject_code: selectedSubject, faculty_id: facultyId || undefined, semester: semester || undefined }),
+        body: JSON.stringify({
+          subject_code: selectedSubject,
+          faculty_id: facultyId || undefined,
+          semester: semester || undefined,
+          section: selectedSection !== 'all' ? selectedSection : undefined,
+        }),
       });
       const json = await res.json();
       if (json.success) { showToast('Survey published ✓'); setSurveys(prev => [json.data, ...prev]); }
@@ -348,31 +363,48 @@ export default function FacultyObePage() {
             ))}
           </div>
 
-          {/* Filters */}
-          <div style={{ background: '#fff', borderRadius: 16, padding: '16px 20px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
-            <select
-              value={selectedSubject}
-              onChange={e => setSelectedSubject(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 10, border: '1.5px solid #E7EAF3', fontSize: 13, color: '#1B1E28', minWidth: 200 }}
-            >
-              <option value="">All Subjects</option>
-              {subjects.map((s: any) => (
-                <option key={s.code} value={s.code}>{s.name} ({s.code})</option>
-              ))}
-            </select>
-            <input
-              type="text" placeholder="Semester (e.g. 5)"
-              value={semester} onChange={e => setSemester(e.target.value)}
-              style={{ padding: '8px 12px', borderRadius: 10, border: '1.5px solid #E7EAF3', fontSize: 13, width: 140 }}
+          {/* 🏛️ Dynamic Faculty Academic Hierarchy Cascading */}
+          <div className="mb-6">
+            <FacultyAcademicCascadingDropdown
+              facultyId={facultyId}
+              onlyLinkedSubjects={true}
+              showSection={true}
+              showSubject={true}
+              onSelectionChange={handleAcademicCascadeChange}
             />
-            <button onClick={computeAttainment} disabled={computing || !selectedSubject}
-              style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 10, background: '#5B4BFF', color: '#fff', border: 'none', fontWeight: 600, fontSize: 13, cursor: computing || !selectedSubject ? 'not-allowed' : 'pointer', opacity: computing || !selectedSubject ? 0.7 : 1 }}>
-              {computing ? <Loader2 size={14} className="animate-spin" /> : <TrendingUp size={14} />}
-              Compute Attainment
-            </button>
-            <button onClick={loadDashboard} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#f5f5f5', color: '#4E5969', border: 'none', fontSize: 13, cursor: 'pointer' }}>
-              <RefreshCw size={14} /> Refresh
-            </button>
+          </div>
+
+          {/* Active Scope & Action Bar */}
+          <div style={{ background: '#fff', borderRadius: 16, padding: '14px 20px', marginBottom: 24, display: 'flex', gap: 16, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#6b7280' }}>
+                Active Scope:
+              </span>
+              <span style={{ padding: '5px 12px', borderRadius: 10, background: '#F0EFFF', color: '#5B4BFF', fontSize: 12, fontWeight: 700 }}>
+                {selectedSubject ? `Subject: ${academicCascade?.subject?.name || selectedSubject} (${selectedSubject})` : 'No Subject Selected'}
+              </span>
+              {semester && (
+                <span style={{ padding: '5px 12px', borderRadius: 10, background: '#E6F9F3', color: '#00875a', fontSize: 12, fontWeight: 700 }}>
+                  Sem {semester}
+                </span>
+              )}
+              {selectedSection && selectedSection !== 'all' && (
+                <span style={{ padding: '5px 12px', borderRadius: 10, background: '#FFF3EC', color: '#F36C21', fontSize: 12, fontWeight: 700 }}>
+                  Section {selectedSection}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <button onClick={computeAttainment} disabled={computing || !selectedSubject}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 20px', borderRadius: 10, background: '#5B4BFF', color: '#fff', border: 'none', fontWeight: 600, fontSize: 13, cursor: computing || !selectedSubject ? 'not-allowed' : 'pointer', opacity: computing || !selectedSubject ? 0.7 : 1 }}>
+                {computing ? <Loader2 size={14} className="animate-spin" /> : <TrendingUp size={14} />}
+                Compute Attainment
+              </button>
+              <button onClick={() => loadDashboard()} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '9px 16px', borderRadius: 10, background: '#f5f5f5', color: '#4E5969', border: 'none', fontSize: 13, cursor: 'pointer' }}>
+                <RefreshCw size={14} /> Refresh
+              </button>
+            </div>
           </div>
 
           {/* Tabs */}

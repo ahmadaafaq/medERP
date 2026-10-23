@@ -613,8 +613,10 @@ export default function AdminMasterPage() {
     const set = new Set<string>();
     facultyLinkedItems.forEach(item => {
       if (item.course_cd) set.add(String(item.course_cd).trim().toLowerCase());
+      if (item.resolved_course_cd) set.add(String(item.resolved_course_cd).trim().toLowerCase());
       if (item.course_code) set.add(String(item.course_code).trim().toLowerCase());
       if (item.course_name) set.add(String(item.course_name).trim().toLowerCase());
+      if (item.resolved_course_name) set.add(String(item.resolved_course_name).trim().toLowerCase());
     });
     return set;
   }, [isFaculty, facultyLinkedItems]);
@@ -624,9 +626,11 @@ export default function AdminMasterPage() {
     const set = new Set<string>();
     facultyLinkedItems.forEach(item => {
       if (item.branch_cd) set.add(String(item.branch_cd).trim().toLowerCase());
+      if (item.resolved_branch_cd) set.add(String(item.resolved_branch_cd).trim().toLowerCase());
       if (item.department_id) set.add(String(item.department_id).trim().toLowerCase());
       if (item.branch_code) set.add(String(item.branch_code).trim().toLowerCase());
       if (item.branch_name) set.add(String(item.branch_name).trim().toLowerCase());
+      if (item.resolved_branch_name) set.add(String(item.resolved_branch_name).trim().toLowerCase());
     });
     return set;
   }, [isFaculty, facultyLinkedItems]);
@@ -636,7 +640,18 @@ export default function AdminMasterPage() {
     const set = new Set<string>();
     facultyLinkedItems.forEach(item => {
       if (item.batch_cd) set.add(String(item.batch_cd).trim().toLowerCase());
+      if (item.resolved_batch_cd) set.add(String(item.resolved_batch_cd).trim().toLowerCase());
       if (item.batch_id) set.add(String(item.batch_id).trim().toLowerCase());
+    });
+    return set;
+  }, [isFaculty, facultyLinkedItems]);
+
+  const facultyLinkedSemCds = useMemo(() => {
+    if (!isFaculty) return null;
+    const set = new Set<string>();
+    facultyLinkedItems.forEach(item => {
+      const s = String(item.resolved_sem_cd || item.sem_cd || item.semester || '').replace(/\D/g, '').trim();
+      if (s) set.add(s);
     });
     return set;
   }, [isFaculty, facultyLinkedItems]);
@@ -719,7 +734,7 @@ export default function AdminMasterPage() {
             const allList = allJson.data || allJson || [];
             linkItems = allList.filter((l: any) =>
               (facId && (l.faculty_id === facId || l.user_id === facId)) ||
-              (empId && l.emp_id === empId) ||
+              (empId && (l.emp_id === empId || l.faculty_code === empId || l.faculty_id === empId)) ||
               (userObj?.name && l.faculty_name && l.faculty_name.toLowerCase() === userObj.name.toLowerCase()) ||
               (userObj?.email && l.faculty_email && l.faculty_email.toLowerCase() === userObj.email.toLowerCase())
             );
@@ -748,6 +763,21 @@ export default function AdminMasterPage() {
       const finalLinks = Array.from(combinedMap.values());
       setFacultyLinkedItems(finalLinks);
       setFacultyLinkedLoaded(true);
+
+      if (finalLinks.length > 0) {
+        const first = finalLinks[0];
+        const fCourse = first.resolved_course_cd || first.course_cd || first.course_code;
+        const fBranch = first.resolved_branch_cd || first.branch_cd || first.branch_code || first.department_id;
+        const fBatch = first.resolved_batch_cd || first.batch_cd || first.batch_id;
+        const fSem = String(first.resolved_sem_cd || first.sem_cd || first.semester || '').replace(/\D/g, '');
+        const fSub = first.subject_code || first.code || first.subject_id || first.id;
+
+        setSelectedCourseFilter(prev => prev === 'all' && fCourse ? String(fCourse) : prev);
+        setSelectedBranchFilter(prev => prev === 'all' && fBranch ? String(fBranch) : prev);
+        setSelectedBatchFilter(prev => prev === 'all' && fBatch ? String(fBatch) : prev);
+        setSelectedSemesterFilter(prev => prev === 'all' && fSem ? String(fSem) : prev);
+        setSelectedSubjectFilter(prev => prev === 'all' && fSub ? String(fSub) : prev);
+      }
     } catch (err) {
       console.error('[AdminMaster] Error loading faculty links:', err);
       setFacultyLinkedLoaded(true);
@@ -814,12 +844,28 @@ export default function AdminMasterPage() {
 
     setLoading(true);
     try {
-      let res = await fetch(`${API_BASE}/${targetCat}?tenant=${encodeURIComponent(targetTenant)}`, {
+      let facultyParam = '';
+      if (isFaculty && targetCat === 'subjects') {
+        const userStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        let fid = '';
+        if (userStr) {
+          try {
+            const u = JSON.parse(userStr);
+            fid = u.emp_id || u.faculty_id || u.profile?.emp_id || u.profile?.id || u.id || u.sub || '';
+          } catch {}
+        }
+        if (!fid && typeof window !== 'undefined') {
+          fid = localStorage.getItem('empid') || localStorage.getItem('emp_id') || localStorage.getItem('facultyId') || '';
+        }
+        if (fid) facultyParam = `&facultyId=${encodeURIComponent(fid)}`;
+      }
+
+      let res = await fetch(`${API_BASE}/${targetCat}?tenant=${encodeURIComponent(targetTenant)}${facultyParam}`, {
         headers: getAuthHeaders(),
       });
       // Resilient fallback: If remote backend returns 404 or fails, call local Next.js route handler
       if (!res.ok) {
-        res = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${encodeURIComponent(targetTenant)}`, {
+        res = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${encodeURIComponent(targetTenant)}${facultyParam}`, {
           headers: getAuthHeaders(),
         });
       }
@@ -827,7 +873,7 @@ export default function AdminMasterPage() {
         const json = await res.json();
         const data = json.data || json || [];
         if (targetCat === 'departments') setDepartments(data);
-        if (targetCat === 'subjects') setSubjects(data);
+        if (targetCat === 'subjects') setSubjects(filterSubjectsForFaculty(data));
         if (targetCat === 'professional-linkers') setLinkers(data);
         if (targetCat === 'topics') setTopics(data);
         if (targetCat === 'competencies') setCompetencies(data);
@@ -1461,7 +1507,27 @@ export default function AdminMasterPage() {
   };
 
   const filterSubjectsForFaculty = (list: any[]) => {
-    if (!isFaculty || !facultyLinkedSubjectKeys || facultyLinkedSubjectKeys.size === 0) return list;
+    if (!isFaculty) return list;
+    if (!facultyLinkedLoaded) return list;
+    if (!facultyLinkedSubjectKeys || facultyLinkedSubjectKeys.size === 0) {
+      if (facultyLinkedItems && facultyLinkedItems.length > 0) {
+        return facultyLinkedItems.map(it => ({
+          colg_cd: 1,
+          sub_cd: String(it.subject_code || it.subject_id),
+          sub_name: it.subject_name,
+          mst_sub_name: `[${it.course_name || it.course_cd || ''}] ${it.subject_name}`,
+          sub_addinfo: it.subject_code || it.subject_id,
+          course_cd: it.course_cd,
+          branch_cd: it.branch_cd,
+          batch_cd: it.batch_cd,
+          sem_cd: it.sem_cd,
+          id: it.subject_id,
+          faculty_name: it.faculty_name,
+          SubTyp: 'THEORY',
+        }));
+      }
+      return [];
+    }
     const filtered = list.filter((s: any) => {
       const sId = String(s.id || '').trim().toLowerCase();
       const sCd = String(s.sub_cd || '').trim().toLowerCase();
@@ -1489,10 +1555,11 @@ export default function AdminMasterPage() {
         batch_cd: it.batch_cd,
         sem_cd: it.sem_cd,
         id: it.subject_id,
+        faculty_name: it.faculty_name,
         SubTyp: 'THEORY',
       }));
     }
-    return filtered;
+    return [];
   };
 
   const fetchUnitSubjects = async (
@@ -3318,16 +3385,18 @@ export default function AdminMasterPage() {
       // Synthesize from facultyLinkedItems if courses master has different IDs or codes
       const uniqueCourses = new Map<string, any>();
       facultyLinkedItems.forEach(it => {
-        const cCd = it.course_cd || it.course_code;
-        const cName = it.course_name || it.course_cd || 'Linked Course';
+        const cCd = it.resolved_course_cd || it.course_cd || it.course_code;
+        const cName = it.resolved_course_name || it.course_name || it.course_cd || 'Linked Course';
         if (cCd && !uniqueCourses.has(String(cCd))) {
           uniqueCourses.set(String(cCd), { id: cCd, course_cd: cCd, code: cCd, name: cName });
         }
       });
       if (uniqueCourses.size > 0) return Array.from(uniqueCourses.values());
+      return [];
     }
+    if (isFaculty && facultyLinkedLoaded) return [];
     return baseList;
-  }, [selectedCollegeFilter, colleges, courses, isFaculty, facultyLinkedCourseCds, facultyLinkedItems]);
+  }, [selectedCollegeFilter, colleges, courses, isFaculty, facultyLinkedLoaded, facultyLinkedCourseCds, facultyLinkedItems]);
 
   const availableFilterBranches = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -3353,18 +3422,21 @@ export default function AdminMasterPage() {
       // Synthesize from facultyLinkedItems
       const uniqueBranches = new Map<string, any>();
       facultyLinkedItems.forEach(it => {
-        const bCd = it.branch_cd || it.branch_code || it.department_id;
-        const bName = it.branch_name || it.department_name || bCd || 'Linked Branch';
-        if (bCd && (!selectedCourseFilter || selectedCourseFilter === 'all' || String(it.course_cd) === String(selectedCourseFilter))) {
+        const bCd = it.resolved_branch_cd || it.branch_cd || it.branch_code || it.department_id;
+        const bName = it.resolved_branch_name || it.branch_name || it.department_name || bCd || 'Linked Branch';
+        const itemCourse = it.resolved_course_cd || it.course_cd;
+        if (bCd && (!selectedCourseFilter || selectedCourseFilter === 'all' || String(itemCourse) === String(selectedCourseFilter))) {
           if (!uniqueBranches.has(String(bCd))) {
             uniqueBranches.set(String(bCd), { id: bCd, branch_cd: bCd, code: bCd, name: bName });
           }
         }
       });
       if (uniqueBranches.size > 0) return Array.from(uniqueBranches.values());
+      return [];
     }
+    if (isFaculty && facultyLinkedLoaded) return [];
     return baseList;
-  }, [selectedCollegeFilter, selectedCourseFilter, departments, colleges, isFaculty, facultyLinkedBranchCds, facultyLinkedItems]);
+  }, [selectedCollegeFilter, selectedCourseFilter, departments, colleges, isFaculty, facultyLinkedLoaded, facultyLinkedBranchCds, facultyLinkedItems]);
 
   const availableFilterBatches = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -3394,15 +3466,37 @@ export default function AdminMasterPage() {
 
       const uniqueBatches = new Map<string, any>();
       facultyLinkedItems.forEach(it => {
-        const bCd = it.batch_cd || it.batch_id;
+        const bCd = it.resolved_batch_cd || it.batch_cd || it.batch_id;
         if (bCd && !uniqueBatches.has(String(bCd))) {
           uniqueBatches.set(String(bCd), { id: bCd, batch_cd: bCd, code: bCd, name: `Batch ${bCd}` });
         }
       });
       if (uniqueBatches.size > 0) return Array.from(uniqueBatches.values());
+      return [];
     }
+    if (isFaculty && facultyLinkedLoaded) return [];
     return baseList;
-  }, [selectedCollegeFilter, selectedCourseFilter, batches, colleges, isFaculty, facultyLinkedBatchCds, facultyLinkedItems]);
+  }, [selectedCollegeFilter, selectedCourseFilter, batches, colleges, isFaculty, facultyLinkedLoaded, facultyLinkedBatchCds, facultyLinkedItems]);
+
+  const availableFilterSemesters = useMemo(() => {
+    const allSems = [1, 2, 3, 4, 5, 6, 7, 8];
+    if (!isFaculty || !facultyLinkedLoaded) return allSems;
+    if (facultyLinkedItems.length === 0) return [];
+    const set = new Set<number>();
+    facultyLinkedItems.forEach(it => {
+      const cCd = it.resolved_course_cd || it.course_cd || it.course_code;
+      const bCd = it.resolved_branch_cd || it.branch_cd || it.branch_code || it.department_id;
+      const batCd = it.resolved_batch_cd || it.batch_cd || it.batch_id;
+      if (selectedCourseFilter !== 'all' && cCd && String(cCd) !== String(selectedCourseFilter)) return;
+      if (selectedBranchFilter !== 'all' && bCd && String(bCd) !== String(selectedBranchFilter)) return;
+      if (selectedBatchFilter !== 'all' && batCd && String(batCd) !== String(selectedBatchFilter)) return;
+      const s = String(it.resolved_sem_cd || it.sem_cd || it.semester || '').replace(/\D/g, '').trim();
+      const n = Number(s);
+      if (n > 0) set.add(n);
+    });
+    const arr = Array.from(set).sort((a, b) => a - b);
+    return arr.length > 0 ? arr : allSems;
+  }, [isFaculty, facultyLinkedLoaded, facultyLinkedItems, selectedCourseFilter, selectedBranchFilter, selectedBatchFilter]);
 
   const availableFilterSubjects = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -3453,9 +3547,11 @@ export default function AdminMasterPage() {
         }
       });
       if (uniqueSubs.size > 0) return Array.from(uniqueSubs.values());
+      return [];
     }
+    if (isFaculty && facultyLinkedLoaded) return [];
     return baseList;
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedBatchFilter, selectedSemesterFilter, subjects, colleges, isFaculty, facultyLinkedSubjectKeys, facultyLinkedItems]);
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedBatchFilter, selectedSemesterFilter, subjects, colleges, isFaculty, facultyLinkedLoaded, facultyLinkedSubjectKeys, facultyLinkedItems]);
 
   const availableFilterUnits = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -3472,20 +3568,23 @@ export default function AdminMasterPage() {
       return true;
     });
 
-    if (isFaculty && facultyLinkedSubjectKeys && facultyLinkedSubjectKeys.size > 0) {
-      return baseList.filter(u => {
-        const uSubId = String(u.subject_id || '').trim().toLowerCase();
-        const uSubCode = String(u.subject_code || '').trim().toLowerCase();
-        const uSubCd = String((u as any).sub_cd || '').trim().toLowerCase();
-        return (
-          (uSubId && facultyLinkedSubjectKeys.has(uSubId)) ||
-          (uSubCode && facultyLinkedSubjectKeys.has(uSubCode)) ||
-          (uSubCd && facultyLinkedSubjectKeys.has(uSubCd))
-        );
-      });
+    if (isFaculty) {
+      if (facultyLinkedSubjectKeys && facultyLinkedSubjectKeys.size > 0) {
+        return baseList.filter(u => {
+          const uSubId = String(u.subject_id || '').trim().toLowerCase();
+          const uSubCode = String(u.subject_code || '').trim().toLowerCase();
+          const uSubCd = String((u as any).sub_cd || '').trim().toLowerCase();
+          return (
+            (uSubId && facultyLinkedSubjectKeys.has(uSubId)) ||
+            (uSubCode && facultyLinkedSubjectKeys.has(uSubCode)) ||
+            (uSubCd && facultyLinkedSubjectKeys.has(uSubCd))
+          );
+        });
+      }
+      if (facultyLinkedLoaded) return [];
     }
     return baseList;
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, units, colleges, isFaculty, facultyLinkedSubjectKeys]);
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, units, colleges, isFaculty, facultyLinkedLoaded, facultyLinkedSubjectKeys]);
 
   const availableFilterTopics = useMemo(() => {
     const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter);
@@ -3503,20 +3602,23 @@ export default function AdminMasterPage() {
       return true;
     });
 
-    if (isFaculty && facultyLinkedSubjectKeys && facultyLinkedSubjectKeys.size > 0) {
-      return baseList.filter(t => {
-        const tSubId = String(t.subject_id || '').trim().toLowerCase();
-        const tSubCode = String(t.subject_code || '').trim().toLowerCase();
-        const tSubCd = String((t as any).sub_cd || '').trim().toLowerCase();
-        return (
-          (tSubId && facultyLinkedSubjectKeys.has(tSubId)) ||
-          (tSubCode && facultyLinkedSubjectKeys.has(tSubCode)) ||
-          (tSubCd && facultyLinkedSubjectKeys.has(tSubCd))
-        );
-      });
+    if (isFaculty) {
+      if (facultyLinkedSubjectKeys && facultyLinkedSubjectKeys.size > 0) {
+        return baseList.filter(t => {
+          const tSubId = String(t.subject_id || '').trim().toLowerCase();
+          const tSubCode = String(t.subject_code || '').trim().toLowerCase();
+          const tSubCd = String((t as any).sub_cd || '').trim().toLowerCase();
+          return (
+            (tSubId && facultyLinkedSubjectKeys.has(tSubId)) ||
+            (tSubCode && facultyLinkedSubjectKeys.has(tSubCode)) ||
+            (tSubCd && facultyLinkedSubjectKeys.has(tSubCd))
+          );
+        });
+      }
+      if (facultyLinkedLoaded) return [];
     }
     return baseList;
-  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, selectedUnitFilter, topics, colleges, isFaculty, facultyLinkedSubjectKeys]);
+  }, [selectedCollegeFilter, selectedCourseFilter, selectedBranchFilter, selectedSubjectFilter, selectedUnitFilter, topics, colleges, isFaculty, facultyLinkedLoaded, facultyLinkedSubjectKeys]);
 
   const filteredList = getFilteredItemsList().filter((item: any) => {
     if (activeTab === 'delivery-types') {
@@ -3607,34 +3709,41 @@ export default function AdminMasterPage() {
     }
 
     // Faculty isolation: restrict rows across tabs to their linked courses and subjects!
-    if (isFaculty && facultyLinkedItems.length > 0) {
-      if (activeTab === 'units' || activeTab === 'topics' || activeTab === 'competencies') {
-        const itemSubId = String(item.subject_id || '').trim().toLowerCase();
-        const itemSubCode = String(item.subject_code || '').trim().toLowerCase();
-        const itemSubCd = String(item.sub_cd || '').trim().toLowerCase();
-        const matchSub = (
-          (itemSubId && facultyLinkedSubjectKeys?.has(itemSubId)) ||
-          (itemSubCode && facultyLinkedSubjectKeys?.has(itemSubCode)) ||
-          (itemSubCd && facultyLinkedSubjectKeys?.has(itemSubCd))
-        );
-        if (!matchSub) return false;
-      } else if (activeTab === 'subjects') {
-        const sId = String(item.id || '').trim().toLowerCase();
-        const sCode = String(item.code || '').trim().toLowerCase();
-        const sSubCd = String(item.sub_cd || '').trim().toLowerCase();
-        const sName = String(item.name || '').trim().toLowerCase();
-        const matchSub = (
-          (sId && facultyLinkedSubjectKeys?.has(sId)) ||
-          (sCode && facultyLinkedSubjectKeys?.has(sCode)) ||
-          (sSubCd && facultyLinkedSubjectKeys?.has(sSubCd)) ||
-          (sName && facultyLinkedSubjectKeys?.has(sName))
-        );
-        if (!matchSub) return false;
-      } else if (activeTab === 'departments') {
-        const bCd = String(item.branch_cd || item.code || item.id || '').trim().toLowerCase();
-        const bName = String(item.name || '').trim().toLowerCase();
-        if (facultyLinkedBranchCds && facultyLinkedBranchCds.size > 0) {
-          if (!facultyLinkedBranchCds.has(bCd) && !facultyLinkedBranchCds.has(bName)) return false;
+    if (isFaculty) {
+      if (facultyLinkedLoaded && facultyLinkedItems.length === 0) {
+        if (activeTab === 'subjects' || activeTab === 'units' || activeTab === 'topics' || activeTab === 'competencies') {
+          return false;
+        }
+      }
+      if (facultyLinkedItems.length > 0) {
+        if (activeTab === 'units' || activeTab === 'topics' || activeTab === 'competencies') {
+          const itemSubId = String(item.subject_id || '').trim().toLowerCase();
+          const itemSubCode = String(item.subject_code || '').trim().toLowerCase();
+          const itemSubCd = String(item.sub_cd || '').trim().toLowerCase();
+          const matchSub = (
+            (itemSubId && facultyLinkedSubjectKeys?.has(itemSubId)) ||
+            (itemSubCode && facultyLinkedSubjectKeys?.has(itemSubCode)) ||
+            (itemSubCd && facultyLinkedSubjectKeys?.has(itemSubCd))
+          );
+          if (!matchSub) return false;
+        } else if (activeTab === 'subjects') {
+          const sId = String(item.id || '').trim().toLowerCase();
+          const sCode = String(item.code || '').trim().toLowerCase();
+          const sSubCd = String(item.sub_cd || '').trim().toLowerCase();
+          const sName = String(item.name || '').trim().toLowerCase();
+          const matchSub = (
+            (sId && facultyLinkedSubjectKeys?.has(sId)) ||
+            (sCode && facultyLinkedSubjectKeys?.has(sCode)) ||
+            (sSubCd && facultyLinkedSubjectKeys?.has(sSubCd)) ||
+            (sName && facultyLinkedSubjectKeys?.has(sName))
+          );
+          if (!matchSub) return false;
+        } else if (activeTab === 'departments') {
+          const bCd = String(item.branch_cd || item.code || item.id || '').trim().toLowerCase();
+          const bName = String(item.name || '').trim().toLowerCase();
+          if (facultyLinkedBranchCds && facultyLinkedBranchCds.size > 0) {
+            if (!facultyLinkedBranchCds.has(bCd) && !facultyLinkedBranchCds.has(bName)) return false;
+          }
         }
       }
     }
@@ -3853,16 +3962,15 @@ export default function AdminMasterPage() {
                     >
                       {isMedicalFilter ? (
                         <>
-                          <option value="all">All Phases</option>
-                          <option value="1">Phase I (1st Prof)</option>
-                          <option value="2">Phase II (2nd Prof)</option>
-                          <option value="3">Phase III Part 1 (3rd Prof P1)</option>
-                          <option value="4">Phase III Part 2 (3rd Prof P2)</option>
+                          <option value="all">{isFaculty ? `All My Phases (${availableFilterSemesters.length})` : 'All Phases'}</option>
+                          {availableFilterSemesters.map((s) => (
+                            <option key={s} value={String(s)}>Phase #{s}</option>
+                          ))}
                         </>
                       ) : (
                         <>
-                          <option value="all">All Semesters</option>
-                          {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
+                          <option value="all">{isFaculty ? `All My Semesters (${availableFilterSemesters.length})` : 'All Semesters'}</option>
+                          {availableFilterSemesters.map((s) => (
                             <option key={s} value={String(s)}>Sem #{s}</option>
                           ))}
                         </>

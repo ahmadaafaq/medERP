@@ -120,6 +120,8 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/admin/subject-linker': [
     { role: 'ADMIN', menuKey: 'admin_subject_linker', label: 'Subject Linker' },
+    { role: 'CLERK', menuKey: 'clerk_subject_linker', label: 'Subject Linker' },
+    { role: 'CLERK', menuKey: 'admin_subject_linker', label: 'Subject Linker' },
   ],
   '/dashboard/admin/timetable-design': [
     { role: 'ADMIN', menuKey: 'admin_timetable_design', label: 'Design Timetable' },
@@ -173,6 +175,10 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/clerk/timetable-design': [
     { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer (Submit HOD)' },
+  ],
+  '/dashboard/clerk/subject-linker': [
+    { role: 'CLERK', menuKey: 'clerk_subject_linker', label: 'Course & Subject Linker' },
+    { role: 'CLERK', menuKey: 'admin_subject_linker', label: 'Course & Subject Linker' },
   ],
 
   // === FACULTY PORTAL ROUTES ===

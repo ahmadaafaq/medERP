@@ -16,15 +16,81 @@ async function handleSubjectsFetch(params: {
   const { course, branch, batch, semester, section, colgcd, slug } = params;
 
   if (slug && !isSrmsTenant(slug)) {
-    // Non-SRMS tenant: Load directly from PostgreSQL
+    // Non-SRMS tenant: Load directly from PostgreSQL Subject Linker (faculty_subjects + subjects + faculty)
     const schema = `tenant_${slug}`;
-    const dbSubs = await queryDb(
-      `SELECT id, code, name AS sub_name, name, code AS sub_cd, code AS linkcd, 'N' AS electivests
-       FROM "${schema}".subjects
-       WHERE (course_cd = $1 OR course_id::text = $1 OR $1 = '13')
-       ORDER BY name ASC`,
+    let dbSubs = await queryDb(
+      `SELECT 
+        COALESCE(s.code, fs.subject_id) AS id,
+        COALESCE(s.code, fs.subject_id) AS code,
+        COALESCE(s.code, fs.subject_id) AS sub_cd,
+        COALESCE(s.code, fs.subject_id) AS linkcd,
+        COALESCE(s.name, fs.subject_id) AS name,
+        CASE 
+          WHEN COALESCE(f.name, u.name) IS NOT NULL THEN COALESCE(s.name, fs.subject_id) || ' (' || COALESCE(f.name, u.name) || ')'
+          ELSE COALESCE(s.name, fs.subject_id)
+        END AS sub_name,
+        COALESCE(f.name, u.name, '') AS "EmpName",
+        COALESCE(f.name, u.name, '') AS faculty_name,
+        COALESCE(f.emp_id, u.emp_id, fs.faculty_id, '') AS empid,
+        COALESCE(f.emp_id, u.emp_id, fs.faculty_id, '') AS faculty_code,
+        COALESCE(f.id, u.id, fs.faculty_id, '') AS faculty_id,
+        'N' AS electivests,
+        COALESCE(fs.course_cd, s.course_cd) AS course_cd,
+        COALESCE(fs.branch_cd, s.branch_cd) AS branch_cd,
+        COALESCE(fs.batch_cd, s.batch_cd) AS batch_cd,
+        COALESCE(fs.sem_cd, s.sem_cd) AS sem_cd,
+        COALESCE(fs.section, '1') AS section
+      FROM "${schema}".faculty_subjects fs
+      JOIN "${schema}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text)
+      LEFT JOIN "${schema}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+      LEFT JOIN "${schema}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
+      WHERE fs.is_active = true
+        AND (
+          $1 = '' OR $1 = '0' OR $1 = 'all' OR
+          fs.course_cd = $1 OR s.course_cd = $1 OR s.course_id::text = $1 OR fs.course_cd IS NULL
+        )
+      UNION ALL
+      SELECT 
+        s.code AS id,
+        s.code,
+        s.code AS sub_cd,
+        s.code AS linkcd,
+        s.name,
+        s.name AS sub_name,
+        '' AS "EmpName",
+        '' AS faculty_name,
+        '' AS empid,
+        '' AS faculty_code,
+        '' AS faculty_id,
+        'N' AS electivests,
+        s.course_cd,
+        s.branch_cd,
+        s.batch_cd,
+        s.sem_cd,
+        '1' AS section
+      FROM "${schema}".subjects s
+      WHERE s.is_active IS NOT FALSE
+        AND ($1 = '' OR $1 = '0' OR $1 = 'all' OR s.course_cd = $1 OR s.course_id::text = $1)
+        AND NOT EXISTS (
+          SELECT 1 FROM "${schema}".faculty_subjects fs2
+          WHERE (fs2.subject_id::text = s.id::text OR fs2.subject_id::text = s.code::text)
+            AND fs2.is_active = true
+        )
+      ORDER BY name ASC`,
       [course]
     ).catch(() => []);
+
+    if (!dbSubs || dbSubs.length === 0) {
+      // Fallback to subjects table directly if faculty_subjects returned empty or does not exist
+      dbSubs = await queryDb(
+        `SELECT id, code, name AS sub_name, name, code AS sub_cd, code AS linkcd, 'N' AS electivests
+         FROM "${schema}".subjects
+         WHERE (course_cd = $1 OR course_id::text = $1 OR $1 = '13' OR $1 = '0' OR $1 = 'all')
+         ORDER BY name ASC`,
+        [course]
+      ).catch(() => []);
+    }
+
     return NextResponse.json({
       success: true,
       data: dbSubs,

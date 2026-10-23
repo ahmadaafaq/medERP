@@ -1006,6 +1006,7 @@ export default function TimetableDesignView({
 
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
+  const [linkedFacultySubjects, setLinkedFacultySubjects] = useState<any[]>([]);
   const [allFaculties, setAllFaculties] = useState<any[]>([]);
   const [allDbUnits, setAllDbUnits] = useState<UnitMasterItem[]>([]);
   const [allDbTopics, setAllDbTopics] = useState<TopicMasterItem[]>([]);
@@ -1611,18 +1612,18 @@ export default function TimetableDesignView({
     return null;
   }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, facultyCrossSlots, clerkDrafts, activeDraft, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList, currentDate]);
 
-  // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject
+  // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject / Subject Linker
   const availableFormSubjects = useMemo(() => {
     const list: any[] = [];
     const seen = new Set<string>();
 
-    // 1. Prioritize live SRMS timetable subjects from EmployeeInfo.asmx/Loadsubject
+    // 1. Prioritize live SRMS timetable subjects from EmployeeInfo.asmx/Loadsubject (or timetable-subjects API)
     if (Array.isArray(srmsTimetableSubjects) && srmsTimetableSubjects.length > 0) {
       for (const s of srmsTimetableSubjects) {
-        const code = String(s.sub_cd || s.code || '');
+        const code = String(s.sub_cd || s.code || s.id || '');
         const rawName = String(s.sub_name || s.name || '');
         const cleanName = rawName.replace(/\([^)]*\)/g, '').trim();
-        const teacherName = s.EmpName || (rawName.match(/\(([^)]+)\)/)?.[1] || '');
+        const teacherName = s.faculty_name || s.EmpName || (rawName.match(/\(([^)]+)\)/)?.[1] || '');
 
         if (code && !seen.has(code)) {
           seen.add(code);
@@ -1632,20 +1633,76 @@ export default function TimetableDesignView({
             name: cleanName || rawName,
             raw_name: rawName,
             faculty_name: teacherName,
-            empid: s.empid || '',
-            linkcd: s.linkcd,
+            empid: s.empid || s.faculty_code || '',
+            faculty_id: s.faculty_id || '',
+            linkcd: s.linkcd || code,
             is_srms: true,
           });
         }
       }
     }
 
-    // 2. Include database subjects for fallback
+    // 2. Include linked subjects from Subject Linker (faculty_subjects) for non-SRMS & unified fallbacks
+    if (Array.isArray(linkedFacultySubjects) && linkedFacultySubjects.length > 0) {
+      const crsCd = selectedCourseObj?.code || selectedCourse;
+      const brCd = selectedBranchObj?.code || selectedBranch;
+      const semCd = selectedSemester;
+
+      for (const fs of linkedFacultySubjects) {
+        if (!fs) continue;
+        const matchCourse = !crsCd || crsCd === '0' || crsCd === 'all' ||
+          String(fs.course_cd) === String(crsCd) ||
+          String(fs.resolved_course_cd) === String(crsCd) ||
+          fs.course_name === selectedCourseObj?.name;
+
+        const matchBranch = !brCd || brCd === '0' || brCd === 'all' ||
+          !fs.branch_cd || String(fs.branch_cd) === String(brCd) ||
+          String(fs.resolved_branch_cd) === String(brCd) ||
+          fs.branch_name === selectedBranchObj?.name;
+
+        const matchSem = !semCd || semCd === '0' || semCd === 'all' ||
+          !fs.sem_cd || String(fs.sem_cd) === String(semCd) ||
+          String(fs.resolved_sem_cd) === String(semCd);
+
+        if (matchCourse && matchBranch && matchSem) {
+          const code = String(fs.subject_code || fs.subject_id || fs.code || fs.id || '');
+          const subName = fs.subject_name || fs.name || 'Subject';
+          const teacherName = fs.faculty_name || '';
+          const empId = fs.faculty_code || fs.empid || '';
+          const facId = fs.faculty_id || '';
+
+          if (code && !seen.has(code)) {
+            seen.add(code);
+            list.push({
+              id: code,
+              code: code,
+              name: subName,
+              raw_name: teacherName ? `${subName} (${teacherName})` : subName,
+              faculty_name: teacherName,
+              empid: empId,
+              faculty_id: facId,
+              linkcd: code,
+              is_linked: true,
+            });
+          } else if (code && seen.has(code)) {
+            const existing = list.find(item => item.code === code || item.id === code);
+            if (existing && !existing.faculty_name && teacherName) {
+              existing.faculty_name = teacherName;
+              existing.empid = empId;
+              existing.faculty_id = facId;
+            }
+          }
+        }
+      }
+    }
+
+    // 3. Include database subjects for fallback
     const safeSubs = Array.isArray(subjects) ? subjects : [];
     const crsCd = selectedCourseObj?.code || selectedCourse || '13';
     for (const s of safeSubs) {
       if (!s) continue;
-      const matchCourse = String(s.course_cd) === String(crsCd) || String(s.course_code) === String(crsCd) || s.course_name === selectedCourseObj?.name;
+      const matchCourse = !crsCd || crsCd === '0' || crsCd === 'all' ||
+        String(s.course_cd) === String(crsCd) || String(s.course_code) === String(crsCd) || s.course_name === selectedCourseObj?.name;
       if (matchCourse) {
         const code = String(s.code || s.id || '');
         if (code && !seen.has(code)) {
@@ -1656,7 +1713,7 @@ export default function TimetableDesignView({
     }
 
     return list;
-  }, [srmsTimetableSubjects, subjects, selectedCourseObj, selectedCourse]);
+  }, [srmsTimetableSubjects, linkedFacultySubjects, subjects, selectedCourseObj, selectedCourse, selectedBranchObj, selectedBranch, selectedSemester]);
 
   // Dynamically compute Available Units based on Selected Subject
   // Dynamically compute Available Units based strictly on Selected Subject from Admin Master
@@ -1805,7 +1862,7 @@ export default function TimetableDesignView({
 
     if (Array.isArray(srmsTimetableSubjects)) {
       for (const s of srmsTimetableSubjects) {
-        const emp = String(s.empid || '');
+        const emp = String(s.empid || s.faculty_code || '');
         const name = s.EmpName || s.faculty_name || '';
         if (emp && name && !seenEmp.has(emp)) {
           seenEmp.add(emp);
@@ -1815,6 +1872,24 @@ export default function TimetableDesignView({
             label: name,
             badge: emp,
             sublabel: '(Live Synced from Portal)',
+          });
+        }
+      }
+    }
+
+    if (Array.isArray(linkedFacultySubjects)) {
+      for (const fs of linkedFacultySubjects) {
+        const emp = String(fs.faculty_code || fs.empid || fs.faculty_id || '');
+        const idVal = fs.faculty_id ? String(fs.faculty_id) : '';
+        const name = fs.faculty_name || '';
+        if (emp && name && !seenEmp.has(emp)) {
+          seenEmp.add(emp);
+          list.push({
+            value: emp,
+            altValues: idVal ? [idVal, emp] : [emp],
+            label: name,
+            badge: fs.faculty_code || 'FAC',
+            sublabel: fs.faculty_designation || '(Subject Linker)',
           });
         }
       }
@@ -1838,7 +1913,7 @@ export default function TimetableDesignView({
       }
     }
     return list;
-  }, [srmsTimetableSubjects, allFaculties]);
+  }, [srmsTimetableSubjects, linkedFacultySubjects, allFaculties]);
 
   // Subject & Faculty Registry List for Timetable Footer
   const registryList = useMemo(() => {
@@ -2243,13 +2318,14 @@ export default function TimetableDesignView({
       const token = localStorage.getItem('token') || '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const [deptRes, subRes, unitRes, topicRes, compRes, facRes] = await Promise.all([
+      const [deptRes, subRes, unitRes, topicRes, compRes, facRes, linkedFacRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/units?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/topics?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/competencies?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/users/faculty?tenant=${encodeURIComponent(activeTenantSlug)}&limit=500`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
       ]);
 
       let loadedDepts: DropdownItem[] = [];
@@ -2280,6 +2356,10 @@ export default function TimetableDesignView({
       if (facRes && facRes.ok) {
         const fJson = await facRes.json();
         setAllFaculties(extractArray(fJson));
+      }
+      if (linkedFacRes && linkedFacRes.ok) {
+        const lfJson = await linkedFacRes.json();
+        setLinkedFacultySubjects(extractArray(lfJson));
       }
 
       // 4. Cascade Level 2: Fetch Courses for active college
@@ -2915,7 +2995,8 @@ export default function TimetableDesignView({
 
     if (matched) {
       autoFacName = matched.faculty_name || matched.EmpName || '';
-      autoFacEmpId = matched.empid ? String(matched.empid) : '';
+      autoFacEmpId = matched.empid ? String(matched.empid) : (matched.faculty_code ? String(matched.faculty_code) : '');
+      autoFacId = matched.faculty_id ? String(matched.faculty_id) : '';
       linkcdVal = matched.linkcd ? String(matched.linkcd) : '';
       electiveSts = matched.electivests || 'N';
 
@@ -2926,11 +3007,26 @@ export default function TimetableDesignView({
         }
       }
 
-      if (autoFacEmpId) {
+      // Fallback check against linkedFacultySubjects if matched lacked faculty details
+      if (!autoFacName && Array.isArray(linkedFacultySubjects)) {
+        const matchedLink = linkedFacultySubjects.find((fs: any) =>
+          String(fs.subject_id) === subVal ||
+          String(fs.subject_code) === subVal ||
+          String(fs.code) === subVal ||
+          (fs.subject_name && subTitle && fs.subject_name.toLowerCase().trim() === subTitle.toLowerCase().trim())
+        );
+        if (matchedLink) {
+          autoFacName = matchedLink.faculty_name || '';
+          autoFacEmpId = matchedLink.faculty_code || matchedLink.empid || '';
+          autoFacId = matchedLink.faculty_id || '';
+        }
+      }
+
+      if (autoFacEmpId && !autoFacId) {
         const foundFac = allFaculties.find((f: any) => String(f.emp_id) === String(autoFacEmpId) || String(f.id) === String(autoFacEmpId));
         autoFacId = foundFac ? foundFac.id : autoFacEmpId;
         if (foundFac?.name && !autoFacName) autoFacName = foundFac.name;
-      } else if (autoFacName) {
+      } else if (autoFacName && !autoFacEmpId) {
         const foundFac = allFaculties.find((f: any) => f.name?.toLowerCase().includes(autoFacName.toLowerCase()));
         autoFacId = foundFac ? foundFac.id : '';
         if (foundFac?.emp_id && !autoFacEmpId) autoFacEmpId = String(foundFac.emp_id);

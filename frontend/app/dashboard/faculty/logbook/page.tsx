@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import PublishTopicModal from '../../../../components/logbook/PublishTopicModal';
@@ -10,6 +10,9 @@ import LogbookFacultyReviewModal from '../../../../components/logbook/LogbookFac
 import PostSeminarTutorialModal from '../../../../components/logbook/PostSeminarTutorialModal';
 import MiniProjectTrackingModal, { ApplicantStudent } from '../../../../components/logbook/MiniProjectTrackingModal';
 import DocumentPreviewModal from '../../../../components/logbook/DocumentPreviewModal';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
 import {
   BookOpen,
   Plus,
@@ -48,7 +51,12 @@ interface TopicItem {
   max_marks: number;
   course_id?: string;
   course_name?: string;
+  branch_id?: string;
+  batch_id?: string;
   batch_name?: string;
+  semester_id?: string;
+  section?: string;
+  subject_id?: string;
   category_id?: string;
   category_name?: string;
   category_code?: string;
@@ -64,8 +72,15 @@ interface SubmissionItem {
   rollno?: string;
   registration_no?: string;
   photo_url?: string;
+  course_cd?: string;
   course_name?: string;
+  branch_cd?: string;
+  batch_cd?: string;
   batch_name?: string;
+  sem_cd?: string;
+  semester?: string;
+  section?: string;
+  subject_id?: string;
   topic_id?: string;
   topic_title: string;
   topic_type?: string;
@@ -102,8 +117,14 @@ export default function FacultyLogbookPage() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [loading, setLoading] = useState(true);
 
-  // Course Filter & Topic Scope
+  // Dynamic Academic Cascading State (Faculty Linked)
+  const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
   const [selectedCourse, setSelectedCourse] = useState<string>('all');
+  const [selectedBranch, setSelectedBranch] = useState<string>('all');
+  const [selectedBatch, setSelectedBatch] = useState<string>('all');
+  const [selectedSem, setSelectedSem] = useState<string>('all');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [availableCourses, setAvailableCourses] = useState<{ id: string; course_cd?: string; code?: string; name: string }[]>([]);
   const [topicScope, setTopicScope] = useState<'ALL' | 'MY'>('ALL');
 
@@ -136,30 +157,6 @@ export default function FacultyLogbookPage() {
   const [isUniversalReviewModalOpen, setIsUniversalReviewModalOpen] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<any | null>(null);
 
-  useEffect(() => {
-    fetchCourses();
-    fetchData();
-  }, []);
-
-  const fetchCourses = async () => {
-    try {
-      const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
-      const token = localStorage.getItem('token') || '';
-      const res = await fetch(`/api/v1/logbook/academic-structure?tenant=${slug}`, {
-        headers: { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug },
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const data = json?.data || json;
-        if (data?.courses && Array.isArray(data.courses)) {
-          setAvailableCourses(data.courses);
-        }
-      }
-    } catch (e) {
-      console.error('Failed to load courses', e);
-    }
-  };
-
   const getFacultyCohort = () => {
     if (typeof window === 'undefined') return { facultyId: '', courseCd: '', branchCd: '', batchCd: '', department: '' };
     try {
@@ -190,16 +187,37 @@ export default function FacultyLogbookPage() {
     return { facultyId: '', courseCd: '', branchCd: '', batchCd: '', department: '' };
   };
 
-  const fetchData = async (targetProjId?: string, overrideCourse?: string, overrideScope?: 'ALL' | 'MY') => {
+  const fetchData = async (
+    targetProjId?: string,
+    overrideCourse?: string,
+    overrideScope?: 'ALL' | 'MY',
+    overrideBranch?: string,
+    overrideBatch?: string,
+    overrideSem?: string,
+    overrideSec?: string,
+    overrideSub?: string
+  ) => {
     setLoading(true);
     const slug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
     const token = localStorage.getItem('token') || '';
     const facCohort = getFacultyCohort();
     const activeCourse = overrideCourse !== undefined ? overrideCourse : selectedCourse;
     const activeScope = overrideScope !== undefined ? overrideScope : topicScope;
+    const activeBranch = overrideBranch !== undefined ? overrideBranch : selectedBranch;
+    const activeBatch = overrideBatch !== undefined ? overrideBatch : selectedBatch;
+    const activeSem = overrideSem !== undefined ? overrideSem : selectedSem;
+    const activeSec = overrideSec !== undefined ? overrideSec : selectedSection;
+    const activeSub = overrideSub !== undefined ? overrideSub : selectedSubject;
 
     const facultyParam = activeScope === 'MY' && facCohort.facultyId ? `&facultyId=${encodeURIComponent(facCohort.facultyId)}` : '&facultyId=all';
     const courseParam = activeCourse && activeCourse !== 'all' ? `&courseId=${encodeURIComponent(activeCourse)}` : '';
+    const branchParam = activeBranch && activeBranch !== 'all' ? `&branchId=${encodeURIComponent(activeBranch)}` : '';
+    const batchParam = activeBatch && activeBatch !== 'all' ? `&batchId=${encodeURIComponent(activeBatch)}` : '';
+    const semParam = activeSem && activeSem !== 'all' ? `&semesterId=${encodeURIComponent(activeSem)}` : '';
+    const secParam = activeSec && activeSec !== 'all' ? `&section=${encodeURIComponent(activeSec)}` : '';
+    const subParam = activeSub ? `&subjectId=${encodeURIComponent(activeSub)}` : '';
+
+    const filterQuery = `${courseParam}${branchParam}${batchParam}${semParam}${secParam}${subParam}`;
 
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -208,14 +226,14 @@ export default function FacultyLogbookPage() {
 
     try {
       // 1. Fetch faculty topics
-      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}${facultyParam}${courseParam}`, { headers });
+      const topRes = await fetch(`/api/v1/logbook/topics?tenant=${slug}${facultyParam}${filterQuery}`, { headers });
       if (topRes.ok) {
         const topJson = await topRes.json();
         setTopics(Array.isArray(topJson.data) ? topJson.data : Array.isArray(topJson) ? topJson : []);
       }
 
       // 2. Fetch submissions queue
-      const subRes = await fetch(`/api/v1/logbook/submissions?tenant=${slug}${facultyParam}${courseParam}`, { headers });
+      const subRes = await fetch(`/api/v1/logbook/submissions?tenant=${slug}${facultyParam}${filterQuery}`, { headers });
       if (subRes.ok) {
         const subJson = await subRes.json();
         setSubmissions(Array.isArray(subJson.data) ? subJson.data : Array.isArray(subJson) ? subJson : []);
@@ -225,7 +243,7 @@ export default function FacultyLogbookPage() {
       let activeProjId = targetProjId || selectedProjectId;
       let projectsArray: any[] = [];
 
-      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}&facultyId=all${courseParam}`, { headers });
+      const allProjRes = await fetch(`/api/v1/logbook/mini-projects/all?tenant=${slug}&facultyId=all${filterQuery}`, { headers });
       if (allProjRes.ok) {
         const allProjJson = await allProjRes.json();
         const rawList = Array.isArray(allProjJson.data) ? allProjJson.data : Array.isArray(allProjJson) ? allProjJson : [];
@@ -233,7 +251,7 @@ export default function FacultyLogbookPage() {
         setMiniProjectsList(rawList);
       }
 
-      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}${courseParam}`, { headers });
+      const projRes = await fetch(`/api/v1/logbook/mini-project?tenant=${slug}${filterQuery}`, { headers });
       if (projRes.ok) {
         const projJson = await projRes.json();
         const rawProj = projJson?.data !== undefined ? projJson.data : projJson;
@@ -255,7 +273,7 @@ export default function FacultyLogbookPage() {
       }
 
       // 4. Fetch all weekly logs
-      const weekRes = await fetch(`/api/v1/logbook/weekly-logs/all?tenant=${slug}${courseParam}`, { headers });
+      const weekRes = await fetch(`/api/v1/logbook/weekly-logs/all?tenant=${slug}${filterQuery}`, { headers });
       if (weekRes.ok) {
         const weekJson = await weekRes.json();
         const rawWeek = weekJson?.data !== undefined ? weekJson.data : weekJson;
@@ -264,7 +282,7 @@ export default function FacultyLogbookPage() {
 
       // 5. Fetch enrolled applicants & tracking for selected project
       const projFilterParam = currentProj?.id ? `&projectId=${encodeURIComponent(currentProj.id)}` : '';
-      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}${courseParam}`, { headers });
+      const appRes = await fetch(`/api/v1/logbook/mini-projects/applicants?tenant=${slug}${projFilterParam}${filterQuery}`, { headers });
       if (appRes.ok) {
         const appJson = await appRes.json();
         const rawApp = appJson?.data !== undefined ? appJson.data : appJson;
@@ -282,6 +300,29 @@ export default function FacultyLogbookPage() {
       setLoading(false);
     }
   };
+
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setAcademicCascade(state);
+    const crsCd = state.course?.course_cd || 'all';
+    const brCd = state.branch?.branch_cd || 'all';
+    const batCd = state.batch?.batch_cd ? String(state.batch.batch_cd) : 'all';
+    const semCd = state.semester?.sem_cd ? String(state.semester.sem_cd) : state.semester?.code || 'all';
+    const secCd = state.section || 'all';
+    const subCd = state.subject?.code || state.subject?.id || '';
+
+    setSelectedCourse(crsCd);
+    setSelectedBranch(brCd);
+    setSelectedBatch(batCd);
+    setSelectedSem(semCd);
+    setSelectedSection(secCd);
+    setSelectedSubject(subCd);
+
+    fetchData(undefined, crsCd, undefined, brCd, batCd, semCd, secCd, subCd);
+  };
+
+  useEffect(() => {
+    fetchData();
+  }, []);
 
   const handleSelectProject = (proj: any) => {
     setSelectedProjectId(proj.id);
@@ -310,11 +351,189 @@ export default function FacultyLogbookPage() {
     }
   };
 
-  // Stats calculation
-  const totalTopics = topics.length;
-  const totalSubmissions = submissions.length;
-  const pendingEvaluation = submissions.filter((s) => s.status === 'SUBMITTED' || s.status === 'LATE').length;
-  const evaluatedCount = submissions.filter((s) => s.status === 'EVALUATED').length;
+  // Filter topics by active linked course, branch, batch, semester, and subject
+  const filteredTopics = useMemo(() => {
+    return topics.filter((t) => {
+      if (topicTypeFilter === 'SEMINAR' && t.category_code !== 'SEMINAR') return false;
+      if (topicTypeFilter === 'TUTORIAL' && t.category_code !== 'TUTORIAL') return false;
+
+      if (selectedCourse && selectedCourse !== 'all') {
+        const tCrs = String(t.course_id || '').toLowerCase();
+        const tCrsName = String(t.course_name || '').toLowerCase();
+        const activeCourseCd = String(selectedCourse).toLowerCase();
+        const activeCourseName = String(academicCascade?.course?.course_name || '').toLowerCase();
+
+        const match =
+          tCrs === activeCourseCd ||
+          (activeCourseCd === '1' && (tCrsName.includes('b.tech') || tCrsName.includes('btech') || tCrs === '1')) ||
+          (activeCourseCd === '13' && (tCrsName.includes('bca') || tCrs === '13')) ||
+          (activeCourseCd === '3' && (tCrsName.includes('mca') || tCrs === '3')) ||
+          (activeCourseCd === '4' && (tCrsName.includes('mba') || tCrs === '4')) ||
+          (activeCourseCd === '2' && (tCrsName.includes('pharm') || tCrs === '2')) ||
+          (activeCourseName && tCrsName && tCrsName.includes(activeCourseName));
+
+        if (!match) return false;
+      }
+
+      if (selectedBranch && selectedBranch !== 'all') {
+        const tBr = String(t.branch_id || '');
+        if (tBr && tBr !== selectedBranch) return false;
+      }
+
+      if (selectedBatch && selectedBatch !== 'all') {
+        const tBat = String(t.batch_id || t.batch_name || '');
+        if (tBat && !tBat.includes(String(selectedBatch))) return false;
+      }
+
+      if (selectedSem && selectedSem !== 'all') {
+        const cleanTarget = String(selectedSem).replace(/\D/g, '');
+        const cleanSem = String(t.semester_id || '').replace(/\D/g, '');
+        if (cleanSem && cleanTarget && cleanSem !== cleanTarget) return false;
+      }
+
+      if (selectedSubject) {
+        const tSub = String(t.subject_id || '').toLowerCase();
+        const targetSub = String(selectedSubject).toLowerCase();
+        const targetSubName = String(academicCascade?.subject?.name || '').toLowerCase();
+        const tTitle = String(t.title || '').toLowerCase();
+
+        if (tSub && tSub !== targetSub) return false;
+        if (!tSub && targetSubName && !tTitle.includes(targetSub) && !tTitle.includes(targetSubName)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [topics, topicTypeFilter, selectedCourse, selectedBranch, selectedBatch, selectedSem, selectedSubject, academicCascade]);
+
+  // Scoped Mini Projects
+  const scopedMiniProjects = useMemo(() => {
+    return miniProjectsList.filter((proj) => {
+      if (selectedCourse && selectedCourse !== 'all') {
+        const pCrs = String(proj.course_id || proj.course_cd || '').toLowerCase();
+        const pCrsName = String(proj.course_name || '').toLowerCase();
+        const activeCourseCd = String(selectedCourse).toLowerCase();
+        const activeCourseName = String(academicCascade?.course?.course_name || '').toLowerCase();
+
+        const match =
+          pCrs === activeCourseCd ||
+          (activeCourseCd === '1' && (pCrsName.includes('b.tech') || pCrsName.includes('btech') || pCrs === '1')) ||
+          (activeCourseCd === '13' && (pCrsName.includes('bca') || pCrs === '13')) ||
+          (activeCourseCd === '3' && (pCrsName.includes('mca') || pCrs === '3')) ||
+          (activeCourseCd === '4' && (pCrsName.includes('mba') || pCrs === '4')) ||
+          (activeCourseCd === '2' && (pCrsName.includes('pharm') || pCrs === '2')) ||
+          (activeCourseName && pCrsName && pCrsName.includes(activeCourseName));
+
+        if (!match) return false;
+      }
+
+      if (selectedBranch && selectedBranch !== 'all') {
+        const pBranch = String(proj.branch_id || proj.branch_cd || '');
+        if (pBranch && pBranch !== selectedBranch) return false;
+      }
+
+      if (selectedBatch && selectedBatch !== 'all') {
+        const pBatch = String(proj.batch_id || proj.batch_cd || '');
+        if (pBatch && !pBatch.includes(String(selectedBatch))) return false;
+      }
+
+      return true;
+    });
+  }, [miniProjectsList, selectedCourse, selectedBranch, selectedBatch, academicCascade]);
+
+  const activeMiniProject = scopedMiniProjects.find((p) => String(p.id) === String(selectedProjectId)) || scopedMiniProjects[0] || null;
+
+  // Filter submissions strictly by active linked cohort & subject
+  const filteredSubmissions = useMemo(() => {
+    return submissions.filter((sub) => {
+      const matchesStatus =
+        submissionFilter === 'ALL' ||
+        (submissionFilter === 'SUBMITTED' && (sub.status === 'SUBMITTED' || sub.status === 'PENDING')) ||
+        (submissionFilter === 'LATE' && sub.status === 'LATE') ||
+        (submissionFilter === 'EVALUATED' && sub.status === 'EVALUATED');
+
+      const matchesSearch =
+        !searchQuery ||
+        sub.student_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sub.rollno?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sub.registration_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        sub.topic_title?.toLowerCase().includes(searchQuery.toLowerCase());
+
+      if (!matchesStatus || !matchesSearch) return false;
+
+      // Filter by active linked Course
+      if (selectedCourse && selectedCourse !== 'all') {
+        const subCourse = String(sub.course_cd || '').toLowerCase();
+        const subCourseName = String(sub.course_name || '').toLowerCase();
+        const activeCourseCd = String(selectedCourse).toLowerCase();
+        const activeCourseName = String(academicCascade?.course?.course_name || '').toLowerCase();
+
+        const matchCourse =
+          subCourse === activeCourseCd ||
+          (activeCourseCd === '1' && (subCourseName.includes('b.tech') || subCourseName.includes('btech') || subCourse === '1')) ||
+          (activeCourseCd === '13' && (subCourseName.includes('bca') || subCourse === '13')) ||
+          (activeCourseCd === '3' && (subCourseName.includes('mca') || subCourse === '3')) ||
+          (activeCourseCd === '4' && (subCourseName.includes('mba') || subCourse === '4')) ||
+          (activeCourseCd === '2' && (subCourseName.includes('pharm') || subCourse === '2')) ||
+          (activeCourseName && subCourseName && subCourseName.includes(activeCourseName));
+
+        if (!matchCourse) return false;
+      }
+
+      // Filter by active linked Branch
+      if (selectedBranch && selectedBranch !== 'all') {
+        const subBranch = String(sub.branch_cd || '');
+        if (subBranch && subBranch !== selectedBranch) return false;
+      }
+
+      // Filter by active linked Batch
+      if (selectedBatch && selectedBatch !== 'all') {
+        const subBatch = String(sub.batch_cd || sub.batch_name || '');
+        if (subBatch && !subBatch.includes(String(selectedBatch))) return false;
+      }
+
+      // Filter by active linked Semester
+      if (selectedSem && selectedSem !== 'all') {
+        const cleanTarget = String(selectedSem).replace(/\D/g, '');
+        const cleanSubSem = String(sub.sem_cd || sub.semester || '').replace(/\D/g, '');
+        if (cleanSubSem && cleanTarget && cleanSubSem !== cleanTarget) return false;
+      }
+
+      // Filter by active linked Section
+      if (selectedSection && selectedSection !== 'all') {
+        const subSec = String(sub.section || '').toLowerCase();
+        const targetSec = String(selectedSection).toLowerCase();
+        if (subSec && !subSec.includes(targetSec) && !targetSec.includes(subSec)) return false;
+      }
+
+      // Filter by active linked Subject
+      if (selectedSubject) {
+        const subSubId = String(sub.subject_id || '').toLowerCase();
+        const targetSub = String(selectedSubject).toLowerCase();
+        const targetSubName = String(academicCascade?.subject?.name || '').toLowerCase();
+        const topicTitle = String(sub.topic_title || '').toLowerCase();
+
+        if (subSubId && subSubId !== targetSub) return false;
+        if (!subSubId && targetSubName && !topicTitle.includes(targetSub) && !topicTitle.includes(targetSubName)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [
+    submissions,
+    submissionFilter,
+    searchQuery,
+    selectedCourse,
+    selectedBranch,
+    selectedBatch,
+    selectedSem,
+    selectedSection,
+    selectedSubject,
+    academicCascade,
+  ]);
 
   // Applicant status & filter calculation
   const isApplicantEvaluated = (app: ApplicantStudent) => {
@@ -327,32 +546,45 @@ export default function FacultyLogbookPage() {
     return totalLogs > 0 && verifiedLogs.length === totalLogs;
   };
 
-  const pendingApplicantsCount = applicants.filter((a) => !isApplicantEvaluated(a)).length;
-  const evaluatedApplicantsCount = applicants.filter((a) => isApplicantEvaluated(a)).length;
+  const filteredApplicants = useMemo(() => {
+    return applicants.filter((app) => {
+      if (applicantFilter === 'PENDING' && isApplicantEvaluated(app)) return false;
+      if (applicantFilter === 'EVALUATED' && !isApplicantEvaluated(app)) return false;
 
-  const filteredApplicants = applicants.filter((app) => {
-    if (applicantFilter === 'PENDING') return !isApplicantEvaluated(app);
-    if (applicantFilter === 'EVALUATED') return isApplicantEvaluated(app);
-    return true;
-  });
+      // Filter applicants by linked course
+      if (selectedCourse && selectedCourse !== 'all') {
+        const appCourse = String(app.course_name || '').toLowerCase();
+        const activeCourseCd = String(selectedCourse).toLowerCase();
+        const activeCourseName = String(academicCascade?.course?.course_name || '').toLowerCase();
 
-  // Filter submissions
-  const filteredSubmissions = submissions.filter((sub) => {
-    const matchesStatus =
-      submissionFilter === 'ALL' ||
-      (submissionFilter === 'SUBMITTED' && (sub.status === 'SUBMITTED' || sub.status === 'PENDING')) ||
-      (submissionFilter === 'LATE' && sub.status === 'LATE') ||
-      (submissionFilter === 'EVALUATED' && sub.status === 'EVALUATED');
+        const match =
+          (activeCourseCd === '1' && (appCourse.includes('b.tech') || appCourse.includes('btech'))) ||
+          (activeCourseCd === '13' && appCourse.includes('bca')) ||
+          (activeCourseCd === '3' && appCourse.includes('mca')) ||
+          (activeCourseCd === '4' && appCourse.includes('mba')) ||
+          (activeCourseCd === '2' && appCourse.includes('pharm')) ||
+          (activeCourseName && appCourse && appCourse.includes(activeCourseName));
 
-    const matchesSearch =
-      !searchQuery ||
-      sub.student_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.rollno?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.registration_no?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      sub.topic_title.toLowerCase().includes(searchQuery.toLowerCase());
+        if (!match) return false;
+      }
 
-    return matchesStatus && matchesSearch;
-  });
+      // Filter by batch
+      if (selectedBatch && selectedBatch !== 'all') {
+        const appBatch = String(app.batch_name || '');
+        if (appBatch && !appBatch.includes(String(selectedBatch))) return false;
+      }
+
+      return true;
+    });
+  }, [applicants, applicantFilter, selectedCourse, selectedBatch, academicCascade]);
+
+  // Stats calculation based strictly on active linked cohort
+  const totalTopics = filteredTopics.length;
+  const totalSubmissions = filteredSubmissions.length;
+  const pendingEvaluation = filteredSubmissions.filter((s) => s.status === 'SUBMITTED' || s.status === 'LATE').length;
+  const evaluatedCount = filteredSubmissions.filter((s) => s.status === 'EVALUATED').length;
+  const pendingApplicantsCount = filteredApplicants.filter((a) => !isApplicantEvaluated(a)).length;
+  const evaluatedApplicantsCount = filteredApplicants.filter((a) => isApplicantEvaluated(a)).length;
 
   return (
     <div className="flex h-screen bg-[#F6F8FC] dark:bg-slate-950 font-sans antialiased text-slate-800 dark:text-slate-100 overflow-hidden">
@@ -398,54 +630,48 @@ export default function FacultyLogbookPage() {
               </div>
             </div>
 
-            {/* Course & Scope Filter Bar */}
+            {/* 🏛️ Dynamic Faculty Academic Hierarchy Cascading */}
+            <div className="mb-4">
+              <FacultyAcademicCascadingDropdown
+                facultyId={getFacultyCohort().facultyId}
+                onlyLinkedSubjects={true}
+                showSection={true}
+                showSubject={true}
+                onSelectionChange={handleAcademicCascadeChange}
+              />
+            </div>
+
+            {/* Scope Summary & Seminar Filter Bar */}
             <div className="bg-white dark:bg-slate-900 rounded-[22px] p-3.5 sm:p-4 shadow-sm border border-slate-200/80 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3">
-              <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
                   <Filter className="w-3.5 h-3.5 text-[#5B4BFF]" />
-                  <span>Course:</span>
+                  <span>Active Scope:</span>
                 </span>
-                <button
-                  onClick={() => {
-                    setSelectedCourse('all');
-                    fetchData(undefined, 'all');
-                  }}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                    selectedCourse === 'all'
-                      ? 'bg-[#2D2575] text-white shadow-sm'
-                      : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                  }`}
-                >
-                  All Courses
-                </button>
-                {(availableCourses.length > 0
-                  ? availableCourses
-                  : [
-                      { id: '13', course_cd: '13', name: 'BCA' },
-                      { id: '3', course_cd: '3', name: 'MCA' },
-                      { id: '1', course_cd: '1', name: 'B.TECH.' },
-                      { id: '4', course_cd: '4', name: 'MBA' },
-                    ]
-                ).map((crs) => {
-                  const cd = String(crs.course_cd || crs.code || crs.id);
-                  const isAct = selectedCourse === cd;
-                  return (
-                    <button
-                      key={crs.id || cd}
-                      onClick={() => {
-                        setSelectedCourse(cd);
-                        fetchData(undefined, cd);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-                        isAct
-                          ? 'bg-[#5B4BFF] text-white shadow-sm'
-                          : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
-                      }`}
-                    >
-                      {crs.name}
-                    </button>
-                  );
-                })}
+                <span className="px-3 py-1 rounded-xl text-xs font-bold bg-[#F0EFFF] text-[#5B4BFF] border border-[#5B4BFF]/20">
+                  {academicCascade?.course?.course_name || (selectedCourse !== 'all' ? `Course ${selectedCourse}` : 'All Courses')}
+                </span>
+                {academicCascade?.branch && (
+                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    {academicCascade.branch.branch_name}
+                  </span>
+                )}
+                {academicCascade?.semester && (
+                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    {academicCascade.semester.SemName || academicCascade.semester.name || `Sem ${selectedSem}`}
+                  </span>
+                )}
+                {selectedSection && selectedSection !== 'all' && (
+                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-[#FFF3EC] dark:bg-orange-950/40 text-[#F36C21] border border-[#F36C21]/20">
+                    Sec {selectedSection}
+                  </span>
+                )}
+                {academicCascade?.subject && (
+                  <span className="px-3 py-1 rounded-xl text-xs font-bold bg-[#E6F9F3] dark:bg-emerald-950/40 text-[#00C48C] border border-[#00C48C]/30 flex items-center gap-1">
+                    <span>✓</span>
+                    <span>{academicCascade.subject.name} ({academicCascade.subject.code || academicCascade.subject.id})</span>
+                  </span>
+                )}
               </div>
 
               {/* Seminar Scope Filter */}
@@ -500,23 +726,25 @@ export default function FacultyLogbookPage() {
                 </div>
                 <div
                   className="text-xs sm:text-lg font-bold text-slate-900 dark:text-white truncate"
-                  title={miniProject?.title || miniProjectsList[0]?.title || 'No Project Assigned'}
+                  title={activeMiniProject?.title || 'No Project Assigned'}
                 >
-                  {miniProject?.title || miniProjectsList[0]?.title || 'No Project Assigned'}
+                  {activeMiniProject?.title || 'No Project Assigned'}
                 </div>
                 <div className="text-[9px] sm:text-xs text-slate-500 mt-0.5 sm:mt-1 truncate flex items-center justify-between">
                   <span className="truncate">
                     <span className="font-semibold">Course: </span>
-                    {miniProject?.course_name ||
-                      (miniProject?.course_id === '13'
+                    {activeMiniProject?.course_name ||
+                      (activeMiniProject?.course_id === '1'
+                        ? 'B.Tech'
+                        : activeMiniProject?.course_id === '13'
                         ? 'BCA'
-                        : miniProject?.course_id === '3'
+                        : activeMiniProject?.course_id === '3'
                         ? 'MCA'
-                        : miniProject?.course_id || 'BCA')}
+                        : activeMiniProject?.course_id || (academicCascade?.course?.course_name || 'N/A'))}
                   </span>
-                  {miniProjectsList.length > 1 && (
+                  {scopedMiniProjects.length > 1 && (
                     <span className="text-[10px] font-bold text-[#F36C21] shrink-0 ml-1">
-                      +{miniProjectsList.length - 1} more
+                      +{scopedMiniProjects.length - 1} more
                     </span>
                   )}
                 </div>
@@ -597,7 +825,7 @@ export default function FacultyLogbookPage() {
                   <FileText className="w-4 h-4" />
                   <span>Incoming Submissions</span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F36C21] text-white font-black">
-                    {submissions.length}
+                    {filteredSubmissions.length}
                   </span>
                 </button>
 
@@ -612,7 +840,7 @@ export default function FacultyLogbookPage() {
                   <Presentation className="w-4 h-4 text-[#F36C21]" />
                   <span>Seminar / Tutorials</span>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#5B4BFF] text-white font-bold">
-                    {topics.filter((t) => t.category_code === 'SEMINAR' || t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('seminar') || t.title?.toLowerCase().includes('tutorial')).length}
+                    {filteredTopics.filter((t) => t.category_code === 'SEMINAR' || t.category_code === 'TUTORIAL' || t.title?.toLowerCase().includes('seminar') || t.title?.toLowerCase().includes('tutorial')).length}
                   </span>
                 </button>
 
@@ -626,9 +854,9 @@ export default function FacultyLogbookPage() {
                 >
                   <FolderGit2 className="w-4 h-4 text-[#F36C21]" />
                   <span>Assigned Mini Project</span>
-                  {miniProjectsList.length > 0 && (
+                  {scopedMiniProjects.length > 0 && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#F36C21] text-white font-black">
-                      {miniProjectsList.length}
+                      {scopedMiniProjects.length}
                     </span>
                   )}
                 </button>
@@ -642,7 +870,7 @@ export default function FacultyLogbookPage() {
                   }`}
                 >
                   <Layers className="w-4 h-4" />
-                  <span>Activity Topics ({topics.length})</span>
+                  <span>Activity Topics ({filteredTopics.length})</span>
                 </button>
               </div>
 

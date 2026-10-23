@@ -585,6 +585,15 @@
     "applicable_firm_mode": "BOTH"
   },
   {
+    "role": "CLERK",
+    "menu_key": "clerk.subject-linker",
+    "menu_label": "Course & Subject Linker",
+    "route_path": "/dashboard/clerk/subject-linker",
+    "parent_menu_key": null,
+    "sort_order": 45,
+    "applicable_firm_mode": "BOTH"
+  },
+  {
     "role": "WARDEN",
     "menu_key": "warden.dashboard",
     "menu_label": "Warden Dashboard",

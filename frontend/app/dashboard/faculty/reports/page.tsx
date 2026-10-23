@@ -151,6 +151,14 @@ export default function FacultyMISReportsPage() {
       }
 
       // 2. Fetch User Profile
+      let facIdParam = '';
+      if (typeof window !== 'undefined') {
+        try {
+          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          facIdParam = u.emp_id || u.faculty_id || u.id || u.sub || localStorage.getItem('empid') || '';
+        } catch {}
+      }
+
       const meRes = await fetch(`${API_BASE}/auth/me`, { headers: h }).catch(() => null);
       if (meRes && meRes.ok) {
         const json = await meRes.json();
@@ -158,12 +166,14 @@ export default function FacultyMISReportsPage() {
         const profile = meData.profile || {};
         const dName = profile.department_name || meData.departmentName || 'Academic Department';
         setDeptName(dName);
+        if (!facIdParam) facIdParam = profile.emp_id || profile.id || meData.id || '';
       }
 
-      // 3. Fetch Batches and Subjects for active tenant
-      const [bRes, sRes] = await Promise.all([
+      // 3. Fetch Batches and Subjects for active tenant (scoped to logged-in faculty)
+      const [bRes, sRes, facSubRes] = await Promise.all([
         fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers: h }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}${facIdParam ? `&facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers: h }).catch(() => null),
+        facIdParam ? fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${slug}&facultyId=${encodeURIComponent(facIdParam)}`, { headers: h }).catch(() => null) : Promise.resolve(null),
       ]);
 
       const parse = (j: any) => Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
@@ -180,7 +190,26 @@ export default function FacultyMISReportsPage() {
       }
 
       if (sRes && sRes.ok) {
-        const sList: Subject[] = dedupeBy(parse(await sRes.json()), (s: Subject) => String(s.subject_cd || s.code || s.name || s.id));
+        let sList: Subject[] = dedupeBy(parse(await sRes.json()), (s: Subject) => String(s.subject_cd || s.code || s.name || s.id));
+        let linkedItems: any[] = [];
+        if (facSubRes && facSubRes.ok) {
+          linkedItems = parse(await facSubRes.json());
+        }
+        if (linkedItems.length > 0) {
+          const linkedKeys = new Set(linkedItems.map((l: any) => String(l.subject_code || l.subject_id || '').toLowerCase()));
+          const filtered = sList.filter((s: any) =>
+            linkedKeys.has(String(s.code || '').toLowerCase()) ||
+            linkedKeys.has(String(s.id || '').toLowerCase()) ||
+            linkedKeys.has(String(s.subject_cd || '').toLowerCase()) ||
+            linkedKeys.has(String(s.name || '').toLowerCase())
+          );
+          sList = filtered.length > 0 ? filtered : linkedItems.map((l: any) => ({
+            id: String(l.subject_id || l.id),
+            code: String(l.subject_code || 'SUB'),
+            name: String(l.subject_name || 'Subject'),
+            subject_cd: String(l.subject_code || l.subject_id),
+          }));
+        }
         setSubjects(sList);
       }
     } catch (e) {

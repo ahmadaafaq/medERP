@@ -124,8 +124,12 @@ export class AdminMasterController {
 
   @Get('subjects')
   @ApiOperation({ summary: 'List Subjects — tenant read' })
-  async listSubjects(@TenantSlug() tenant: string) {
-    const data = await this.adminMasterService.listSubjects(tenant);
+  async listSubjects(
+    @TenantSlug() tenant: string,
+    @Query('facultyId') facultyId?: string,
+    @Query('departmentId') departmentId?: string,
+  ) {
+    const data = await this.adminMasterService.listSubjects(tenant, facultyId, departmentId);
     return { success: true, data };
   }
 

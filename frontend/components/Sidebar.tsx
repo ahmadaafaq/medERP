@@ -36,7 +36,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   let role = propRole || 'student';
   if (activeSessionRole === 'hod' && (propRole === 'faculty' || !propRole || pathname?.includes('/faculty') || pathname?.includes('/hod'))) {
     role = 'hod';
-  } else if (activeSessionRole === 'clerk' && (propRole === 'faculty' || !propRole || pathname?.includes('/clerk'))) {
+  } else if (activeSessionRole === 'clerk' && (propRole === 'faculty' || propRole === 'clerk' || !propRole || pathname?.includes('/clerk') || pathname?.includes('/subject-linker') || pathname?.includes('/staff-master') || pathname?.includes('/student-master') || pathname?.includes('/repository'))) {
     role = 'clerk';
   } else if (!propRole) {
     role =
@@ -93,7 +93,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
     if (typeof window !== 'undefined') {
       const rawSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '';
       const cleanSlug = rawSlug.toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '') || 'srms-cet-bareilly';
-      const targetRole = (propRole || localStorage.getItem('role') || 'student').toUpperCase();
+      const targetRole = (role || propRole || localStorage.getItem('role') || 'student').toUpperCase();
       const cacheKey = `${cleanSlug}:${targetRole}`;
 
       const cached = sidebarPermissionsCache.get(cacheKey);
@@ -390,6 +390,16 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 if (norm === 'faculty_dept') keySet.add('faculty_department_faculty');
                 if (norm === 'clerk_staff_master') keySet.add('clerk_staff');
                 if (norm === 'clerk_student_master') keySet.add('clerk_student');
+                if (norm === 'admin_subject_linker') {
+                  keySet.add('clerk_subject_linker');
+                  keySet.add('clerk_subject');
+                  keySet.add('admin_subject');
+                }
+                if (norm === 'clerk_subject_linker') {
+                  keySet.add('admin_subject_linker');
+                  keySet.add('clerk_subject');
+                  keySet.add('admin_subject');
+                }
                 if (norm === 'warden_mess_menu') keySet.add('warden_mess');
                 if (norm === 'warden_mess') keySet.add('warden_mess_menu');
                 if (norm === 'warden_student_master') keySet.add('warden_roster');
@@ -1878,6 +1888,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span>Assessment & Q-Bank</span>
+                </Link>
+              )}
+
+              {(isAllowed('clerk_subject_linker', '/dashboard/clerk/subject-linker') || isAllowed('admin_subject_linker', '/dashboard/admin/subject-linker') || isAllowed('clerk_subject') || isAllowed('admin_subject') || isAllowed('clerk.subject-linker')) && (
+                <Link href="/dashboard/clerk/subject-linker" data-active={(isLinkActive('/dashboard/clerk/subject-linker') || isLinkActive('/dashboard/admin/subject-linker')) ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/subject-linker')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span>Course & Subject Linker</span>
                 </Link>
               )}
 

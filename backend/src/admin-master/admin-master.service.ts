@@ -953,7 +953,7 @@ export class AdminMasterService {
   }
 
   // ─── 3. SUBJECT MASTER (COLLEGE-WISE & CROSS-COLLEGE) ───────────────────────
-  async listSubjects(tenantSlug?: string) {
+  async listSubjects(tenantSlug?: string, facultyId?: string, departmentId?: string) {
     const colleges = await this.listColleges();
 
     if (tenantSlug && tenantSlug !== 'all') {
@@ -966,6 +966,7 @@ export class AdminMasterService {
 
       try {
         await this.tenantSchemaService.provisionSchema(slug).catch(() => {});
+        await this.ensureFacultySubjectsTable(schema).catch(() => {});
         await this.ds.query(`
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
@@ -976,6 +977,52 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS sub_addinfo VARCHAR(100);
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS mst_sub_name VARCHAR(200);
         `).catch(() => {});
+
+        const queryParams: any[] = [];
+        const whereClauses: string[] = [];
+
+        if (facultyId && facultyId.trim() !== '') {
+          queryParams.push(facultyId.trim());
+          const pIdx = queryParams.length;
+          whereClauses.push(`(
+            sub.id::text IN (
+              SELECT fs.subject_id::text FROM "${schema}".faculty_subjects fs
+              LEFT JOIN "${schema}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+              LEFT JOIN "${schema}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
+              WHERE fs.is_active = true AND (
+                fs.faculty_id::text = $${pIdx}::text OR 
+                f.emp_id::text = $${pIdx}::text OR 
+                f.id::text = $${pIdx}::text OR
+                u.id::text = $${pIdx}::text OR
+                u.emp_id::text = $${pIdx}::text
+              )
+            )
+            OR sub.code::text IN (
+              SELECT fs.subject_id::text FROM "${schema}".faculty_subjects fs
+              LEFT JOIN "${schema}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+              LEFT JOIN "${schema}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
+              WHERE fs.is_active = true AND (
+                fs.faculty_id::text = $${pIdx}::text OR 
+                f.emp_id::text = $${pIdx}::text OR 
+                f.id::text = $${pIdx}::text OR
+                u.id::text = $${pIdx}::text OR
+                u.emp_id::text = $${pIdx}::text
+              )
+            )
+            OR sub.id::text IN (
+              SELECT f.subject_id::text FROM "${schema}".faculty f
+              WHERE f.subject_id IS NOT NULL AND (f.id::text = $${pIdx}::text OR f.emp_id::text = $${pIdx}::text)
+            )
+          )`);
+        }
+
+        if (departmentId && departmentId.trim() !== '' && departmentId !== 'all') {
+          queryParams.push(departmentId.trim());
+          const pIdx = queryParams.length;
+          whereClauses.push(`(sub.department_id::text = $${pIdx}::text OR sub.department_code::text = $${pIdx}::text)`);
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
         const subjQuery = `
           SELECT * FROM (
@@ -992,19 +1039,20 @@ export class AdminMasterService {
               s.mst_sub_name,
               d.name as department_name, 
               d.code as department_code
-            FROM subjects s
-            LEFT JOIN departments d ON d.id::text = s.department_id::text
-            LEFT JOIN batches b ON b.id::text = s.batch_id::text
+            FROM "${schema}".subjects s
+            LEFT JOIN "${schema}".departments d ON d.id::text = s.department_id::text
+            LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
             ORDER BY s.id
           ) sub
+          ${whereSql}
           ORDER BY sub.code ASC, sub.name ASC
         `;
-        const rows = await this.tenantSchemaService.queryInTenant(
-          slug,
+        const rows = await this.ds.query(
           subjQuery,
+          queryParams,
         ).catch(() => []);
 
-        return rows.map(r => ({
+        return rows.map((r: any) => ({
           ...r,
           college_id: collegeId,
           college_name: collegeName,
@@ -1022,6 +1070,7 @@ export class AdminMasterService {
     for (const col of colleges) {
       try {
         const schema = `tenant_${col.slug}`;
+        await this.ensureFacultySubjectsTable(schema).catch(() => {});
         await this.ds.query(`
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
@@ -1032,6 +1081,52 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS sub_addinfo VARCHAR(100);
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS mst_sub_name VARCHAR(200);
         `).catch(() => {});
+
+        const queryParams: any[] = [];
+        const whereClauses: string[] = [];
+
+        if (facultyId && facultyId.trim() !== '') {
+          queryParams.push(facultyId.trim());
+          const pIdx = queryParams.length;
+          whereClauses.push(`(
+            sub.id::text IN (
+              SELECT fs.subject_id::text FROM "${schema}".faculty_subjects fs
+              LEFT JOIN "${schema}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+              LEFT JOIN "${schema}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
+              WHERE fs.is_active = true AND (
+                fs.faculty_id::text = $${pIdx}::text OR 
+                f.emp_id::text = $${pIdx}::text OR 
+                f.id::text = $${pIdx}::text OR
+                u.id::text = $${pIdx}::text OR
+                u.emp_id::text = $${pIdx}::text
+              )
+            )
+            OR sub.code::text IN (
+              SELECT fs.subject_id::text FROM "${schema}".faculty_subjects fs
+              LEFT JOIN "${schema}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+              LEFT JOIN "${schema}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
+              WHERE fs.is_active = true AND (
+                fs.faculty_id::text = $${pIdx}::text OR 
+                f.emp_id::text = $${pIdx}::text OR 
+                f.id::text = $${pIdx}::text OR
+                u.id::text = $${pIdx}::text OR
+                u.emp_id::text = $${pIdx}::text
+              )
+            )
+            OR sub.id::text IN (
+              SELECT f.subject_id::text FROM "${schema}".faculty f
+              WHERE f.subject_id IS NOT NULL AND (f.id::text = $${pIdx}::text OR f.emp_id::text = $${pIdx}::text)
+            )
+          )`);
+        }
+
+        if (departmentId && departmentId.trim() !== '' && departmentId !== 'all') {
+          queryParams.push(departmentId.trim());
+          const pIdx = queryParams.length;
+          whereClauses.push(`(sub.department_id::text = $${pIdx}::text OR sub.department_code::text = $${pIdx}::text)`);
+        }
+
+        const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
 
         const subjQuery = `
           SELECT * FROM (
@@ -1048,20 +1143,21 @@ export class AdminMasterService {
               s.mst_sub_name,
               d.name as department_name, 
               d.code as department_code
-            FROM subjects s
-            LEFT JOIN departments d ON d.id::text = s.department_id::text
-            LEFT JOIN batches b ON b.id::text = s.batch_id::text
+            FROM "${schema}".subjects s
+            LEFT JOIN "${schema}".departments d ON d.id::text = s.department_id::text
+            LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
             ORDER BY s.id
           ) sub
+          ${whereSql}
           ORDER BY sub.code ASC, sub.name ASC
         `;
-        const rows = await this.tenantSchemaService.queryInTenant(
-          col.slug,
+        const rows = await this.ds.query(
           subjQuery,
+          queryParams,
         ).catch(() => []);
 
         allSubjects.push(
-          ...rows.map(r => ({
+          ...rows.map((r: any) => ({
             ...r,
             college_id: col.id,
             college_name: col.name,
@@ -1340,15 +1436,30 @@ export class AdminMasterService {
     const params: any[] = [];
     let pIdx = 1;
 
-    if (targetSub) {
-      whereConditions.push(`(t.subject_id::text = $${pIdx} OR t.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
-      params.push(targetSub);
-      pIdx++;
+    if (subjectId && subjectCode && subjectId !== subjectCode) {
+      whereConditions.push(`(t.subject_id::text = $${pIdx} OR t.subject_code = $${pIdx} OR t.subject_code = $${pIdx + 1} OR s.code = $${pIdx + 1} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+      params.push(subjectId, subjectCode);
+      pIdx += 2;
+    } else {
+      const targetSub = subjectId || subjectCode;
+      if (targetSub) {
+        whereConditions.push(`(t.subject_id::text = $${pIdx} OR t.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+        params.push(targetSub);
+        pIdx++;
+      }
     }
-    if (targetUnit) {
-      whereConditions.push(`(t.unit_id::text = $${pIdx} OR t.unit_code = $${pIdx} OR u.code = $${pIdx} OR u.id::text = $${pIdx})`);
-      params.push(targetUnit);
-      pIdx++;
+
+    if (unitId && unitCode && unitId !== unitCode) {
+      whereConditions.push(`(t.unit_id::text = $${pIdx} OR t.unit_code = $${pIdx} OR t.unit_code = $${pIdx + 1} OR u.code = $${pIdx + 1} OR u.code = $${pIdx} OR u.id::text = $${pIdx})`);
+      params.push(unitId, unitCode);
+      pIdx += 2;
+    } else {
+      const targetUnit = unitId || unitCode;
+      if (targetUnit) {
+        whereConditions.push(`(t.unit_id::text = $${pIdx} OR t.unit_code = $${pIdx} OR u.code = $${pIdx} OR u.id::text = $${pIdx})`);
+        params.push(targetUnit);
+        pIdx++;
+      }
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -1566,7 +1677,7 @@ export class AdminMasterService {
     if (subSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
+        `SELECT id, code, name, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 OR sub_addinfo = $1 LIMIT 1`,
         [subSearch],
       ).catch(() => []);
       if (subRows.length > 0) {
@@ -1577,7 +1688,7 @@ export class AdminMasterService {
       }
     }
 
-    // Resolve unit if string code or UUID
+    // Resolve unit if string code or UUID (scoped by subject to prevent mixing)
     let unitId = dto.unit_id;
     let unitCode = dto.unit_code;
     let bloomLevel = dto.bloom_level;
@@ -1585,8 +1696,11 @@ export class AdminMasterService {
     if (unitSearch) {
       const unitRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, bloom_level, course_cd, branch_cd FROM units WHERE id::text = $1 OR code = $1 LIMIT 1`,
-        [unitSearch],
+        `SELECT id, code, name, bloom_level, course_cd, branch_cd FROM units 
+         WHERE (id::text = $1 OR code = $1)
+           AND ($2::text IS NULL OR subject_id::text = $2 OR subject_code = $3)
+         LIMIT 1`,
+        [unitSearch, subjectId || null, subjectCode || null],
       ).catch(() => []);
       if (unitRows.length > 0) {
         unitId = unitRows[0].id;
@@ -1750,20 +1864,46 @@ export class AdminMasterService {
     const params: any[] = [];
     let pIdx = 1;
 
-    if (targetTopic) {
-      whereConditions.push(`(c.topic_id::text = $${pIdx} OR c.topic_code = $${pIdx} OR t.code = $${pIdx} OR t.id::text = $${pIdx})`);
-      params.push(targetTopic);
-      pIdx++;
+    if (topicId && topicCode && topicId !== topicCode) {
+      whereConditions.push(`(c.topic_id::text = $${pIdx} OR c.topic_code = $${pIdx} OR c.topic_code = $${pIdx + 1} OR t.code = $${pIdx + 1} OR t.code = $${pIdx} OR t.id::text = $${pIdx})`);
+      params.push(topicId, topicCode);
+      pIdx += 2;
+    } else {
+      const targetTopic = (topicId || topicCode || '').trim();
+      if (targetTopic) {
+        whereConditions.push(`(c.topic_id::text = $${pIdx} OR c.topic_code = $${pIdx} OR t.code = $${pIdx} OR t.id::text = $${pIdx})`);
+        params.push(targetTopic);
+        pIdx++;
+      }
     }
     if (targetUnit) {
       whereConditions.push(`(c.unit_id::text = $${pIdx} OR c.unit_code = $${pIdx} OR u.code = $${pIdx} OR u.id::text = $${pIdx})`);
       params.push(targetUnit);
       pIdx++;
     }
-    if (targetSub) {
-      whereConditions.push(`(c.subject_id::text = $${pIdx} OR c.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
-      params.push(targetSub);
-      pIdx++;
+    if (subjectId && subjectCode && subjectId.trim() !== subjectCode.trim()) {
+      whereConditions.push(`(
+        c.subject_id::text = $${pIdx} OR c.subject_id::text = $${pIdx + 1} OR 
+        c.subject_code = $${pIdx} OR c.subject_code = $${pIdx + 1} OR 
+        s.code = $${pIdx} OR s.code = $${pIdx + 1} OR 
+        s.id::text = $${pIdx} OR s.id::text = $${pIdx + 1} OR
+        s.sub_addinfo = $${pIdx} OR s.sub_addinfo = $${pIdx + 1}
+      )`);
+      params.push(subjectId.trim(), subjectCode.trim());
+      pIdx += 2;
+    } else {
+      const targetSub = (subjectId || subjectCode || '').trim();
+      if (targetSub) {
+        whereConditions.push(`(
+          c.subject_id::text = $${pIdx} OR 
+          c.subject_code = $${pIdx} OR 
+          s.code = $${pIdx} OR 
+          s.id::text = $${pIdx} OR
+          s.sub_addinfo = $${pIdx}
+        )`);
+        params.push(targetSub);
+        pIdx++;
+      }
     }
 
     const whereClause = whereConditions.length > 0 ? `WHERE ${whereConditions.join(' AND ')}` : '';
@@ -1792,9 +1932,9 @@ export class AdminMasterService {
                 COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
                 COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
               FROM competencies c
-              LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
-              LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
-              LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
+              LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_id::text OR s.code::text = c.subject_code::text OR s.sub_addinfo = c.subject_code::text)
+              LEFT JOIN units u ON (u.id::text = c.unit_id::text OR (u.code::text = c.unit_code::text AND (u.subject_id::text = c.subject_id::text OR u.subject_code = c.subject_code)))
+              LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR (t.code::text = c.topic_code::text AND (t.subject_id::text = c.subject_id::text OR t.subject_code = c.subject_code)))
               LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
               ${whereClause}
               ORDER BY c.id
@@ -1843,9 +1983,9 @@ export class AdminMasterService {
           COALESCE(c.course_cd::text, t.course_cd::text, u.course_cd::text, s.course_cd::text) as course_cd,
           COALESCE(c.branch_cd::text, t.branch_cd::text, u.branch_cd::text, s.branch_cd::text) as branch_cd
         FROM competencies c
-        LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_code::text)
-        LEFT JOIN units u ON (u.id::text = c.unit_id::text OR u.code::text = c.unit_code::text)
-        LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR t.code::text = c.topic_code::text)
+        LEFT JOIN subjects s ON (s.id::text = c.subject_id::text OR s.code::text = c.subject_id::text OR s.code::text = c.subject_code::text OR s.sub_addinfo = c.subject_code::text)
+        LEFT JOIN units u ON (u.id::text = c.unit_id::text OR (u.code::text = c.unit_code::text AND (u.subject_id::text = c.subject_id::text OR u.subject_code = c.subject_code)))
+        LEFT JOIN topics t ON (t.id::text = c.topic_id::text OR (t.code::text = c.topic_code::text AND (t.subject_id::text = c.subject_id::text OR t.subject_code = c.subject_code)))
         LEFT JOIN professional_linkers l ON l.id::text = c.linker_id::text
         ${whereClause}
         ORDER BY c.id
@@ -1880,7 +2020,7 @@ export class AdminMasterService {
     if (subSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
+        `SELECT id, code, name, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 OR sub_addinfo = $1 LIMIT 1`,
         [subSearch],
       ).catch(() => []);
       if (subRows.length > 0) {
@@ -1891,15 +2031,18 @@ export class AdminMasterService {
       }
     }
 
-    // Resolve unit if string code or UUID
+    // Resolve unit if string code or UUID (scoped by subject)
     let unitId = dto.unit_id || dto.unitId;
     let unitCode = dto.unit_code || dto.unitCode;
     const unitSearch = dto.unit_code || dto.unitCode || dto.unit_id || dto.unitId;
     if (unitSearch) {
       const unitRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, course_cd, branch_cd FROM units WHERE id::text = $1 OR code = $1 LIMIT 1`,
-        [unitSearch],
+        `SELECT id, code, name, course_cd, branch_cd FROM units 
+         WHERE (id::text = $1 OR code = $1)
+           AND ($2::text IS NULL OR subject_id::text = $2 OR subject_code = $3)
+         LIMIT 1`,
+        [unitSearch, subjectId || null, subjectCode || null],
       ).catch(() => []);
       if (unitRows.length > 0) {
         unitId = unitRows[0].id;
@@ -1909,7 +2052,7 @@ export class AdminMasterService {
       }
     }
 
-    // Resolve topic if string code or UUID
+    // Resolve topic if string code or UUID (scoped by subject)
     let topicId = dto.topic_id || dto.topicId;
     let topicCode = dto.topic_code || dto.topicCode;
     let bloomLevel = dto.bloom_level || dto.bloomLevel;
@@ -1917,8 +2060,11 @@ export class AdminMasterService {
     if (topicSearch) {
       const topicRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, bloom_level, unit_id, unit_code, subject_id, subject_code, course_cd, branch_cd FROM topics WHERE id::text = $1 OR code = $1 LIMIT 1`,
-        [topicSearch],
+        `SELECT id, code, name, bloom_level, unit_id, unit_code, subject_id, subject_code, course_cd, branch_cd FROM topics 
+         WHERE (id::text = $1 OR code = $1)
+           AND ($2::text IS NULL OR subject_id::text = $2 OR subject_code = $3)
+         LIMIT 1`,
+        [topicSearch, subjectId || null, subjectCode || null],
       ).catch(() => []);
       if (topicRows.length > 0) {
         topicId = topicRows[0].id;
@@ -2047,7 +2193,7 @@ export class AdminMasterService {
     if (subSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
+        `SELECT id, code, name, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 OR sub_addinfo = $1 LIMIT 1`,
         [subSearch],
       ).catch(() => []);
       if (subRows.length > 0) {
@@ -2058,15 +2204,18 @@ export class AdminMasterService {
       }
     }
 
-    // Resolve unit if string code or UUID
+    // Resolve unit if string code or UUID (scoped by subject)
     let unitId = dto.unit_id;
     let unitCode = dto.unit_code;
     const unitSearch = dto.unit_code || dto.unit_id;
     if (unitSearch) {
       const unitRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, course_cd, branch_cd FROM units WHERE id::text = $1 OR code = $1 LIMIT 1`,
-        [unitSearch],
+        `SELECT id, code, name, course_cd, branch_cd FROM units 
+         WHERE (id::text = $1 OR code = $1)
+           AND ($2::text IS NULL OR subject_id::text = $2 OR subject_code = $3)
+         LIMIT 1`,
+        [unitSearch, subjectId || null, subjectCode || null],
       ).catch(() => []);
       if (unitRows.length > 0) {
         unitId = unitRows[0].id;
@@ -2076,7 +2225,7 @@ export class AdminMasterService {
       }
     }
 
-    // Resolve topic if string code or UUID
+    // Resolve topic if string code or UUID (scoped by subject)
     let topicId = dto.topic_id;
     let topicCode = dto.topic_code;
     let bloomLevel = dto.bloom_level;
@@ -2084,8 +2233,11 @@ export class AdminMasterService {
     if (topicSearch) {
       const topicRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, code, name, bloom_level, unit_id, unit_code, subject_id, subject_code, course_cd, branch_cd FROM topics WHERE id::text = $1 OR code = $1 LIMIT 1`,
-        [topicSearch],
+        `SELECT id, code, name, bloom_level, unit_id, unit_code, subject_id, subject_code, course_cd, branch_cd FROM topics 
+         WHERE (id::text = $1 OR code = $1)
+           AND ($2::text IS NULL OR subject_id::text = $2 OR subject_code = $3)
+         LIMIT 1`,
+        [topicSearch, subjectId || null, subjectCode || null],
       ).catch(() => []);
       if (topicRows.length > 0) {
         topicId = topicRows[0].id;
@@ -2976,17 +3128,18 @@ export class AdminMasterService {
       await this.ds.query(`
         CREATE TABLE IF NOT EXISTS "${schema}".faculty_subjects (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          faculty_id UUID NOT NULL,
-          subject_id UUID NOT NULL,
+          faculty_id TEXT NOT NULL,
+          subject_id TEXT NOT NULL,
           is_active BOOLEAN DEFAULT true,
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
       `).catch(() => {});
       await this.ds.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9_]/g, '_')}_fac_sub ON "${schema}".faculty_subjects (faculty_id, subject_id);
-      `).catch(() => {});
-      await this.ds.query(`
+        ALTER TABLE "${schema}".faculty_subjects ALTER COLUMN faculty_id TYPE TEXT;
+        ALTER TABLE "${schema}".faculty_subjects ALTER COLUMN subject_id TYPE TEXT;
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+        ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW();
         ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
         ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
         ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
@@ -2994,6 +3147,30 @@ export class AdminMasterService {
         ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
         ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50);
         ALTER TABLE "${schema}".faculty_subjects ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+      `).catch(() => {});
+      // Drop legacy single-column unique constraint if present to allow multiple scope linkages per faculty
+      await this.ds.query(`
+        ALTER TABLE "${schema}".faculty_subjects DROP CONSTRAINT IF EXISTS uq_${schema.replace(/[^a-zA-Z0-9_]/g, '_')}_fac_sub;
+        DROP INDEX IF EXISTS "${schema}".uq_${schema.replace(/[^a-zA-Z0-9_]/g, '_')}_fac_sub;
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_${schema.replace(/[^a-zA-Z0-9_]/g, '_')}_fac_sub_scope 
+        ON "${schema}".faculty_subjects (faculty_id, subject_id, COALESCE(course_cd, ''), COALESCE(branch_cd, ''), COALESCE(batch_cd, ''), COALESCE(sem_cd, ''), COALESCE(section, ''));
+      `).catch(() => {});
+      // Auto-backfill course_cd, course_name, branch_cd, branch_name, batch_cd, sem_cd, section from subjects, courses, and departments
+      await this.ds.query(`
+        UPDATE "${schema}".faculty_subjects fs
+        SET 
+          course_cd = COALESCE(fs.course_cd, s.course_cd, '1'),
+          course_name = COALESCE(c.name, fs.course_name, s.course_name, 'B.TECH.'),
+          branch_cd = COALESCE(fs.branch_cd, s.branch_cd, '1'),
+          branch_name = COALESCE(d.name, fs.branch_name, 'Computer Science and Engineering'),
+          batch_cd = COALESCE(fs.batch_cd, s.batch_cd, '17'),
+          sem_cd = COALESCE(fs.sem_cd, s.sem_cd, s.semester, '5'),
+          section = COALESCE(fs.section, '1')
+        FROM "${schema}".subjects s
+        LEFT JOIN "${schema}".courses c ON (c.course_cd::text = s.course_cd::text OR c.code::text = s.course_cd::text)
+        LEFT JOIN "${schema}".departments d ON (d.id::text = s.department_id::text OR d.code::text = s.department_id::text OR d.branch_cd::text = s.branch_cd::text)
+        WHERE (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text OR s.sub_addinfo::text = fs.subject_id::text)
+          AND (fs.course_cd IS NULL OR fs.course_name IS NULL OR fs.course_name ILIKE 'Course %' OR fs.course_name = 'GENERAL COURSE' OR fs.sem_cd IS NULL);
       `).catch(() => {});
       AdminMasterService.ensuredFacultySubjectSchemas.add(schema);
     } catch (e) {}
@@ -3012,21 +3189,38 @@ export class AdminMasterService {
           await this.ensureFacultySubjectsTable(s);
           const rows = await this.ds.query(
             `SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
-                    fs.course_cd, fs.course_name, fs.branch_cd, fs.branch_name, fs.batch_cd, fs.sem_cd, fs.section,
-                    COALESCE(fs.course_cd, s.course_cd) AS resolved_course_cd,
-                    COALESCE(fs.course_name, s.course_name) AS resolved_course_name,
-                    COALESCE(fs.branch_cd, s.branch_cd) AS resolved_branch_cd,
-                    COALESCE(fs.batch_cd, s.batch_cd) AS resolved_batch_cd,
+                    COALESCE(fs.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+                    COALESCE(c.name, fs.course_name, s.course_name) AS course_name,
+                    COALESCE(fs.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+                    COALESCE(sd.name, fs.branch_name, fd.name, d.name) AS branch_name,
+                    COALESCE(fs.batch_cd, s.batch_cd) AS batch_cd,
+                    COALESCE(b.name, b.year, fs.batch_cd) AS batch_name,
+                    COALESCE(b.year, fs.batch_cd) AS batch_year,
+                    COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS sem_cd,
+                    COALESCE(fs.section, '1') AS section,
+                    COALESCE(fs.course_cd, s.course_cd, c.course_cd, c.code) AS resolved_course_cd,
+                    COALESCE(c.name, fs.course_name, s.course_name) AS resolved_course_name,
+                    COALESCE(fs.branch_cd, s.branch_cd, d.branch_cd, d.code) AS resolved_branch_cd,
+                    COALESCE(sd.name, fs.branch_name, fd.name, d.name) AS resolved_branch_name,
+                    COALESCE(b.name, b.year, fs.batch_cd) AS resolved_batch_name,
+                    COALESCE(b.year, fs.batch_cd) AS resolved_batch_year,
                     COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS resolved_sem_cd,
-                    f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
+                    COALESCE(f.name, u.name, 'Faculty') AS faculty_name,
+                    COALESCE(f.emp_id, u.emp_id, fs.faculty_id) AS faculty_code,
+                    f.designation AS faculty_designation,
                     fd.name AS faculty_department_name, fd.code AS faculty_department_code,
-                    s.name AS subject_name, s.code AS subject_code,
+                    COALESCE(s.name, fs.subject_id) AS subject_name,
+                    COALESCE(s.code, fs.subject_id) AS subject_code,
                     sd.name AS subject_department_name, sd.code AS subject_department_code
              FROM "${s}".faculty_subjects fs
-             JOIN "${s}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+             LEFT JOIN "${s}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+             LEFT JOIN "${s}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
              LEFT JOIN "${s}".departments fd ON (fd.id::text = f.department_id::text OR fd.code::text = f.department_id::text)
-             JOIN "${s}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text)
+             LEFT JOIN "${s}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text OR s.sub_addinfo::text = fs.subject_id::text)
+             LEFT JOIN "${s}".courses c ON (c.course_cd::text = COALESCE(fs.course_cd, s.course_cd)::text OR c.code::text = COALESCE(fs.course_cd, s.course_cd)::text)
+             LEFT JOIN "${s}".departments d ON (d.id::text = s.department_id::text OR d.code::text = s.department_id::text OR (d.branch_cd::text = COALESCE(fs.branch_cd, s.branch_cd)::text AND (d.course_cd::text = COALESCE(fs.course_cd, s.course_cd)::text OR d.course_cd IS NULL)))
              LEFT JOIN "${s}".departments sd ON (sd.id::text = s.department_id::text OR sd.code::text = s.department_id::text)
+             LEFT JOIN "${s}".batches b ON (b.batch_cd::text = fs.batch_cd::text AND (b.course_cd::text = COALESCE(fs.course_cd, s.course_cd)::text OR b.course_cd IS NULL))
              WHERE fs.is_active = true
              ORDER BY fs.id, fs.created_at DESC`
           );
@@ -3052,30 +3246,47 @@ export class AdminMasterService {
     const params: any[] = [];
     let sql = `
       SELECT DISTINCT ON (fs.id) fs.id, fs.faculty_id, fs.subject_id, fs.is_active, fs.created_at,
-             fs.course_cd, fs.course_name, fs.branch_cd, fs.branch_name, fs.batch_cd, fs.sem_cd, fs.section,
-             COALESCE(fs.course_cd, s.course_cd) AS resolved_course_cd,
-             COALESCE(fs.course_name, s.course_name) AS resolved_course_name,
-             COALESCE(fs.branch_cd, s.branch_cd) AS resolved_branch_cd,
-             COALESCE(fs.batch_cd, s.batch_cd) AS resolved_batch_cd,
+             COALESCE(fs.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+             COALESCE(c.name, fs.course_name, s.course_name) AS course_name,
+             COALESCE(fs.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+             COALESCE(sd.name, fs.branch_name, fd.name, d.name) AS branch_name,
+             COALESCE(fs.batch_cd, s.batch_cd) AS batch_cd,
+             COALESCE(b.name, b.year, fs.batch_cd) AS batch_name,
+             COALESCE(b.year, fs.batch_cd) AS batch_year,
+             COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS sem_cd,
+             COALESCE(fs.section, '1') AS section,
+             COALESCE(fs.course_cd, s.course_cd, c.course_cd, c.code) AS resolved_course_cd,
+             COALESCE(c.name, fs.course_name, s.course_name) AS resolved_course_name,
+             COALESCE(fs.branch_cd, s.branch_cd, d.branch_cd, d.code) AS resolved_branch_cd,
+             COALESCE(sd.name, fs.branch_name, fd.name, d.name) AS resolved_branch_name,
+             COALESCE(b.name, b.year, fs.batch_cd) AS resolved_batch_name,
+             COALESCE(b.year, fs.batch_cd) AS resolved_batch_year,
              COALESCE(fs.sem_cd, s.sem_cd, s.semester) AS resolved_sem_cd,
-             f.name AS faculty_name, f.emp_id AS faculty_code, f.designation AS faculty_designation,
+             COALESCE(f.name, u.name, 'Faculty') AS faculty_name,
+             COALESCE(f.emp_id, u.emp_id, fs.faculty_id) AS faculty_code,
+             f.designation AS faculty_designation,
              fd.name AS faculty_department_name, fd.code AS faculty_department_code,
-             s.name AS subject_name, s.code AS subject_code,
+             COALESCE(s.name, fs.subject_id) AS subject_name,
+             COALESCE(s.code, fs.subject_id) AS subject_code,
              sd.name AS subject_department_name, sd.code AS subject_department_code
       FROM "${s}".faculty_subjects fs
-      JOIN "${s}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+      LEFT JOIN "${s}".faculty f ON (f.id::text = fs.faculty_id::text OR f.emp_id::text = fs.faculty_id::text)
+      LEFT JOIN "${s}".users u ON (u.emp_id::text = f.emp_id::text OR u.id::text = fs.faculty_id::text OR u.emp_id::text = fs.faculty_id::text)
       LEFT JOIN "${s}".departments fd ON (fd.id::text = f.department_id::text OR fd.code::text = f.department_id::text)
-      JOIN "${s}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text)
+      LEFT JOIN "${s}".subjects s ON (s.id::text = fs.subject_id::text OR s.code::text = fs.subject_id::text OR s.sub_addinfo::text = fs.subject_id::text)
+      LEFT JOIN "${s}".courses c ON (c.course_cd::text = COALESCE(fs.course_cd, s.course_cd)::text OR c.code::text = COALESCE(fs.course_cd, s.course_cd)::text)
+      LEFT JOIN "${s}".departments d ON (d.id::text = s.department_id::text OR d.code::text = s.department_id::text OR (d.branch_cd::text = COALESCE(fs.branch_cd, s.branch_cd)::text AND (d.course_cd::text = COALESCE(fs.course_cd, s.course_cd)::text OR d.course_cd IS NULL)))
       LEFT JOIN "${s}".departments sd ON (sd.id::text = s.department_id::text OR sd.code::text = s.department_id::text)
+      LEFT JOIN "${s}".batches b ON (b.batch_cd::text = fs.batch_cd::text AND (b.course_cd::text = COALESCE(fs.course_cd, s.course_cd)::text OR b.course_cd IS NULL))
       WHERE fs.is_active = true
     `;
     if (query?.facultyId) {
       params.push(query.facultyId);
-      sql += ` AND (fs.faculty_id::text = $${params.length}::text OR f.emp_id::text = $${params.length}::text OR f.id::text = $${params.length}::text)`;
+      sql += ` AND (fs.faculty_id::text = $${params.length}::text OR f.emp_id::text = $${params.length}::text OR f.id::text = $${params.length}::text OR u.id::text = $${params.length}::text OR u.emp_id::text = $${params.length}::text)`;
     }
     if (query?.subjectId) {
       params.push(query.subjectId);
-      sql += ` AND (fs.subject_id::text = $${params.length}::text OR s.code::text = $${params.length}::text OR s.id::text = $${params.length}::text)`;
+      sql += ` AND (fs.subject_id::text = $${params.length}::text OR s.code::text = $${params.length}::text OR s.id::text = $${params.length}::text OR s.sub_addinfo::text = $${params.length}::text)`;
     }
     if (query?.departmentId) {
       params.push(query.departmentId);
@@ -3083,11 +3294,11 @@ export class AdminMasterService {
     }
     if (query?.courseCd) {
       params.push(query.courseCd);
-      sql += ` AND (fs.course_cd::text = $${params.length}::text OR s.course_cd::text = $${params.length}::text)`;
+      sql += ` AND (fs.course_cd::text = $${params.length}::text OR s.course_cd::text = $${params.length}::text OR c.code::text = $${params.length}::text OR c.course_cd::text = $${params.length}::text)`;
     }
     if (query?.branchCd) {
       params.push(query.branchCd);
-      sql += ` AND (fs.branch_cd::text = $${params.length}::text OR s.branch_cd::text = $${params.length}::text OR s.department_id::text = $${params.length}::text OR sd.code::text = $${params.length}::text)`;
+      sql += ` AND (fs.branch_cd::text = $${params.length}::text OR s.branch_cd::text = $${params.length}::text OR s.department_id::text = $${params.length}::text OR sd.code::text = $${params.length}::text OR d.code::text = $${params.length}::text OR d.branch_cd::text = $${params.length}::text)`;
     }
     sql += ` ORDER BY fs.id, fs.created_at DESC`;
     const rows = await this.ds.query(sql, params).catch(() => []);
@@ -3108,53 +3319,94 @@ export class AdminMasterService {
     const schema = `tenant_${targetSlug}`;
     await this.ensureFacultySubjectsTable(schema);
 
-    // Resolve Faculty UUID
-    let facId = dto.facultyId;
-    if (!this.isUUID(facId)) {
+    // Resolve Faculty UUID or emp_id
+    let facId = dto.facultyId || dto.faculty_id || dto.empId || dto.emp_id || dto.facultyCode || dto.faculty_code;
+    if (facId) {
       const fRows = await this.ds.query(
         `SELECT id FROM "${schema}".faculty WHERE emp_id = $1 OR id::text = $1 LIMIT 1`,
-        [dto.facultyId],
+        [facId],
       ).catch(() => []);
-      if (fRows.length) facId = fRows[0].id;
+      if (fRows.length) {
+        facId = fRows[0].id;
+      } else {
+        const uRows = await this.ds.query(
+          `SELECT id FROM "${schema}".users WHERE emp_id = $1 OR id::text = $1 LIMIT 1`,
+          [facId],
+        ).catch(() => []);
+        if (uRows.length) facId = uRows[0].id;
+      }
     }
 
     // Resolve Subject UUID and Subject details (fallback for course, branch, batch, sem)
-    let subId = dto.subjectId;
+    let subId = dto.subjectId || dto.subject_id || dto.subjectCode || dto.subject_code || dto.subCode || dto.sub_code;
     const sRows = await this.ds.query(
-      `SELECT * FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
-      [dto.subjectId],
+      `SELECT * FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 OR sub_addinfo = $1 LIMIT 1`,
+      [subId],
     ).catch(() => []);
     if (sRows.length) {
       subId = sRows[0].id;
     }
     const sub = sRows[0] || {};
 
-    const courseCd = dto.courseCd || sub.course_cd || null;
-    const courseName = dto.courseName || sub.course_name || null;
-    const branchCd = dto.branchCd || sub.branch_cd || dto.departmentId || null;
-    const branchName = dto.branchName || null;
-    const batchCd = dto.batchCd || sub.batch_cd || null;
-    const semCd = dto.semCd || sub.sem_cd || sub.semester || null;
-    const section = dto.section || null;
+    let courseCd = dto.courseCd || dto.course_cd || sub.course_cd || null;
+    let courseName = dto.courseName || dto.course_name || sub.course_name || null;
+    if (courseCd && (!courseName || courseName.startsWith('Course '))) {
+      const cRows = await this.ds.query(
+        `SELECT name FROM "${schema}".courses WHERE course_cd = $1 OR code = $1 OR id::text = $1 LIMIT 1`,
+        [courseCd],
+      ).catch(() => []);
+      if (cRows.length) courseName = cRows[0].name;
+    }
 
-    const rows = await this.ds.query(
-      `INSERT INTO "${schema}".faculty_subjects (
-         faculty_id, subject_id, course_cd, course_name, branch_cd, branch_name, batch_cd, sem_cd, section, is_active
-       )
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
-       ON CONFLICT (faculty_id, subject_id) DO UPDATE SET
-         course_cd = COALESCE(EXCLUDED.course_cd, "${schema}".faculty_subjects.course_cd),
-         course_name = COALESCE(EXCLUDED.course_name, "${schema}".faculty_subjects.course_name),
-         branch_cd = COALESCE(EXCLUDED.branch_cd, "${schema}".faculty_subjects.branch_cd),
-         branch_name = COALESCE(EXCLUDED.branch_name, "${schema}".faculty_subjects.branch_name),
-         batch_cd = COALESCE(EXCLUDED.batch_cd, "${schema}".faculty_subjects.batch_cd),
-         sem_cd = COALESCE(EXCLUDED.sem_cd, "${schema}".faculty_subjects.sem_cd),
-         section = COALESCE(EXCLUDED.section, "${schema}".faculty_subjects.section),
-         is_active = true,
-         updated_at = NOW()
-       RETURNING *`,
-      [facId, subId, courseCd, courseName, branchCd, branchName, batchCd, semCd, section]
-    );
+    let branchCd = dto.branchCd || dto.branch_cd || sub.branch_cd || dto.departmentId || dto.department_id || null;
+    let branchName = dto.branchName || dto.branch_name || null;
+    if (branchCd && !branchName) {
+      const dRows = await this.ds.query(
+        `SELECT name FROM "${schema}".departments WHERE branch_cd = $1 OR code = $1 OR id::text = $1 LIMIT 1`,
+        [branchCd],
+      ).catch(() => []);
+      if (dRows.length) branchName = dRows[0].name;
+    }
+
+    const batchCd = dto.batchCd || dto.batch_cd || sub.batch_cd || null;
+    const semCd = dto.semCd || dto.sem_cd || sub.sem_cd || sub.semester || null;
+    const section = dto.section || '1';
+
+    // Check if an existing link exists for this exact faculty, subject, and academic scope
+    const existingRows = await this.ds.query(
+      `SELECT id FROM "${schema}".faculty_subjects
+       WHERE faculty_id = $1 AND subject_id = $2
+         AND COALESCE(course_cd, '') = COALESCE($3, '')
+         AND COALESCE(branch_cd, '') = COALESCE($4, '')
+         AND COALESCE(batch_cd, '') = COALESCE($5, '')
+         AND COALESCE(sem_cd, '') = COALESCE($6, '')
+         AND COALESCE(section, '1') = COALESCE($7, '1')
+       LIMIT 1`,
+      [facId, subId, courseCd, branchCd, batchCd, semCd, section]
+    ).catch(() => []);
+
+    let rows: any[] = [];
+    if (existingRows.length > 0) {
+      rows = await this.ds.query(
+        `UPDATE "${schema}".faculty_subjects
+         SET course_name = COALESCE($1, course_name),
+             branch_name = COALESCE($2, branch_name),
+             is_active = true,
+             updated_at = NOW()
+         WHERE id = $3
+         RETURNING *`,
+        [courseName, branchName, existingRows[0].id]
+      );
+    } else {
+      rows = await this.ds.query(
+        `INSERT INTO "${schema}".faculty_subjects (
+           faculty_id, subject_id, course_cd, course_name, branch_cd, branch_name, batch_cd, sem_cd, section, is_active
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+         RETURNING *`,
+        [facId, subId, courseCd, courseName, branchCd, branchName, batchCd, semCd, section]
+      );
+    }
     return rows[0];
   }
 
@@ -3166,33 +3418,41 @@ export class AdminMasterService {
     const schema = `tenant_${targetSlug}`;
     await this.ensureFacultySubjectsTable(schema);
 
-    // Resolve Faculty UUID
-    let facId = dto.facultyId;
-    if (!this.isUUID(facId)) {
+    // Resolve Faculty UUID or emp_id
+    let facId = dto.facultyId || dto.faculty_id || dto.empId || dto.emp_id || dto.facultyCode || dto.faculty_code;
+    if (facId) {
       const fRows = await this.ds.query(
         `SELECT id FROM "${schema}".faculty WHERE emp_id = $1 OR id::text = $1 LIMIT 1`,
-        [dto.facultyId],
+        [facId],
       ).catch(() => []);
-      if (fRows.length) facId = fRows[0].id;
+      if (fRows.length) {
+        facId = fRows[0].id;
+      } else {
+        const uRows = await this.ds.query(
+          `SELECT id FROM "${schema}".users WHERE emp_id = $1 OR id::text = $1 LIMIT 1`,
+          [facId],
+        ).catch(() => []);
+        if (uRows.length) facId = uRows[0].id;
+      }
     }
 
-    // Resolve Subject UUID
-    let subId = dto.subjectId;
+    // Resolve Subject UUID or Code
+    let subId = dto.subjectId || dto.subject_id || dto.subjectCode || dto.subject_code || dto.subCode || dto.sub_code;
     const sRows = await this.ds.query(
-      `SELECT * FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 LIMIT 1`,
-      [dto.subjectId],
+      `SELECT * FROM "${schema}".subjects WHERE code = $1 OR id::text = $1 OR sub_addinfo = $1 LIMIT 1`,
+      [subId],
     ).catch(() => []);
     if (sRows.length) {
       subId = sRows[0].id;
     }
     const sub = sRows[0] || {};
 
-    const courseCd = dto.courseCd || sub.course_cd || null;
-    const courseName = dto.courseName || sub.course_name || null;
-    const branchCd = dto.branchCd || sub.branch_cd || dto.departmentId || null;
-    const branchName = dto.branchName || null;
-    const batchCd = dto.batchCd || sub.batch_cd || null;
-    const semCd = dto.semCd || sub.sem_cd || sub.semester || null;
+    const courseCd = dto.courseCd || dto.course_cd || sub.course_cd || null;
+    const courseName = dto.courseName || dto.course_name || sub.course_name || null;
+    const branchCd = dto.branchCd || dto.branch_cd || sub.branch_cd || dto.departmentId || dto.department_id || null;
+    const branchName = dto.branchName || dto.branch_name || null;
+    const batchCd = dto.batchCd || dto.batch_cd || sub.batch_cd || null;
+    const semCd = dto.semCd || dto.sem_cd || sub.sem_cd || sub.semester || null;
     const section = dto.section || null;
 
     const rows = await this.ds.query(
@@ -3259,11 +3519,17 @@ export class AdminMasterService {
       const params: any[] = [];
       let pIdx = 1;
 
-      const subTarget = subjectId || subjectCode;
-      if (subTarget) {
-        whereConditions.push(`(u.subject_id::text = $${pIdx} OR u.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
-        params.push(subTarget);
-        pIdx++;
+      if (subjectId && subjectCode && subjectId !== subjectCode) {
+        whereConditions.push(`(u.subject_id::text = $${pIdx} OR u.subject_code = $${pIdx} OR u.subject_code = $${pIdx + 1} OR s.code = $${pIdx + 1} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+        params.push(subjectId, subjectCode);
+        pIdx += 2;
+      } else {
+        const subTarget = subjectId || subjectCode;
+        if (subTarget) {
+          whereConditions.push(`(u.subject_id::text = $${pIdx} OR u.subject_code = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx})`);
+          params.push(subTarget);
+          pIdx++;
+        }
       }
       if (courseCd) {
         whereConditions.push(`(COALESCE(u.course_cd, s.course_cd) = $${pIdx})`);

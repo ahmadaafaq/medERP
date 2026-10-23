@@ -138,6 +138,7 @@ export default function QuestionPaperReviewModal({
             .sub-questions { margin: 6px 0 6px 18px; }
             .sub-q-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
             .practical-row { display: flex; justify-content: space-between; margin-bottom: 4px; border-bottom: 1px dotted #ccc; padding-bottom: 2px; }
+            .q-img { max-width: 100%; max-height: 240px; object-fit: contain; margin: 6px 0 8px 18px; display: block; border: 1px solid #ccc; border-radius: 4px; }
             .no-print { display: none !important; }
           </style>
         </head>
@@ -197,6 +198,14 @@ export default function QuestionPaperReviewModal({
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/20">
                   Version {currentVersion}
                 </span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-[#F36C21]/10 text-[#F36C21] border border-[#F36C21]/20">
+                  {paper.paper_set || paper.paperSet || 'Set A'}
+                </span>
+                {paper.target_sections && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black uppercase bg-[#00C48C]/10 text-[#00C48C] border border-[#00C48C]/20">
+                    🎯 {Array.isArray(paper.target_sections) ? (paper.target_sections.includes('All') ? 'Common (All Sections)' : paper.target_sections.join(', ')) : String(paper.target_sections)}
+                  </span>
+                )}
                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase ${
                   paper.status === 'HOD_APPROVED' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400' :
                   paper.status === 'CHANGES_REQUESTED' ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400' :
@@ -315,6 +324,8 @@ export default function QuestionPaperReviewModal({
               <span><b>Course/Branch:</b> {formatCourseName(paper.course_cd, paper.course_name) || 'BCA'} {paper.branch_cd ? `· Branch ${paper.branch_cd}` : ''}</span>
               <span><b>Semester:</b> {formatSemester(paper.semester, paper.section) || 'Semester 3'}</span>
               <span><b>Paper Code:</b> {paper.code}</span>
+              <span><b>Set:</b> <b className="font-bold underline">{paper.paper_set || paper.paperSet || 'Set A'}</b></span>
+              <span><b>Target Section:</b> {Array.isArray(paper.target_sections) ? (paper.target_sections.includes('All') ? 'Common (All Sections)' : paper.target_sections.join(', ')) : (paper.target_sections || 'Common')}</span>
               <span><b>Duration:</b> {paper.duration_minutes || 60} mins</span>
               <span><b>Max Marks:</b> {paper.max_marks || 100}</span>
               <span><b>Pass Marks:</b> {paper.passing_marks || 40}</span>
@@ -390,6 +401,17 @@ export default function QuestionPaperReviewModal({
                                       {q.questionText || q.question_text}
                                     </p>
                                   </div>
+
+                                  {/* Attached Diagram / Image */}
+                                  {(q.image_url || q.imageUrl) && (
+                                    <div className="mt-2.5 mb-2 ml-5">
+                                      <img
+                                        src={q.image_url || q.imageUrl}
+                                        alt={`Diagram for Q${qIdx + 1}`}
+                                        className="q-img max-h-56 max-w-full object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-white p-1 shadow-sm"
+                                      />
+                                    </div>
+                                  )}
 
                                   {/* Sub-questions if any */}
                                   {q.sub_questions && Array.isArray(q.sub_questions) && q.sub_questions.length > 0 && (

@@ -30,6 +30,7 @@ export class ExaminationController {
   @Get('papers')
   async getPapers(
     @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
     @Query('status') status?: string,
     @Query('departmentId') departmentId?: string,
     @Query('colgCd') colgCd?: string,
@@ -38,10 +39,15 @@ export class ExaminationController {
     @Query('batchCd') batchCd?: string,
     @Query('semester') semester?: string,
     @Query('section') section?: string,
+    @Query('facultyId') facultyId?: string,
+    @Query('createdBy') createdBy?: string,
+    @Query('role') role?: string,
   ) {
-    return this.examinationService.getPapers(tenantSlug, {
-      status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section,
-    });
+    return this.examinationService.getPapers(
+      tenantSlug,
+      { status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section, facultyId, createdBy, role },
+      user,
+    );
   }
 
   // ─── HOD Approval — Question Papers ─────────────────────────────────────
@@ -102,14 +108,22 @@ export class ExaminationController {
 
   @Public()
   @Get('papers/:id')
-  async getPaperById(@Tenant() tenantSlug: string, @Param('id') id: string) {
-    return this.examinationService.getPaperById(tenantSlug, id);
+  async getPaperById(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.examinationService.getPaperById(tenantSlug, id, user);
   }
 
   @Public()
   @Delete('papers/:id')
-  async deletePaper(@Tenant() tenantSlug: string, @Param('id') id: string) {
-    return this.examinationService.deletePaper(tenantSlug, id);
+  async deletePaper(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+  ) {
+    return this.examinationService.deletePaper(tenantSlug, id, user);
   }
 
   // ─── Timetable Draft Workflow (Clerk → HOD → Live) ──────────────────────
@@ -317,6 +331,8 @@ export class ExaminationController {
     @Query('topic') topic?: string,
     @Query('competencyId') competencyId?: string,
     @Query('competencyCode') competencyCode?: string,
+    @Query('unitId') unitId?: string,
+    @Query('unitCode') unitCode?: string,
     @Query('colgCd') colgCd?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
@@ -326,6 +342,7 @@ export class ExaminationController {
   ) {
     return this.examinationService.getQuestions(tenantSlug, {
       departmentId, subjectId, mode, professionalPhase, topicId, topic, competencyId, competencyCode,
+      unitId, unitCode,
       colgCd, courseCd, branchCd, batchCd, semester, section,
     });
   }

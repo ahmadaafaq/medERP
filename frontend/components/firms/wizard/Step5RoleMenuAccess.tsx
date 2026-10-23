@@ -132,6 +132,7 @@ export default function Step5RoleMenuAccess({
         { role: 'CLERK', menu_key: 'clerk.dashboard', menu_label: 'Clerk Portal', route_path: '/dashboard/clerk', parent_menu_key: null, sort_order: 10, applicable_firm_mode: 'BOTH' },
         { role: 'CLERK', menu_key: 'clerk.attendance-import', menu_label: 'Attendance Import', route_path: '/dashboard/clerk/attendance-import', parent_menu_key: null, sort_order: 20, applicable_firm_mode: 'BOTH' },
         { role: 'CLERK', menu_key: 'clerk.marks-entry', menu_label: 'Marks Entry', route_path: '/dashboard/clerk/marks-entry', parent_menu_key: null, sort_order: 30, applicable_firm_mode: 'BOTH' },
+        { role: 'CLERK', menu_key: 'clerk.subject-linker', menu_label: 'Course and Subject Linker', route_path: '/dashboard/clerk/subject-linker', parent_menu_key: null, sort_order: 40, applicable_firm_mode: 'BOTH' },
       ],
       WARDEN: [
         { role: 'WARDEN', menu_key: 'warden.dashboard', menu_label: 'Hostel Dashboard', route_path: '/dashboard/warden', parent_menu_key: null, sort_order: 10, applicable_firm_mode: 'BOTH' },

@@ -3,6 +3,9 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '../../../../components/faculty/FacultyAcademicCascadingDropdown';
 
 interface SubQuestion {
   id: string;
@@ -19,6 +22,10 @@ interface QuestionItem {
   professional_phase?: string;
   topic?: string;
   topic_id?: string;
+  topic_code?: string;
+  unit_id?: string;
+  unit_code?: string;
+  unit_name?: string;
   mode: 'MCQ' | 'DESC';
   question_text: string;
   option_a?: string;
@@ -29,6 +36,8 @@ interface QuestionItem {
   difficulty_level?: 'Easy' | 'Medium' | 'Hard' | 'Expert';
   competency_code?: string;
   competency_id?: string;
+  image_url?: string;
+  imageUrl?: string;
   has_sub_questions?: boolean;
   sub_questions?: SubQuestion[];
   max_marks?: number;
@@ -46,23 +55,42 @@ interface Subject {
   name: string;
   code: string;
   department_id?: string;
+  mst_sub_name?: string;
+}
+
+interface UnitItem {
+  id: string;
+  name: string;
+  code: string;
+  subject_id?: string;
+  subject_code?: string;
+  bloom_level?: string;
 }
 
 interface TopicItem {
   id: string;
   name: string;
   code: string;
+  unit_id?: string;
+  unit_code?: string;
+  unit_name?: string;
   subject_id?: string;
   subject_name?: string;
+  subject_code?: string;
 }
 
 interface CompetencyItem {
   id: string;
   code: string;
   description: string;
+  name?: string;
   topic_id?: string;
+  topic_code?: string;
   topic_name?: string;
+  unit_id?: string;
+  unit_code?: string;
   subject_id?: string;
+  subject_code?: string;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
@@ -80,6 +108,146 @@ const getTenantName = (): string => {
   }
   return '';
 };
+
+// Dynamic syllabus units generator tailored to any subject (Standard CO1 to CO5)
+function generateSyllabusUnits(code: string, name: string): UnitItem[] {
+  const n = (name || '').toLowerCase();
+  const c = (code || '').trim().toLowerCase();
+
+  // 1. Data Analytics / Lifecycle (88622)
+  if (c.includes('88622') || n.includes('data analytics') || n.includes('analytics') || n.includes('lifecycle')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Discuss various concepts of data analytics pipeline' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: Apply classification and regression techniques' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Explain and apply mining techniques on streaming data' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Compare different clustering and frequent pattern mining algorithms' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Describe the concept of R programming and implement analytics on Big data using R' },
+    ];
+  }
+
+  // 2. Universal Human Values & Professional Ethics
+  if (c === '88536' || n.includes('human value') || n.includes('ethics') || n.includes('values')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Introduction to Value Education & Self Exploration' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: Harmony in the Human Being - Understanding Myself' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Harmony in the Family and Society - Relationship & Trust' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Harmony in Nature & Existence - Whole Existence as Co-existence' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Implications of Holistic Understanding - Professional Ethics' },
+    ];
+  }
+
+  // 3. Computer Organization & Architecture
+  if (c === '88535' || n.includes('computer organization') || n.includes('architecture')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Introduction to Computer System, Data Representation & Logic' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: Central Processing Unit & Instruction Cycle' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Memory Hierarchy, Cache Memory & Virtual Memory' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Input-Output Organization & DMA Controllers' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Pipelining, Instruction Hazards & Parallel Processing' },
+    ];
+  }
+
+  // 4. Web Technology & Front End Development
+  if (c === '88534' || c === '88539' || c === '88541' || n.includes('web') || n.includes('front end') || n.includes('html') || n.includes('css')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Fundamentals of Web Architecture, HTML5 & CSS3 Styling' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: JavaScript Essentials, DOM Manipulation & Event Handling' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Responsive Layouts, Flexbox, Grid & UI Components' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Client-Server Architecture, REST APIs & Asynchronous JS' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Full Stack Integration, Web Security & Project Deployment' },
+    ];
+  }
+
+  // 5. Object Oriented Programming in C++ / Java
+  if (c === '88532' || c === '88538' || n.includes('c++') || n.includes('java') || n.includes('object oriented')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Principles of OOP, Data Types & Control Structures' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: Classes, Objects, Constructors & Destructors' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Operator Overloading & Type Conversion Mechanisms' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Inheritance, Virtual Functions & Dynamic Polymorphism' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Templates, Exception Handling & File Stream I/O' },
+    ];
+  }
+
+  // 6. Operating System
+  if (c === '88537' || c === '87665' || c === '87659' || n.includes('operating system') || n.includes('os')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Introduction to Operating Systems & System Structures' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: Process Management, Threads & CPU Scheduling Algorithms' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Process Synchronization, Semaphores & Deadlock Handling' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Memory Management, Paging, Segmentation & Virtual Memory' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Storage Management, File Systems & Disk Scheduling' },
+    ];
+  }
+
+  // 7. Practical / Lab
+  if (n.includes('lab') || n.includes('workshop') || n.includes('practical')) {
+    return [
+      { id: 'CO1', code: 'CO1', name: 'CO1: Environment Setup, Tool Configuration & Foundation' },
+      { id: 'CO2', code: 'CO2', name: 'CO2: Implementation of Core Algorithmic Techniques' },
+      { id: 'CO3', code: 'CO3', name: 'CO3: Intermediate Problem Solving & Module Testing' },
+      { id: 'CO4', code: 'CO4', name: 'CO4: Complex Application Scenarios & Mini-Project Build' },
+      { id: 'CO5', code: 'CO5', name: 'CO5: Viva Voce, Practical Evaluation & Code Optimization' },
+    ];
+  }
+
+  // Default dynamic Course Outcomes (CO1 to CO5)
+  return [
+    { id: 'CO1', code: 'CO1', name: `CO1: ${name || 'Subject'} - Fundamental Concepts & Architecture` },
+    { id: 'CO2', code: 'CO2', name: `CO2: ${name || 'Subject'} - Core Methodologies & Mechanics` },
+    { id: 'CO3', code: 'CO3', name: `CO3: ${name || 'Subject'} - Analytical Formulation & Design` },
+    { id: 'CO4', code: 'CO4', name: `CO4: ${name || 'Subject'} - Practical Applications & Case Studies` },
+    { id: 'CO5', code: 'CO5', name: `CO5: ${name || 'Subject'} - Advanced Trends, Assessment & Review` },
+  ];
+}
+
+function generateSyllabusTopics(unitCode: string, unitName: string, subjectCode: string, subjectName?: string): TopicItem[] {
+  const cleanU = unitCode.replace(/\s+/g, '');
+  const prefix = subjectCode ? `${subjectCode}-${cleanU}` : cleanU;
+  return [
+    {
+      id: `${prefix}-T01`,
+      code: `${prefix}-T01`,
+      name: `${unitCode}: Conceptual Foundations & Core Principles`,
+      unit_code: unitCode,
+      subject_code: subjectCode,
+    },
+    {
+      id: `${prefix}-T02`,
+      code: `${prefix}-T02`,
+      name: `${unitCode}: Detailed Architecture, Modeling & Implementation`,
+      unit_code: unitCode,
+      subject_code: subjectCode,
+    },
+    {
+      id: `${prefix}-T03`,
+      code: `${prefix}-T03`,
+      name: `${unitCode}: Applied Case Studies, Optimization & Evaluation`,
+      unit_code: unitCode,
+      subject_code: subjectCode,
+    },
+  ];
+}
+
+function generateSyllabusSubtopics(topicCode: string, topicName?: string): CompetencyItem[] {
+  return [
+    {
+      id: `${topicCode}-ST01`,
+      code: `${topicCode}-ST01`,
+      description: `Need, principles, key roles & definitions for ${topicName || 'topic'}`,
+    },
+    {
+      id: `${topicCode}-ST02`,
+      code: `${topicCode}-ST02`,
+      description: `Analytical modeling, design patterns & operational workflow`,
+    },
+    {
+      id: `${topicCode}-ST03`,
+      code: `${topicCode}-ST03`,
+      description: `Case study analysis, testing, edge cases & performance review`,
+    },
+  ];
+}
 
 interface ProfessionalLinker {
   id: string;
@@ -110,6 +278,7 @@ export default function FacultyAssessmentMasterPage() {
   // All master data from Admin-Master & College-Master APIs
   const [departments, setDepartments] = useState<Department[]>([]);
   const [allSubjects, setAllSubjects] = useState<Subject[]>([]);
+  const [allUnits, setAllUnits] = useState<UnitItem[]>([]);
   const [allLinkers, setAllLinkers] = useState<ProfessionalLinker[]>([]);
   const [collegeProfessionals, setCollegeProfessionals] = useState<CollegeProfessional[]>([]);
   const [dbTopics, setDbTopics] = useState<TopicItem[]>([]);
@@ -117,14 +286,47 @@ export default function FacultyAssessmentMasterPage() {
   const [metaLoading, setMetaLoading] = useState(true);
 
   // Cascade selections — strictly from Master data
+  const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
   const [selectedDept, setSelectedDept] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedCbmeYear, setSelectedCbmeYear] = useState<string>('');
   const [selectedProfPhase, setSelectedProfPhase] = useState<string>('');
+
+  // ─── Units -> Topic -> Sub Topics Hierarchy State ───
+  const [availableUnits, setAvailableUnits] = useState<UnitItem[]>([]);
+  const [selectedUnitId, setSelectedUnitId] = useState<string>('');
+  const [selectedUnitCode, setSelectedUnitCode] = useState<string>('');
+  const [selectedUnitName, setSelectedUnitName] = useState<string>('');
+  const [loadingUnits, setLoadingUnits] = useState<boolean>(false);
+
+  const [availableTopics, setAvailableTopics] = useState<TopicItem[]>([]);
   const [selectedTopicId, setSelectedTopicId] = useState<string>('');
+  const [selectedTopicCode, setSelectedTopicCode] = useState<string>('');
   const [selectedTopicName, setSelectedTopicName] = useState<string>('');
+  const [loadingTopics, setLoadingTopics] = useState<boolean>(false);
+
+  const [availableCompetencies, setAvailableCompetencies] = useState<CompetencyItem[]>([]);
   const [selectedCompetencyId, setSelectedCompetencyId] = useState<string>('');
   const [selectedCompetencyCode, setSelectedCompetencyCode] = useState<string>('');
+  const [selectedCompetencyDesc, setSelectedCompetencyDesc] = useState<string>('');
+  const [loadingCompetencies, setLoadingCompetencies] = useState<boolean>(false);
+
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setAcademicCascade(state);
+    if (state.college) {
+      setTenantName(state.college.colg_name);
+    }
+    if (state.branch) {
+      setSelectedDept(state.branch.branch_cd);
+      setFacultyDeptName(state.branch.branch_name);
+    }
+    if (state.subject) {
+      setSelectedSubject(state.subject.code || state.subject.id);
+    }
+    if (state.semester) {
+      setSelectedProfPhase(state.semester.SemName || state.semester.name);
+    }
+  };
 
   // Mode Switch
   const [mode, setMode] = useState<'MCQ' | 'DESC'>('MCQ');
@@ -149,6 +351,22 @@ export default function FacultyAssessmentMasterPage() {
   const [descDifficulty, setDescDifficulty] = useState<'Easy' | 'Medium' | 'Hard' | 'Expert'>('Hard');
   const [descMaxMarks, setDescMaxMarks] = useState<number>(10.0);
 
+  // Question Image Upload State
+  const [questionImage, setQuestionImage] = useState<string>('');
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setAlert({ type: 'error', message: 'Image size must be less than 5MB.' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setQuestionImage(reader.result as string);
+    };
+    reader.readAsDataURL(file);
+  };
+
   // Question Ledger & Filter State
   const [questions, setQuestions] = useState<QuestionItem[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -163,6 +381,8 @@ export default function FacultyAssessmentMasterPage() {
   const [paperCode, setPaperCode] = useState('MED-2025-PHY-T1');
   const [paperDuration, setPaperDuration] = useState(180);
   const [paperTotalMarks, setPaperTotalMarks] = useState(100);
+  const [paperSet, setPaperSet] = useState<string>('Set A');
+  const [targetSections, setTargetSections] = useState<string[]>(['All']);
   const [designedPapers, setDesignedPapers] = useState<any[]>([]);
 
   // Dynamic Paper Sections State
@@ -211,11 +431,31 @@ export default function FacultyAssessmentMasterPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
     try {
-      const res = await fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers: h });
+      let u: any = {};
+      try {
+        u = JSON.parse(localStorage.getItem('user') || '{}');
+      } catch {}
+      const userRole = (u.role || '').toUpperCase();
+      const userId = u.id || u.sub || u.faculty_id || localStorage.getItem('empid') || '';
+      const deptId = u.department_id || selectedDept || '';
+
+      const qp = new URLSearchParams();
+      qp.set('tenant', slug);
+      if (userRole) qp.set('role', userRole);
+      if (userId) qp.set('createdBy', userId);
+      if (deptId && (userRole === 'HOD' || userRole.includes('HOD'))) qp.set('departmentId', deptId);
+
+      const res = await fetch(`${API_BASE}/exams/papers?${qp.toString()}`, { headers: h });
       if (res.ok) {
         const json = await res.json();
         const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        setCreatedPapersList(list);
+        // STRICT CONFIDENTIALITY: Faculty can ONLY view question papers that they prepared.
+        // Other faculties from the same department cannot view it.
+        const isFaculty = !userRole || userRole === 'FACULTY' || userRole === 'TEACHER' || userRole === 'INSTRUCTOR';
+        const filtered = (isFaculty && userId)
+          ? list.filter((p: any) => p.created_by && String(p.created_by) === String(userId))
+          : list;
+        setCreatedPapersList(filtered);
       }
     } catch (e) {
       console.error('Failed to fetch created papers list', e);
@@ -230,10 +470,14 @@ export default function FacultyAssessmentMasterPage() {
 
   const handleCreateNewPaper = () => {
     setEditingPaperId(null);
-    setPaperTitle('MBBS Physiology 1st Sessional Examination');
-    setPaperCode(`MED-${new Date().getFullYear()}-PHY-T${createdPapersList.length + 1}`);
+    const subName = academicCascade?.subject?.mst_sub_name || academicCascade?.subject?.name || 'Subject';
+    const subCode = (academicCascade?.subject?.code || 'EXAM').replace(/[^a-zA-Z0-9]/g, '');
+    setPaperTitle(`${subName} Sessional Examination`);
+    setPaperCode(`${subCode}-${new Date().getFullYear()}-T${createdPapersList.length + 1}`);
     setPaperDuration(60);
     setPaperTotalMarks(40);
+    setPaperSet('Set A');
+    setTargetSections(['All']);
     setPaperSections([
       {
         id: 'sec-1',
@@ -272,6 +516,17 @@ export default function FacultyAssessmentMasterPage() {
     setPaperCode(paper.code || 'MED-EXAM-01');
     setPaperDuration(Number(paper.duration_minutes || paper.duration_mins || 60));
     setPaperTotalMarks(Number(paper.max_marks || 40));
+    setPaperSet(paper.paper_set || paper.paperSet || 'Set A');
+
+    let targetSecs = paper.target_sections || paper.targetSections || ['All'];
+    if (typeof targetSecs === 'string') {
+      try {
+        targetSecs = JSON.parse(targetSecs);
+      } catch {
+        targetSecs = [targetSecs];
+      }
+    }
+    setTargetSections(Array.isArray(targetSecs) ? targetSecs : [targetSecs]);
 
     let rawSections = paper.sections;
     if (typeof rawSections === 'string') {
@@ -301,7 +556,8 @@ export default function FacultyAssessmentMasterPage() {
           optionC: q.option_c || q.optionC,
           optionD: q.option_d || q.optionD,
           correctOption: q.correct_option || q.correctOption,
-          subQuestions: Array.isArray(q.sub_questions) ? q.sub_questions : (Array.isArray(q.subQuestions) ? q.subQuestions : [])
+          subQuestions: Array.isArray(q.sub_questions) ? q.sub_questions : (Array.isArray(q.subQuestions) ? q.subQuestions : []),
+          imageUrl: q.image_url || q.imageUrl || null,
         }));
 
         return {
@@ -354,6 +610,42 @@ export default function FacultyAssessmentMasterPage() {
     }, 100);
   };
 
+  const handleDuplicateAsNextSet = (paper: any) => {
+    const currentSet = paper.paper_set || paper.paperSet || 'Set A';
+    let nextSet = 'Set B';
+    if (currentSet.includes('A')) nextSet = 'Set B';
+    else if (currentSet.includes('B')) nextSet = 'Set C';
+    else if (currentSet.includes('C')) nextSet = 'Set D';
+    else nextSet = `${currentSet} (Copy)`;
+
+    setEditingPaperId(null);
+    setPaperTitle(`${paper.name || 'Exam Paper'} (${nextSet})`);
+    const baseCode = (paper.code || 'EXAM').replace(/-SET[A-Z]/i, '').replace(/_SET[A-Z]/i, '');
+    setPaperCode(`${baseCode}-${nextSet.replace(/\s+/g, '').toUpperCase()}`);
+    setPaperDuration(Number(paper.duration_minutes || paper.duration_mins || 60));
+    setPaperTotalMarks(Number(paper.max_marks || 40));
+    setPaperSet(nextSet);
+
+    // If original was for Section A, suggest Section B; otherwise default to All
+    const prevSecs = Array.isArray(paper.target_sections) ? paper.target_sections : ['All'];
+    if (prevSecs.includes('Section A')) setTargetSections(['Section B']);
+    else if (prevSecs.includes('Section B')) setTargetSections(['Section A']);
+    else setTargetSections(['All']);
+
+    let rawSections = paper.sections;
+    if (typeof rawSections === 'string') {
+      try { rawSections = JSON.parse(rawSections); } catch { rawSections = []; }
+    }
+    if (Array.isArray(rawSections) && rawSections.length > 0) {
+      setPaperSections(JSON.parse(JSON.stringify(rawSections)));
+    }
+    setShowPaperEditor(true);
+    setAlert({ type: 'success', message: `Duplicated paper into new draft ${nextSet}! You can now shuffle questions or target a specific section.` });
+    setTimeout(() => {
+      document.getElementById('paper-editor-container')?.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+  };
+
   const handleDeleteCreatedPaper = async (paperId: string) => {
     const slug = getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
@@ -392,7 +684,7 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   const [masterBankQuestions, setMasterBankQuestions] = useState<QuestionItem[]>([]);
-  const [secFilters, setSecFilters] = useState<{ [secId: string]: { type: string; topic: string; competency: string } }>({});
+  const [secFilters, setSecFilters] = useState<{ [secId: string]: { type: string; unit: string; topic: string; competency: string } }>({});
   const [secCheckedQIds, setSecCheckedQIds] = useState<{ [secId: string]: string[] }>({});
 
   const fetchMasterBankQuestions = async () => {
@@ -424,13 +716,14 @@ export default function FacultyAssessmentMasterPage() {
     fetchMasterBankQuestions();
   }, [selectedDept, selectedSubject, activeTab]);
 
-  const handleUpdateSectionFilter = (secId: string, field: 'type' | 'topic' | 'competency', val: string) => {
+  const handleUpdateSectionFilter = (secId: string, field: 'type' | 'unit' | 'topic' | 'competency', val: string) => {
     setSecFilters(prev => ({
       ...prev,
       [secId]: {
         type: field === 'type' ? val : (prev[secId]?.type || 'ALL'),
-        topic: field === 'topic' ? val : (prev[secId]?.topic || 'ALL'),
-        competency: field === 'competency' ? val : (prev[secId]?.competency || 'ALL'),
+        unit: field === 'unit' ? val : (prev[secId]?.unit || 'ALL'),
+        topic: field === 'unit' ? 'ALL' : (field === 'topic' ? val : (prev[secId]?.topic || 'ALL')),
+        competency: (field === 'unit' || field === 'topic') ? 'ALL' : (field === 'competency' ? val : (prev[secId]?.competency || 'ALL')),
       }
     }));
   };
@@ -467,7 +760,8 @@ export default function FacultyAssessmentMasterPage() {
           optionC: tq.option_c,
           optionD: tq.option_d,
           correctOption: tq.correct_option,
-          subQuestions: tq.sub_questions
+          subQuestions: tq.sub_questions,
+          imageUrl: tq.image_url || tq.imageUrl || null,
         }));
       return {
         ...sec,
@@ -499,7 +793,8 @@ export default function FacultyAssessmentMasterPage() {
             optionC: targetQ.option_c,
             optionD: targetQ.option_d,
             correctOption: targetQ.correct_option,
-            subQuestions: targetQ.sub_questions
+            subQuestions: targetQ.sub_questions,
+            imageUrl: targetQ.image_url || targetQ.imageUrl || null,
           }
         ]
       };
@@ -595,23 +890,55 @@ export default function FacultyAssessmentMasterPage() {
         }
       }
 
+      let facIdParam = '';
+      if (typeof window !== 'undefined') {
+        try {
+          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          facIdParam = u.faculty_id || u.profile?.id || u.id || u.sub || u.emp_id || localStorage.getItem('empid') || '';
+        } catch {}
+      }
+
       // 2. Fetch Master data strictly from DB APIs
-      const [deptRes, subjRes, linkRes, profRes, topicRes, compRes] = await Promise.all([
+      const [deptRes, subjRes, linkRes, profRes, unitRes, topicRes, compRes, facSubRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments`, { headers: h }),
-        fetch(`${API_BASE}/admin-master/subjects`, { headers: h }),
+        fetch(`${API_BASE}/admin-master/subjects${facIdParam ? `?facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers: h }),
         fetch(`${API_BASE}/admin-master/professional-linkers`, { headers: h }),
         fetch(`${API_BASE}/college-master/professionals`, { headers: h }),
+        fetch(`${API_BASE}/admin-master/units`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/admin-master/topics`, { headers: h }),
         fetch(`${API_BASE}/admin-master/competencies`, { headers: h }),
+        facIdParam ? fetch(`${API_BASE}/admin-master/faculty-subjects?facultyId=${encodeURIComponent(facIdParam)}`, { headers: h }).catch(() => null) : Promise.resolve(null),
       ]);
 
       let fetchedDepts: Department[] = [];
       let fetchedSubjs: Subject[] = [];
 
       if (deptRes.ok) { fetchedDepts = parse(await deptRes.json()); }
-      if (subjRes.ok) { fetchedSubjs = parse(await subjRes.json()); setAllSubjects(fetchedSubjs); }
+      if (subjRes.ok) { fetchedSubjs = parse(await subjRes.json()); }
+
+      let linkedItems: any[] = [];
+      if (facSubRes && facSubRes.ok) {
+        linkedItems = parse(await facSubRes.json());
+      }
+      if (linkedItems.length > 0) {
+        const linkedKeys = new Set(linkedItems.map((l: any) => String(l.subject_code || l.subject_id || '').toLowerCase()));
+        const filtered = fetchedSubjs.filter((s: any) =>
+          linkedKeys.has(String(s.code || '').toLowerCase()) ||
+          linkedKeys.has(String(s.id || '').toLowerCase()) ||
+          linkedKeys.has(String(s.name || '').toLowerCase())
+        );
+        fetchedSubjs = filtered.length > 0 ? filtered : linkedItems.map((l: any) => ({
+          id: l.subject_id || l.id,
+          code: l.subject_code || 'SUB',
+          name: l.subject_name || 'Subject',
+          department_id: l.department_id,
+        }));
+      }
+      setAllSubjects(fetchedSubjs);
+
       if (linkRes.ok) { const j = await linkRes.json(); setAllLinkers(parse(j)); }
       if (profRes.ok) { const j = await profRes.json(); setCollegeProfessionals(parse(j)); }
+      if (unitRes && unitRes.ok) { const j = await unitRes.json(); setAllUnits(parse(j)); }
       if (topicRes.ok) { const j = await topicRes.json(); setDbTopics(parse(j)); }
       if (compRes.ok) { const j = await compRes.json(); setDbCompetencies(parse(j)); }
 
@@ -625,18 +952,7 @@ export default function FacultyAssessmentMasterPage() {
 
         setSelectedDept(matchedDept.id);
 
-        const deptSubjs = fetchedSubjs.filter(s => {
-          if (s.department_id === matchedDept.id) return true;
-          const sClean = s.name.toLowerCase().replace('department of ', '').trim();
-          const dClean = matchedDept.name.toLowerCase().replace('department of ', '').trim();
-          return sClean && dClean && (sClean.includes(dClean) || dClean.includes(sClean));
-        });
-        const matchedSubj = (userSubjId ? deptSubjs.find(s => s.id === userSubjId) || fetchedSubjs.find(s => s.id === userSubjId) : null) ||
-          deptSubjs.find(s => s.code === 'PY' || s.name.toUpperCase() === 'PHYSIOLOGY') ||
-          deptSubjs[0] ||
-          fetchedSubjs[0];
-
-        if (matchedSubj) setSelectedSubject(matchedSubj.id);
+        // Department selected; academic subject selection is driven by FacultyAcademicCascadingDropdown
       }
     } catch (e) {
       console.error('Failed to fetch Master data', e);
@@ -649,40 +965,60 @@ export default function FacultyAssessmentMasterPage() {
   const handleDepartmentChange = (deptId: string) => {
     setSelectedDept(deptId);
     setSelectedSubject('');
-    setSelectedTopicId(''); setSelectedTopicName(''); setSelectedCompetencyCode('');
+    setSelectedUnitId(''); setSelectedUnitCode(''); setSelectedUnitName('');
+    setSelectedTopicId(''); setSelectedTopicCode(''); setSelectedTopicName('');
+    setSelectedCompetencyId(''); setSelectedCompetencyCode(''); setSelectedCompetencyDesc('');
   };
+
   const handleSubjectChange = (subjectId: string) => {
     setSelectedSubject(subjectId);
-    setSelectedTopicId(''); setSelectedTopicName(''); setSelectedCompetencyCode('');
+    setSelectedUnitId(''); setSelectedUnitCode(''); setSelectedUnitName('');
+    setSelectedTopicId(''); setSelectedTopicCode(''); setSelectedTopicName('');
+    setSelectedCompetencyId(''); setSelectedCompetencyCode(''); setSelectedCompetencyDesc('');
   };
+
   const handleCbmeYearChange = (year: string) => {
     setSelectedCbmeYear(year);
   };
+
   const handleProfPhaseChange = (profId: string) => {
     setSelectedProfPhase(profId);
   };
+
+  const handleUnitChange = (unitId: string) => {
+    setSelectedUnitId(unitId);
+    const found = availableUnits.find((u) => u.id === unitId || u.code === unitId);
+    setSelectedUnitCode(found?.code || unitId);
+    setSelectedUnitName(found?.name || '');
+    setSelectedTopicId(''); setSelectedTopicCode(''); setSelectedTopicName('');
+    setSelectedCompetencyId(''); setSelectedCompetencyCode(''); setSelectedCompetencyDesc('');
+  };
+
   const handleTopicChange = (topicId: string) => {
     setSelectedTopicId(topicId);
-    const found = dbTopics.find(t => t.id === topicId);
+    const found = availableTopics.find((t) => t.id === topicId || t.code === topicId);
+    setSelectedTopicCode(found?.code || topicId);
     setSelectedTopicName(found?.name || '');
-    setSelectedCompetencyId('');
-    setSelectedCompetencyCode('');
-    const topicComps = dbCompetencies.filter(c => c.topic_id === topicId);
-    if (topicComps.length > 0) {
-      setSelectedCompetencyId(topicComps[0].id || '');
-      setSelectedCompetencyCode(topicComps[0].code || '');
-    }
+    setSelectedCompetencyId(''); setSelectedCompetencyCode(''); setSelectedCompetencyDesc('');
   };
 
   const subjectsForDept = useMemo(() => {
+    if (academicCascade?.allSubjects && academicCascade.allSubjects.length > 0) {
+      return academicCascade.allSubjects.map((s) => ({
+        id: s.code || s.id,
+        name: s.mst_sub_name ? `${s.code ? `${s.code} — ` : ''}${s.mst_sub_name}` : s.name,
+        code: s.code || s.id,
+        department_id: academicCascade.branch?.branch_cd,
+      }));
+    }
     if (!selectedDept) return allSubjects;
-    const deptObj = departments.find(d => d.id === selectedDept);
+    const deptObj = departments.find((d) => d.id === selectedDept);
     if (!deptObj) return allSubjects;
 
     const deptNameClean = deptObj.name.toLowerCase().replace('department of ', '').trim();
     const deptCodeClean = deptObj.code.toLowerCase().trim();
 
-    const matches = allSubjects.filter(s => {
+    const matches = allSubjects.filter((s) => {
       if (s.department_id === selectedDept) return true;
       const subjDeptName = ((s as any).department_name || '').toLowerCase();
       if (subjDeptName && subjDeptName.includes(deptNameClean)) return true;
@@ -702,20 +1038,13 @@ export default function FacultyAssessmentMasterPage() {
     });
 
     return sorted;
-  }, [allSubjects, selectedDept, departments]);
+  }, [allSubjects, selectedDept, departments, academicCascade?.allSubjects, academicCascade?.branch]);
 
-  useEffect(() => {
-    if (subjectsForDept.length > 0) {
-      const exists = subjectsForDept.some(s => s.id === selectedSubject);
-      if (!exists) {
-        setSelectedSubject(subjectsForDept[0].id);
-      }
-    }
-  }, [subjectsForDept, selectedSubject]);
+
 
   const cbmeYearsList = useMemo(() => {
     const map = new Map<string, string>();
-    allLinkers.forEach(l => {
+    allLinkers.forEach((l) => {
       const yearStr = l.academic_session || (l.name ? `${l.name} (${l.code})` : l.code);
       if (yearStr) map.set(l.id, l.name ? `${l.name} (${l.academic_session || l.code})` : yearStr);
     });
@@ -734,64 +1063,445 @@ export default function FacultyAssessmentMasterPage() {
     }
   }, [collegeProfessionals, selectedProfPhase]);
 
-  // Topics strictly filtered by selectedSubject
-  const availableTopics = useMemo(() => {
-    if (!selectedSubject) return [];
-    return dbTopics.filter(t => (t as any).subject_id === selectedSubject);
-  }, [dbTopics, selectedSubject]);
-
-  // Competencies strictly filtered by selectedTopicId
-  const availableCompetencies = useMemo(() => {
-    if (!selectedTopicId) return [];
-    return dbCompetencies.filter(c => c.topic_id === selectedTopicId);
-  }, [dbCompetencies, selectedTopicId]);
-
+  // ─── 1. SUBJECT LOADED -> DYNAMICALLY LOAD UNITS / COURSE OUTCOMES (CO) ───
   useEffect(() => {
-    if (availableTopics.length > 0) {
-      const savedTopicId = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_topic_id') || '' : '';
-      const savedCompCode = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_comp_code') || '' : '';
-      const savedCompId = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_comp_id') || '' : '';
+    let active = true;
+    const loadUnits = async () => {
+      const activeSub = (academicCascade?.subject?.code || academicCascade?.subject?.id || selectedSubject || '').trim();
+      if (!activeSub) {
+        setAvailableUnits([]);
+        setSelectedUnitId('');
+        setSelectedUnitCode('');
+        setSelectedUnitName('');
+        return;
+      }
+      setLoadingUnits(true);
+      const slug = getTenantSlug();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const h = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
 
-      const exists = availableTopics.some(t => t.id === selectedTopicId);
-      if (!exists) {
-        const restoredTopic = availableTopics.find(t => t.id === savedTopicId) || availableTopics[0];
-        setSelectedTopicId(restoredTopic.id);
-        setSelectedTopicName(restoredTopic.name);
-        const topicComps = dbCompetencies.filter(c => c.topic_id === restoredTopic.id);
-        const restoredComp = topicComps.find(c => c.code === savedCompCode || c.id === savedCompId) || topicComps[0];
-        if (restoredComp) {
-          setSelectedCompetencyId(restoredComp.id || '');
-          setSelectedCompetencyCode(restoredComp.code || '');
+      const subjObj =
+        academicCascade?.subject ||
+        academicCascade?.allSubjects?.find((s: any) => s.code === activeSub || s.id === activeSub) ||
+        allSubjects.find((s: any) => s.code === activeSub || s.id === activeSub);
+
+      const rawSubCode = (subjObj?.code || activeSub || '').trim();
+      const subCodeMatch = rawSubCode.match(/\[([a-zA-Z0-9_\-\s]+)\]/) || rawSubCode.match(/\b\d{4,6}\b/);
+      const cleanSubCode = (subCodeMatch ? (subCodeMatch[1] || subCodeMatch[0]) : rawSubCode).trim();
+      const subId = (subjObj?.id && subjObj.id !== rawSubCode && subjObj.id !== cleanSubCode ? subjObj.id : '').trim();
+      const subName = (subjObj?.mst_sub_name || subjObj?.name || '').trim();
+
+      try {
+        const queryParams = new URLSearchParams();
+        queryParams.set('tenant', slug);
+        if (cleanSubCode) queryParams.set('subjectCode', cleanSubCode);
+        if (subId) queryParams.set('subjectId', subId);
+
+        const res = await fetch(`${API_BASE}/admin-master/units?${queryParams.toString()}`, { headers: h }).catch(() => null);
+
+        let fetched: any[] = [];
+        if (res && res.ok) {
+          const json = await res.json();
+          const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+          if (list.length > 0) {
+            fetched = list;
+          }
+        }
+
+        if (!active) return;
+
+        let finalUnits: UnitItem[] = [];
+        if (fetched.length > 0) {
+          finalUnits = fetched.map((u: any) => {
+            const code = String(u.code || u.unit_code || u.id || '').trim();
+            const desc = (u.description || '').trim();
+            const uName = (u.name || u.unit_name || '').trim();
+            let displayName = uName;
+            if (desc && desc !== code) {
+              displayName = `${code}: ${desc}`;
+            } else if (uName && uName !== code) {
+              displayName = `${code}: ${uName}`;
+            } else {
+              displayName = code || `CO${u.unit_order || 1}`;
+            }
+            return {
+              id: String(u.id || code),
+              code: code,
+              name: displayName,
+              description: desc,
+              subject_id: u.subject_id,
+              subject_code: u.subject_code || cleanSubCode,
+            };
+          });
+        } else {
+          // Check from allUnits cache
+          const cached = allUnits.filter((u: any) => {
+            const uSubCode = String(u.subject_code || '').toLowerCase().trim();
+            const uSubId = String(u.subject_id || '').toLowerCase().trim();
+            const target = cleanSubCode.toLowerCase();
+            return (target && (uSubCode === target || uSubCode.includes(target))) || (subId && uSubId === subId.toLowerCase());
+          });
+          if (cached.length > 0) {
+            finalUnits = cached.map((u: any) => {
+              const code = String(u.code || u.unit_code || u.id || '').trim();
+              const desc = (u.description || '').trim();
+              const uName = (u.name || u.unit_name || '').trim();
+              let displayName = uName;
+              if (desc && desc !== code) {
+                displayName = `${code}: ${desc}`;
+              } else if (uName && uName !== code) {
+                displayName = `${code}: ${uName}`;
+              } else {
+                displayName = code || `CO${u.unit_order || 1}`;
+              }
+              return {
+                id: String(u.id || code),
+                code: code,
+                name: displayName,
+                description: desc,
+                subject_id: u.subject_id,
+                subject_code: u.subject_code || cleanSubCode,
+              };
+            });
+          } else {
+            // Dynamically generate syllabus units tailored to this subject (Standard CO1 to CO5)
+            finalUnits = generateSyllabusUnits(cleanSubCode, subName);
+          }
+        }
+
+        setAvailableUnits(finalUnits);
+        if (finalUnits.length > 0) {
+          const savedUnitId = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_unit_id') || '' : '';
+          const matchUnit = finalUnits.find((u) => u.id === savedUnitId || u.code === savedUnitId) || finalUnits[0];
+          setSelectedUnitId(matchUnit.id);
+          setSelectedUnitCode(matchUnit.code);
+          setSelectedUnitName(matchUnit.name);
+        } else {
+          setSelectedUnitId('');
+          setSelectedUnitCode('');
+          setSelectedUnitName('');
+        }
+      } catch (e) {
+        console.error('Failed to load units for subject:', e);
+        if (!active) return;
+        const fallback = generateSyllabusUnits(cleanSubCode, subName);
+        setAvailableUnits(fallback);
+        if (fallback.length > 0) {
+          setSelectedUnitId(fallback[0].id);
+          setSelectedUnitCode(fallback[0].code);
+          setSelectedUnitName(fallback[0].name);
+        }
+      } finally {
+        if (active) setLoadingUnits(false);
+      }
+    };
+
+    loadUnits();
+    return () => {
+      active = false;
+    };
+  }, [selectedSubject, academicCascade?.subject, allSubjects, allUnits]);
+
+  // ─── 2. UNIT / CO LOADED/SELECTED -> DYNAMICALLY LOAD TOPICS OF THAT CO ───
+  useEffect(() => {
+    let active = true;
+    const loadTopics = async () => {
+      if (!selectedUnitCode && !selectedUnitId) {
+        setAvailableTopics([]);
+        setSelectedTopicId('');
+        setSelectedTopicCode('');
+        setSelectedTopicName('');
+        return;
+      }
+      setLoadingTopics(true);
+      const slug = getTenantSlug();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const h = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
+
+      const subjObj =
+        academicCascade?.subject ||
+        academicCascade?.allSubjects?.find((s: any) => s.code === selectedSubject || s.id === selectedSubject) ||
+        allSubjects.find((s: any) => s.code === selectedSubject || s.id === selectedSubject);
+
+      const rawSubCode = (subjObj?.code || selectedSubject || '').trim();
+      const subCodeMatch = rawSubCode.match(/\[([a-zA-Z0-9_\-\s]+)\]/) || rawSubCode.match(/\b\d{4,6}\b/);
+      const cleanSubCode = (subCodeMatch ? (subCodeMatch[1] || subCodeMatch[0]) : rawSubCode).trim();
+      const subId = (subjObj?.id && subjObj.id !== rawSubCode && subjObj.id !== cleanSubCode ? subjObj.id : '').trim();
+      const subName = (subjObj?.mst_sub_name || subjObj?.name || '').trim();
+
+      try {
+        const queryParams = new URLSearchParams();
+        queryParams.set('tenant', slug);
+        if (cleanSubCode) queryParams.set('subjectCode', cleanSubCode);
+        if (subId) queryParams.set('subjectId', subId);
+        if (selectedUnitId) queryParams.set('unitId', selectedUnitId);
+        if (selectedUnitCode) queryParams.set('unitCode', selectedUnitCode);
+
+        const res = await fetch(`${API_BASE}/admin-master/topics?${queryParams.toString()}`, { headers: h }).catch(() => null);
+
+        let fetched: any[] = [];
+        if (res && res.ok) {
+          const json = await res.json();
+          const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+          fetched = list.filter((t: any) => {
+            const tUnitCode = String(t.unit_code || '').toLowerCase().trim();
+            const tUnitId = String(t.unit_id || '').toLowerCase().trim();
+            const selCode = (selectedUnitCode || '').toLowerCase().trim();
+            const selId = (selectedUnitId || '').toLowerCase().trim();
+
+            const matchUnit =
+              (selCode && tUnitCode === selCode) ||
+              (selId && tUnitId === selId) ||
+              (selCode && String(t.unit_name || '').toLowerCase().includes(selCode));
+
+            const tSubCode = String(t.subject_code || '').toLowerCase().trim();
+            const tSubId = String(t.subject_id || '').toLowerCase().trim();
+            const target = cleanSubCode.toLowerCase();
+            const matchSub =
+              !target ||
+              tSubCode === target ||
+              tSubCode.includes(target) ||
+              (subId && tSubId === subId.toLowerCase());
+
+            return matchUnit && matchSub;
+          });
+        }
+
+        if (!active) return;
+
+        let finalTopics: TopicItem[] = [];
+        if (fetched.length > 0) {
+          finalTopics = fetched.map((t: any) => {
+            const code = String(t.code || t.topic_code || t.id || '').trim();
+            const name = (t.name || t.topic_name || '').trim();
+            const displayName = name && !name.startsWith(code) ? `${code}: ${name}` : (name || code);
+            return {
+              id: String(t.id || code),
+              code: code,
+              name: displayName,
+              unit_id: t.unit_id || selectedUnitId,
+              unit_code: t.unit_code || selectedUnitCode,
+              subject_id: t.subject_id || subId,
+              subject_code: t.subject_code || cleanSubCode,
+            };
+          });
+        } else {
+          // Check from dbTopics cache
+          const cached = dbTopics.filter((t: any) => {
+            const tUnitCode = String(t.unit_code || '').toLowerCase().trim();
+            const tUnitId = String(t.unit_id || '').toLowerCase().trim();
+            const selCode = (selectedUnitCode || '').toLowerCase().trim();
+            const selId = (selectedUnitId || '').toLowerCase().trim();
+
+            const matchUnit =
+              (selCode && tUnitCode === selCode) ||
+              (selId && tUnitId === selId) ||
+              (selCode && String(t.unit_name || '').toLowerCase().includes(selCode));
+
+            const tSubCode = String(t.subject_code || t.subject_id || '').toLowerCase().trim();
+            const target = cleanSubCode.toLowerCase();
+            const matchSub =
+              !target ||
+              tSubCode === target ||
+              tSubCode.includes(target) ||
+              String(t.name || '').toLowerCase().includes(target);
+
+            return matchUnit || (matchSub && !t.unit_code);
+          });
+
+          if (cached.length > 0) {
+            finalTopics = cached.map((t: any) => {
+              const code = String(t.code || t.topic_code || t.id || '').trim();
+              const name = (t.name || t.topic_name || '').trim();
+              const displayName = name && !name.startsWith(code) ? `${code}: ${name}` : (name || code);
+              return {
+                id: String(t.id || code),
+                code: code,
+                name: displayName,
+                unit_id: t.unit_id || selectedUnitId,
+                unit_code: t.unit_code || selectedUnitCode,
+                subject_id: t.subject_id || subId,
+                subject_code: t.subject_code || cleanSubCode,
+              };
+            });
+          } else {
+            // If topics not feeded in master, do not show
+            finalTopics = [];
+          }
+        }
+
+        setAvailableTopics(finalTopics);
+        if (finalTopics.length > 0) {
+          const savedTopicId = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_topic_id') || '' : '';
+          const matchTopic = finalTopics.find((t) => t.id === savedTopicId || t.code === savedTopicId) || finalTopics[0];
+          setSelectedTopicId(matchTopic.id);
+          setSelectedTopicCode(matchTopic.code);
+          setSelectedTopicName(matchTopic.name);
+        } else {
+          setSelectedTopicId('');
+          setSelectedTopicCode('');
+          setSelectedTopicName('');
+        }
+      } catch (e) {
+        console.error('Failed to load topics for unit:', e);
+        if (!active) return;
+        setAvailableTopics([]);
+        setSelectedTopicId('');
+        setSelectedTopicCode('');
+        setSelectedTopicName('');
+      } finally {
+        if (active) setLoadingTopics(false);
+      }
+    };
+
+    loadTopics();
+    return () => {
+      active = false;
+    };
+  }, [selectedUnitId, selectedUnitCode, selectedUnitName, selectedSubject, academicCascade?.subject, allSubjects, dbTopics]);
+
+  // ─── 3. TOPIC LOADED/SELECTED -> DYNAMICALLY LOAD SUB TOPICS / COMPETENCIES ───
+  useEffect(() => {
+    let active = true;
+    const loadCompetencies = async () => {
+      if (!selectedTopicId && !selectedTopicCode) {
+        setAvailableCompetencies([]);
+        setSelectedCompetencyId('');
+        setSelectedCompetencyCode('');
+        setSelectedCompetencyDesc('');
+        return;
+      }
+      setLoadingCompetencies(true);
+      const slug = getTenantSlug();
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const h = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
+
+      try {
+        const queryParams = new URLSearchParams();
+        queryParams.set('tenant', slug);
+        if (selectedTopicId) queryParams.set('topicId', selectedTopicId);
+        if (selectedTopicCode) queryParams.set('topicCode', selectedTopicCode);
+
+        const res = await fetch(`${API_BASE}/admin-master/competencies?${queryParams.toString()}`, { headers: h }).catch(() => null);
+
+        let fetched: any[] = [];
+        if (res && res.ok) {
+          const json = await res.json();
+          const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+          fetched = list.filter((c: any) => {
+            const cTopicId = String(c.topic_id || '').toLowerCase().trim();
+            const cTopicCode = String(c.topic_code || '').toLowerCase().trim();
+            const selId = (selectedTopicId || '').toLowerCase().trim();
+            const selCode = (selectedTopicCode || '').toLowerCase().trim();
+            return (
+              (selId && cTopicId === selId) ||
+              (selCode && cTopicCode === selCode) ||
+              (selCode && String(c.code || '').toLowerCase().startsWith(selCode))
+            );
+          });
+        }
+
+        if (!active) return;
+
+        let finalComps: CompetencyItem[] = [];
+        if (fetched.length > 0) {
+          finalComps = fetched.map((c: any) => {
+            const code = String(c.code || c.id || '').trim();
+            const desc = (c.description || c.name || '').trim();
+            return {
+              id: String(c.id || code),
+              code: code,
+              description: desc,
+              name: desc || code,
+              topic_id: c.topic_id || selectedTopicId,
+              topic_code: c.topic_code || selectedTopicCode,
+            };
+          });
+        } else {
+          // Check from dbCompetencies cache
+          const cached = dbCompetencies.filter((c: any) => {
+            const cTopicId = String(c.topic_id || '').toLowerCase().trim();
+            const cTopicCode = String(c.topic_code || '').toLowerCase().trim();
+            const selId = (selectedTopicId || '').toLowerCase().trim();
+            const selCode = (selectedTopicCode || '').toLowerCase().trim();
+            return (
+              (selId && cTopicId === selId) ||
+              (selCode && cTopicCode === selCode) ||
+              (selCode && String(c.code || '').toLowerCase().startsWith(selCode))
+            );
+          });
+
+          if (cached.length > 0) {
+            finalComps = cached.map((c: any) => {
+              const code = String(c.code || c.id || '').trim();
+              const desc = (c.description || c.name || '').trim();
+              return {
+                id: String(c.id || code),
+                code: code,
+                description: desc,
+                name: desc || code,
+                topic_id: c.topic_id || selectedTopicId,
+                topic_code: c.topic_code || selectedTopicCode,
+              };
+            });
+          } else {
+            // If subtopics not feeded in master, do not show
+            finalComps = [];
+          }
+        }
+
+        setAvailableCompetencies(finalComps);
+        if (finalComps.length > 0) {
+          const savedCompCode = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_comp_code') || '' : '';
+          const savedCompId = typeof window !== 'undefined' ? sessionStorage.getItem('faculty_selected_comp_id') || '' : '';
+          const matchComp =
+            finalComps.find((c) => c.code === savedCompCode || c.id === savedCompId) || finalComps[0];
+          setSelectedCompetencyId(matchComp.id || '');
+          setSelectedCompetencyCode(matchComp.code || '');
+          setSelectedCompetencyDesc(matchComp.description || '');
         } else {
           setSelectedCompetencyId('');
           setSelectedCompetencyCode('');
+          setSelectedCompetencyDesc('');
         }
+      } catch (e) {
+        console.error('Failed to load competencies for topic:', e);
+        if (!active) return;
+        setAvailableCompetencies([]);
+        setSelectedCompetencyId('');
+        setSelectedCompetencyCode('');
+        setSelectedCompetencyDesc('');
+      } finally {
+        if (active) setLoadingCompetencies(false);
       }
-    } else {
-      setSelectedTopicId('');
-      setSelectedTopicName('');
-      setSelectedCompetencyId('');
-      setSelectedCompetencyCode('');
-    }
-  }, [availableTopics, selectedTopicId, dbCompetencies]);
+    };
 
-  // Persist selections to sessionStorage whenever user selects Topic/Competency/Subject
+    loadCompetencies();
+    return () => {
+      active = false;
+    };
+  }, [selectedTopicId, selectedTopicCode, selectedTopicName, dbCompetencies]);
+
+  // Persist selections to sessionStorage whenever user selects Unit/Topic/Competency/Subject
   useEffect(() => {
     if (typeof window !== 'undefined') {
+      if (selectedUnitId) sessionStorage.setItem('faculty_selected_unit_id', selectedUnitId);
+      if (selectedUnitCode) sessionStorage.setItem('faculty_selected_unit_code', selectedUnitCode);
+      if (selectedUnitName) sessionStorage.setItem('faculty_selected_unit_name', selectedUnitName);
       if (selectedTopicId) sessionStorage.setItem('faculty_selected_topic_id', selectedTopicId);
       if (selectedTopicName) sessionStorage.setItem('faculty_selected_topic_name', selectedTopicName);
       if (selectedCompetencyId) sessionStorage.setItem('faculty_selected_comp_id', selectedCompetencyId);
       if (selectedCompetencyCode) sessionStorage.setItem('faculty_selected_comp_code', selectedCompetencyCode);
       if (selectedSubject) sessionStorage.setItem('faculty_selected_subject_id', selectedSubject);
     }
-  }, [selectedTopicId, selectedTopicName, selectedCompetencyId, selectedCompetencyCode, selectedSubject]);
+  }, [selectedUnitId, selectedUnitCode, selectedUnitName, selectedTopicId, selectedTopicName, selectedCompetencyId, selectedCompetencyCode, selectedSubject]);
 
-  const canEnterQuestion = !!(selectedTopicId && selectedCompetencyCode);
+  const canEnterQuestion = !!(selectedUnitId || selectedUnitCode);
 
-  // Load questions when topic/competency/mode/subject change
+  // Load questions when unit/CO, topic, competency, mode, subject change
   useEffect(() => {
     fetchQuestions();
-  }, [selectedTopicId, selectedCompetencyCode, mode, selectedSubject]);
+  }, [selectedUnitId, selectedUnitCode, selectedTopicId, selectedCompetencyCode, mode, selectedSubject]);
 
   // Load designed papers from DB on mount and when switching to publish tab
   useEffect(() => {
@@ -811,14 +1521,21 @@ export default function FacultyAssessmentMasterPage() {
       if (mode) params.set('mode', mode);
       if (selectedSubject) params.set('subjectId', selectedSubject);
 
-      if (selectedTopicId && selectedTopicId !== 'all') {
+      if (selectedUnitCode && selectedUnitCode !== 'all' && selectedUnitCode !== 'ALL') {
+        params.set('unitCode', selectedUnitCode);
+      }
+      if (selectedUnitId && selectedUnitId !== 'all') {
+        params.set('unitId', selectedUnitId);
+      }
+
+      if (availableTopics.length > 0 && selectedTopicId && selectedTopicId !== 'all') {
         params.set('topicId', selectedTopicId);
-      } else if (selectedTopicName && selectedTopicName !== 'all') {
+      } else if (availableTopics.length > 0 && selectedTopicName && selectedTopicName !== 'all') {
         const cleanTopic = selectedTopicName.replace(/^Topic \d+:\s*/i, '').replace(/\[.*\]$/, '').trim();
         params.set('topic', cleanTopic);
       }
 
-      if (selectedCompetencyCode && selectedCompetencyCode !== 'all') {
+      if (availableCompetencies.length > 0 && selectedCompetencyCode && selectedCompetencyCode !== 'all') {
         const cleanCompCode = selectedCompetencyCode.includes(':')
           ? selectedCompetencyCode.split(':')[0].trim()
           : selectedCompetencyCode.trim();
@@ -838,18 +1555,37 @@ export default function FacultyAssessmentMasterPage() {
     }
   };
 
-  // Load designed papers from DB (GET /exams/papers)
+  // Load designed papers from DB (GET /exams/papers) with role-based confidentiality
   const fetchDesignedPapers = async () => {
     const slug = getTenantSlug();
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
-      const res = await fetch(`${API_BASE}/exams/papers`, { headers: h });
+      let u: any = {};
+      try {
+        u = JSON.parse(localStorage.getItem('user') || '{}');
+      } catch {}
+      const userRole = (u.role || '').toUpperCase();
+      const userId = u.id || u.sub || u.faculty_id || localStorage.getItem('empid') || '';
+      const deptId = u.department_id || selectedDept || '';
+
+      const qp = new URLSearchParams();
+      qp.set('tenant', slug);
+      if (userRole) qp.set('role', userRole);
+      if (userId) qp.set('createdBy', userId);
+      if (deptId && (userRole === 'HOD' || userRole.includes('HOD'))) qp.set('departmentId', deptId);
+
+      const res = await fetch(`${API_BASE}/exams/papers?${qp.toString()}`, { headers: h });
       if (res.ok) {
         const json = await res.json();
         const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
+        // STRICT CONFIDENTIALITY: Faculty can ONLY view question papers that they prepared.
+        const isFaculty = !userRole || userRole === 'FACULTY' || userRole === 'TEACHER' || userRole === 'INSTRUCTOR';
+        const filtered = (isFaculty && userId)
+          ? list.filter((p: any) => p.created_by && String(p.created_by) === String(userId))
+          : list;
         // Map to UI shape
-        const mapped = list.map((p: any) => ({
+        const mapped = filtered.map((p: any) => ({
           id: p.id,
           code: p.code,
           name: p.name,
@@ -857,6 +1593,8 @@ export default function FacultyAssessmentMasterPage() {
           maxMarks: p.max_marks || 100,
           status: p.is_active ? 'Published' : 'Ready for Publishing',
           subject_name: p.subject_name || '',
+          paper_set: p.paper_set || p.paperSet || 'Set A',
+          target_sections: p.target_sections || p.targetSections || ['All'],
           sections: p.sections || [],
         }));
         setDesignedPapers(mapped);
@@ -893,7 +1631,7 @@ export default function FacultyAssessmentMasterPage() {
   const handleSaveQuestion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canEnterQuestion) {
-      setAlert({ type: 'error', message: 'Please select Topic and Competency before saving a question.' });
+      setAlert({ type: 'error', message: 'Please select Course Outcome (CO) / Unit before saving a question.' });
       return;
     }
     setSaving(true);
@@ -904,20 +1642,32 @@ export default function FacultyAssessmentMasterPage() {
     const profObj = collegeProfessionals.find(p => p.id === selectedProfPhase);
     const profLabel = profObj?.name || null;
 
-    const cleanCompCode = selectedCompetencyCode.includes(':')
+    const cleanCompCode = selectedCompetencyCode ? (selectedCompetencyCode.includes(':')
       ? selectedCompetencyCode.split(':')[0].trim()
-      : selectedCompetencyCode.trim();
+      : selectedCompetencyCode.trim()) : null;
 
-    const cleanTopicName = selectedTopicName.replace(/^Topic \d+:\s*/i, '').replace(/\[.*\]$/, '').trim();
+    const cleanTopicName = selectedTopicName ? selectedTopicName.replace(/^Topic \d+:\s*/i, '').replace(/\[.*\]$/, '').trim() : (selectedUnitName || selectedUnitCode || 'Core Unit');
 
     const payload = mode === 'MCQ' ? {
       departmentId: selectedDept || null,
       subjectId: selectedSubject || null,
       professionalPhase: profLabel,
+      unitId: selectedUnitId || null,
+      unitCode: selectedUnitCode || 'CO1',
+      unitName: selectedUnitName || 'Unit 1',
       topicId: selectedTopicId || null,
       topic: cleanTopicName,
+      topicCode: selectedTopicCode || null,
       competencyId: selectedCompetencyId || null,
       competencyCode: cleanCompCode,
+      subTopicId: selectedCompetencyId || null,
+      subTopicCode: cleanCompCode,
+      colgCd: academicCascade?.college?.colg_cd || '1',
+      courseCd: academicCascade?.course?.course_cd || null,
+      branchCd: academicCascade?.branch?.branch_cd || null,
+      batchCd: academicCascade?.batch?.batch_cd || null,
+      semester: academicCascade?.semester?.sem_cd || null,
+      section: academicCascade?.section || null,
       mode: 'MCQ',
       questionText: mcqQuestionText.trim(),
       optionA: optionA.trim(),
@@ -927,20 +1677,34 @@ export default function FacultyAssessmentMasterPage() {
       correctOption,
       difficultyLevel: mcqDifficulty,
       maxMarks: Number(mcqMaxMarks) || 1.0,
+      imageUrl: questionImage || null,
     } : {
       departmentId: selectedDept || null,
       subjectId: selectedSubject || null,
       professionalPhase: profLabel,
+      unitId: selectedUnitId || null,
+      unitCode: selectedUnitCode || 'CO1',
+      unitName: selectedUnitName || 'Unit 1',
       topicId: selectedTopicId || null,
       topic: cleanTopicName,
+      topicCode: selectedTopicCode || null,
       competencyId: selectedCompetencyId || null,
       competencyCode: cleanCompCode,
+      subTopicId: selectedCompetencyId || null,
+      subTopicCode: cleanCompCode,
+      colgCd: academicCascade?.college?.colg_cd || '1',
+      courseCd: academicCascade?.course?.course_cd || null,
+      branchCd: academicCascade?.branch?.branch_cd || null,
+      batchCd: academicCascade?.batch?.batch_cd || null,
+      semester: academicCascade?.semester?.sem_cd || null,
+      section: academicCascade?.section || null,
       mode: 'DESC',
       questionText: descQuestionText.trim(),
       hasSubQuestions,
       subQuestions: hasSubQuestions ? subQuestions : [],
       difficultyLevel: descDifficulty,
       maxMarks: Number(descMaxMarks) || 10.0,
+      imageUrl: questionImage || null,
     };
 
     try {
@@ -968,6 +1732,7 @@ export default function FacultyAssessmentMasterPage() {
           difficulty_level: payload.difficultyLevel,
           competency_code: payload.competencyCode,
           max_marks: payload.maxMarks,
+          image_url: questionImage || null,
         };
         setQuestions([newQ, ...questions]);
         setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
@@ -982,6 +1747,7 @@ export default function FacultyAssessmentMasterPage() {
         difficulty_level: payload.difficultyLevel,
         competency_code: payload.competencyCode,
         max_marks: payload.maxMarks,
+        image_url: questionImage || null,
       };
       setQuestions([newQ, ...questions]);
       setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
@@ -992,6 +1758,7 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   const resetForm = () => {
+    setQuestionImage('');
     if (mode === 'MCQ') {
       setMcqQuestionText('');
       setOptionA('');
@@ -1023,16 +1790,35 @@ export default function FacultyAssessmentMasterPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug, 'Content-Type': 'application/json' };
     try {
+      let u: any = {};
+      try {
+        u = JSON.parse(localStorage.getItem('user') || '{}');
+      } catch {}
+      const userId = u.id || u.sub || u.faculty_id || null;
+
       const payload = {
         id: editingPaperId || undefined,
         code: paperCode,
         name: paperTitle,
+        paperSet: paperSet,
+        paper_set: paperSet,
+        targetSections: targetSections,
+        target_sections: targetSections,
         subjectId: selectedSubject || null,
         maxMarks: paperTotalMarks,
         passingMarks: Math.round(paperTotalMarks * 0.4),
         durationMinutes: paperDuration,
         type: 'THEORY',
         sections: paperSections,
+        departmentId: selectedDept || academicCascade?.branch?.branch_cd || null,
+        colgCd: academicCascade?.college?.colg_cd || '1',
+        courseCd: academicCascade?.course?.course_cd || null,
+        branchCd: academicCascade?.branch?.branch_cd || null,
+        batchCd: academicCascade?.batch?.batch_cd || null,
+        semester: academicCascade?.semester?.sem_cd || null,
+        section: academicCascade?.section || null,
+        createdBy: userId,
+        facultyId: userId,
       };
       const res = await fetch(`${API_BASE}/exams/papers`, {
         method: 'POST',
@@ -1122,13 +1908,21 @@ export default function FacultyAssessmentMasterPage() {
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft flex flex-col md:flex-row items-center justify-between gap-4 transition-all">
             <div>
               <div className="flex items-center gap-2">
-                <span className="text-[11px] font-extrabold text-[#5B4BFF] uppercase tracking-widest">{facultyDeptName}</span>
+                <span className="text-[11px] font-extrabold text-[#5B4BFF] uppercase tracking-widest">
+                  {academicCascade?.branch?.branch_name || facultyDeptName || 'FACULTY DEPARTMENT'}
+                </span>
                 <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/20">
-                  Auto-Selected Department
+                  {academicCascade?.course?.course_name
+                    ? `${academicCascade.course.course_name} • ${academicCascade.semester?.SemName || 'Active Hierarchy'}`
+                    : 'Auto-Selected Department'}
                 </span>
               </div>
-              <h2 className="text-xl font-black text-[#1B1E28] dark:text-white tracking-tight uppercase mt-1">Faculty Medical Assessment Engine</h2>
-              <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">CBME Competency-Based Question Bank & Examination Design Portal</p>
+              <h2 className="text-xl font-black text-[#1B1E28] dark:text-white tracking-tight uppercase mt-1">
+                Faculty Assessment &amp; Question Bank Designer
+              </h2>
+              <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
+                Academic Hierarchy (College → Course → Branch → Batch → Semester) &amp; Question Bank Portal
+              </p>
             </div>
 
             <div className="flex items-center gap-2 p-1.5 bg-[#F1F4F9] dark:bg-slate-800 rounded-full border border-[#E7EAF3] dark:border-slate-700 text-xs font-bold shrink-0 shadow-inner">
@@ -1170,89 +1964,15 @@ export default function FacultyAssessmentMasterPage() {
           {/* TAB 1: QUESTION BANK */}
           {activeTab === 'bank' && (
             <div className="space-y-6">
-              {/* Context Selector Bar with Cascading Auto-Select */}
-              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-                  <h3 className="text-xs font-black uppercase tracking-wider text-[#5B4BFF]">
-                    🏛️ Faculty CBME Assessment Context — Department Auto-Selected
-                  </h3>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  {/* Active Institution badge */}
-                  <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 flex flex-col justify-center">
-                    <span className="text-[10px] font-black uppercase text-[#5B4BFF]">Active Institution</span>
-                    <div className="flex items-center justify-between text-xs font-black text-[#1B1E28] dark:text-white mt-0.5">
-                      <span className="truncate">{tenantName || getTenantSlug()}</span>
-                      <span className="px-2 py-0.5 rounded-full text-[9px] font-mono font-bold bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20 ml-1 shrink-0">
-                        {getTenantSlug()}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Department — strictly from DB */}
-                  <div>
-                    <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">Department *</label>
-                    <select
-                      value={selectedDept}
-                      onChange={(e) => handleDepartmentChange(e.target.value)}
-                      disabled={metaLoading}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white text-xs font-bold focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 disabled:opacity-50 shadow-sm"
-                    >
-                      {metaLoading
-                        ? <option value="">Loading departments...</option>
-                        : departments.length === 0
-                          ? <option value="">⚠ No departments — add in Admin Master first</option>
-                          : departments.map(d => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
-                    </select>
-                  </div>
-
-                  {/* Subject — filtered by selected dept */}
-                  <div>
-                    <label className="block text-xs font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1.5">Subject (Auto-Matched) *</label>
-                    <select
-                      value={selectedSubject}
-                      onChange={(e) => handleSubjectChange(e.target.value)}
-                      disabled={metaLoading || !selectedDept}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 disabled:opacity-50 shadow-sm"
-                    >
-                      {!selectedDept
-                        ? <option value="">Select Department first</option>
-                        : subjectsForDept.length === 0
-                          ? <option value="">No subjects for this department</option>
-                          : subjectsForDept.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                {/* Row 2: CBME Year + Professional Phase */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-xs font-black uppercase text-[#FFB020] dark:text-amber-400 mb-1.5">CBME Year *</label>
-                    <select
-                      value={selectedCbmeYear}
-                      onChange={(e) => handleCbmeYearChange(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#FFB020]/40 text-[#1B1E28] dark:text-amber-300 font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
-                    >
-                      <option value="">— Select CBME Year —</option>
-                      {cbmeYearsList.map(y => <option key={y.id} value={y.id}>{y.label}</option>)}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-black uppercase text-[#F04438] dark:text-rose-400 mb-1.5">Professional Phase *</label>
-                    <select
-                      value={selectedProfPhase}
-                      onChange={(e) => handleProfPhaseChange(e.target.value)}
-                      className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#F04438]/40 text-[#1B1E28] dark:text-rose-300 font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
-                    >
-                      <option value="">— Select Professional Phase —</option>
-                      {collegeProfessionals.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} [{p.course_cd}]</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
+              {/* Dynamic Faculty Academic Hierarchy Cascading (Course & Subject Linker) */}
+              <FacultyAcademicCascadingDropdown
+                onlyLinkedSubjects={true}
+                showSection={true}
+                showSubject={true}
+                onSelectionChange={handleAcademicCascadeChange}
+                title="🏛️ Faculty Academic Hierarchy Cascading"
+                subtitle="College → Course → Branch → Batch → Semester → Section → Subject Selection"
+              />
 
               {/* Mode Switch & Question Creation Form */}
               <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-6">
@@ -1277,38 +1997,75 @@ export default function FacultyAssessmentMasterPage() {
                 </div>
 
                 <div className="p-5 rounded-[22px] bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* 1. COURSE OUTCOME (CO) / UNIT MASTER */}
                     <div>
-                      <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">Topic Master *</label>
+                      <label className="block text-xs font-black uppercase text-[#5B4BFF] dark:text-indigo-400 mb-1.5 flex items-center justify-between">
+                        <span>Course Outcome (CO) / Unit Master *</span>
+                        {loadingUnits && <span className="text-[10px] text-gray-400 animate-pulse font-normal">Loading...</span>}
+                      </label>
                       <select
-                        value={selectedTopicId}
-                        onChange={(e) => handleTopicChange(e.target.value)}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                        value={selectedUnitId}
+                        onChange={(e) => handleUnitChange(e.target.value)}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
                       >
-                        <option value="">— Select Topic —</option>
-                        {availableTopics.map(t => <option key={t.id} value={t.id}>{t.name} [{t.code || ''}]</option>)}
+                        <option value="">— Select Course Outcome (CO) —</option>
+                        {availableUnits.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.name}
+                          </option>
+                        ))}
                       </select>
                     </div>
 
+                    {/* 2. TOPIC MASTER */}
                     <div>
-                      <label className="block text-xs font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1.5">Competency Code *</label>
+                      <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5 flex items-center justify-between">
+                        <span>Topic Master *</span>
+                        {loadingTopics && <span className="text-[10px] text-gray-400 animate-pulse font-normal">Loading...</span>}
+                      </label>
+                      <select
+                        value={selectedTopicId}
+                        onChange={(e) => handleTopicChange(e.target.value)}
+                        disabled={availableTopics.length === 0}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
+                      >
+                        <option value="">{availableTopics.length === 0 ? '— No Topics Feeded in Master —' : '— Select Topic —'}</option>
+                        {availableTopics.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* 3. SUB TOPIC / COMPETENCY CODE */}
+                    <div>
+                      <label className="block text-xs font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1.5 flex items-center justify-between">
+                        <span>Sub Topic / Competency Code</span>
+                        {loadingCompetencies && <span className="text-[10px] text-gray-400 animate-pulse font-normal">Loading...</span>}
+                      </label>
                       <select
                         value={selectedCompetencyId || selectedCompetencyCode}
                         onChange={(e) => {
                           const val = e.target.value;
-                          const match = availableCompetencies.find(c => c.id === val || c.code === val);
+                          const match = availableCompetencies.find((c) => c.id === val || c.code === val);
                           if (match) {
                             setSelectedCompetencyId(match.id || '');
                             setSelectedCompetencyCode(match.code || val);
+                            setSelectedCompetencyDesc(match.description || match.name || '');
                           } else {
                             setSelectedCompetencyCode(val);
                           }
                         }}
-                        className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                        disabled={availableCompetencies.length === 0}
+                        className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm disabled:opacity-60 disabled:cursor-not-allowed"
                       >
-                        <option value="">— Select Competency —</option>
-                        {availableCompetencies.map(c => (
-                          <option key={c.id || c.code} value={c.id || c.code}>{c.code}: {c.description}</option>
+                        <option value="">{availableCompetencies.length === 0 ? '— No Subtopics Feeded in Master —' : '— Select Sub Topic / Competency —'}</option>
+                        {availableCompetencies.map((c) => (
+                          <option key={c.id || c.code} value={c.id || c.code}>
+                            {c.code}: {c.description || c.name || c.code}
+                          </option>
                         ))}
                       </select>
                     </div>
@@ -1501,6 +2258,60 @@ export default function FacultyAssessmentMasterPage() {
                     </div>
                   )}
 
+                  {/* Image / Diagram / Formula Upload Box */}
+                  <div className="p-4 rounded-[22px] bg-[#F8FAFC] dark:bg-slate-800/80 border border-dashed border-[#5B4BFF]/40 space-y-3">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div>
+                        <label className="text-xs font-black uppercase text-[#1B1E28] dark:text-slate-200 flex items-center gap-1.5">
+                          <span>🖼️</span> Question Diagram / Formula / Slide Image (Optional)
+                        </label>
+                        <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
+                          Upload anatomical figure, circuit schematic, histology slide, or chart to display in the examination question paper
+                        </p>
+                      </div>
+                      {questionImage && (
+                        <button
+                          type="button"
+                          onClick={() => setQuestionImage('')}
+                          className="px-2.5 py-1 rounded-lg bg-[#FEECEB] text-[#F04438] hover:text-rose-600 text-[11px] font-extrabold border border-[#F04438]/20 flex items-center gap-1"
+                        >
+                          <span>✕</span> Remove Image
+                        </button>
+                      )}
+                    </div>
+
+                    {questionImage ? (
+                      <div className="flex items-center gap-4 p-3 bg-white dark:bg-slate-900 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
+                        <img
+                          src={questionImage}
+                          alt="Question Preview Attachment"
+                          className="h-20 w-32 object-contain rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 shadow-sm"
+                        />
+                        <div className="space-y-1">
+                          <span className="text-xs font-bold text-[#00C48C] flex items-center gap-1">
+                            ✓ Image Attached &amp; Ready to Save
+                          </span>
+                          <p className="text-[11px] text-[#4E5969] dark:text-slate-400">
+                            This visual will render immediately below the question prompt across Question Bank ledger, Paper Designer, and Student Review Print.
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex items-center justify-center gap-2.5 p-4 rounded-xl border border-dashed border-[#5B4BFF]/50 bg-white dark:bg-slate-900 hover:bg-[#EEF2FF] dark:hover:bg-slate-800/80 cursor-pointer transition-all">
+                        <span className="text-base">📷</span>
+                        <span className="text-xs font-black text-[#5B4BFF]">
+                          Click or drag image file here to attach (PNG, JPG, SVG, WebP up to 5MB)
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageUpload}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+
                   <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
                     <button
                       type="submit"
@@ -1542,7 +2353,7 @@ export default function FacultyAssessmentMasterPage() {
                         <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-[11px] font-black uppercase text-[#1B1E28] dark:text-slate-300 tracking-wider bg-[#F8FAFC] dark:bg-slate-800/60">
                           <th className="py-3.5 px-4 w-32 rounded-l-xl">Mode &amp; Level</th>
                           <th className="py-3.5 px-4">Question Prompt</th>
-                          <th className="py-3.5 px-4 w-64">Topic &amp; Competency</th>
+                          <th className="py-3.5 px-4 w-72">CO, Topic &amp; Competency</th>
                           <th className="py-3.5 px-4 w-28 text-center">Marks</th>
                           <th className="py-3.5 px-4 w-24 text-right rounded-r-xl">Action</th>
                         </tr>
@@ -1577,6 +2388,21 @@ export default function FacultyAssessmentMasterPage() {
                               {/* Question Prompt */}
                               <td className="py-4 px-4 align-top space-y-3">
                                 <p className="font-black text-[#1B1E28] dark:text-white text-sm leading-relaxed">{q.question_text}</p>
+
+                                {/* Attached Diagram Image in Ledger */}
+                                {(q.image_url || q.imageUrl) && (
+                                  <div className="flex items-center gap-2 mt-1">
+                                    <img
+                                      src={q.image_url || q.imageUrl}
+                                      alt="Question Diagram"
+                                      className="h-14 w-20 object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white shadow-sm cursor-pointer hover:scale-105 transition-transform"
+                                      onClick={() => window.open(q.image_url || q.imageUrl, '_blank')}
+                                    />
+                                    <span className="text-[10px] font-bold text-slate-500">
+                                      📷 Diagram Attached (Click to enlarge)
+                                    </span>
+                                  </div>
+                                )}
 
                                 {/* MCQ Options Grid */}
                                 {q.mode === 'MCQ' && (
@@ -1619,17 +2445,29 @@ export default function FacultyAssessmentMasterPage() {
                                 )}
                               </td>
 
-                              {/* Topic & Competency */}
-                              <td className="py-4 px-4 align-top space-y-2">
-                                <div className="flex items-center gap-1.5 text-xs font-black text-[#2D2575] dark:text-indigo-300">
-                                  <span>📚</span>
-                                  <span className="truncate">{q.topic || 'General Physiology'}</span>
-                                </div>
-                                <div>
-                                  <span className="px-2.5 py-1 rounded-full font-mono text-[11px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30 inline-block">
-                                    🎯 {q.competency_code || 'PY1.1(2024)'}
+                              {/* CO, Topic & Competency */}
+                              <td className="py-4 px-4 align-top space-y-1.5">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30 inline-block">
+                                    🏛️ {q.unit_code || 'CO1'}
                                   </span>
+                                  {q.unit_name && q.unit_name !== q.unit_code && (
+                                    <span className="text-[10px] text-slate-500 font-bold truncate max-w-[130px]">{q.unit_name}</span>
+                                  )}
                                 </div>
+                                {q.topic && (
+                                  <div className="flex items-center gap-1.5 text-xs font-black text-[#2D2575] dark:text-indigo-300">
+                                    <span>📚</span>
+                                    <span className="truncate">{q.topic}</span>
+                                  </div>
+                                )}
+                                {q.competency_code && (
+                                  <div>
+                                    <span className="px-2.5 py-0.5 rounded-full font-mono text-[10px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30 inline-block">
+                                      🎯 {q.competency_code}
+                                    </span>
+                                  </div>
+                                )}
                               </td>
 
                               {/* Marks */}
@@ -1667,16 +2505,22 @@ export default function FacultyAssessmentMasterPage() {
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[#4E5969] dark:text-slate-400 font-bold">Active Design Context:</span>
                   <span className="px-3 py-1 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-extrabold border border-[#5B4BFF]/30">
-                    🏛️ {departments.find(d => d.id === selectedDept)?.name || facultyDeptName}
+                    🏛️ {academicCascade?.college?.colg_name || tenantName || 'College'}
                   </span>
                   <span className="px-3 py-1 rounded-full bg-[#E6F9F3] text-[#00C48C] font-extrabold border border-[#00C48C]/30">
-                    📖 {subjectsForDept.find(s => s.id === selectedSubject)?.name || 'PHYSIOLOGY'}
+                    🎓 {academicCascade?.course?.course_name || 'Course'}
                   </span>
                   <span className="px-3 py-1 rounded-full bg-[#FFF4EC] text-[#F36C21] font-extrabold border border-[#F36C21]/30">
-                    🎓 CBME 2024 (NMC)
+                    🏢 {academicCascade?.branch?.branch_name || facultyDeptName}
                   </span>
-                  <span className="px-3 py-1 rounded-full bg-[#FEECEB] text-[#F04438] font-extrabold border border-[#F04438]/30">
-                    📅 Batch 2025 (1st Prof)
+                  <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 font-extrabold border border-purple-200">
+                    📅 {academicCascade?.batch?.batch_name || 'Batch'}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-extrabold border border-blue-200">
+                    🔢 {academicCascade?.semester?.SemName || academicCascade?.semester?.name || 'Semester'}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-extrabold border border-emerald-200">
+                    📖 {academicCascade?.subject?.name || selectedSubject || 'Subject'}
                   </span>
                 </div>
 
@@ -1737,7 +2581,12 @@ export default function FacultyAssessmentMasterPage() {
                         >
                           {/* Top Card Banner */}
                           <div className="bg-[#2D2575] text-white px-4 py-2.5 flex items-center justify-between font-black text-[11px] uppercase tracking-wider">
-                            <span className="font-mono text-[#F36C21]">[{paper.code || 'MED-PAPER'}]</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono text-[#F36C21]">[{paper.code || 'MED-PAPER'}]</span>
+                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-white/20 text-white">
+                                {paper.paper_set || 'Set A'}
+                              </span>
+                            </div>
                             {isEditing ? (
                               <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#5B4BFF] text-white animate-pulse">
                                 ✏️ EDITING NOW
@@ -1762,6 +2611,15 @@ export default function FacultyAssessmentMasterPage() {
                               </div>
                             </div>
 
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20">
+                                📑 {paper.paper_set || 'Set A'}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-md text-[10px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/20">
+                                🎯 {Array.isArray(paper.target_sections) ? (paper.target_sections.includes('All') ? 'Common: All Sections' : paper.target_sections.join(', ')) : (paper.target_sections || 'Common (All Sections)')}
+                              </span>
+                            </div>
+
                             <div className="flex items-center justify-between pt-2 border-t border-[#E7EAF3] dark:border-slate-800 text-xs">
                               <span className="font-mono font-black text-[#F36C21]">
                                 ⏱️ {paper.duration_minutes || paper.duration_mins || 60} MINS
@@ -1776,15 +2634,27 @@ export default function FacultyAssessmentMasterPage() {
                           </div>
 
                           {/* Card Footer Actions */}
-                          <div className="px-5 py-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between bg-[#F8FAFC]/70 dark:bg-slate-800/40">
-                            <button
-                              type="button"
-                              onClick={() => handleEditExistingPaper(paper)}
-                              className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5"
-                            >
-                              <span>✏️</span>
-                              <span>Modify / Edit Paper</span>
-                            </button>
+                          <div className="px-5 py-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-2 bg-[#F8FAFC]/70 dark:bg-slate-800/40">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditExistingPaper(paper)}
+                                className="px-3 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5"
+                              >
+                                <span>✏️</span>
+                                <span>Edit Paper</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleDuplicateAsNextSet(paper)}
+                                className="px-3 py-2 rounded-xl bg-[#EEF2FF] dark:bg-slate-800 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white text-xs font-black border border-[#5B4BFF]/30 transition-all flex items-center gap-1.5 shadow-sm"
+                                title="Duplicate paper to next set (e.g. Set B or Set C) for another section or rotation"
+                              >
+                                <span>📑</span>
+                                <span>Clone as Next Set</span>
+                              </button>
+                            </div>
 
                             <button
                               type="button"
@@ -1844,8 +2714,8 @@ export default function FacultyAssessmentMasterPage() {
 
                   <form onSubmit={handleSavePaperDesign} className="space-y-6">
                     {/* Paper Header Inputs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                      <div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                      <div className="lg:col-span-2">
                         <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">
                           Exam Paper Title *
                         </label>
@@ -1871,30 +2741,71 @@ export default function FacultyAssessmentMasterPage() {
                         />
                       </div>
 
+                      {/* Paper Set Selector */}
                       <div>
-                        <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">
-                          Duration (Mins) *
+                        <label className="block text-xs font-black uppercase text-[#F36C21] dark:text-orange-400 mb-1.5">
+                          Paper Set *
                         </label>
-                        <input
-                          type="number"
-                          value={paperDuration}
-                          onChange={(e) => setPaperDuration(Number(e.target.value))}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
-                          required
-                        />
+                        <select
+                          value={paperSet}
+                          onChange={(e) => setPaperSet(e.target.value)}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#F36C21]/50 text-[#F36C21] font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                        >
+                          <option value="Set A">📑 Set A</option>
+                          <option value="Set B">📑 Set B</option>
+                          <option value="Set C">📑 Set C</option>
+                          <option value="Set D">📑 Set D</option>
+                          <option value="Set E">📑 Set E</option>
+                        </select>
+                      </div>
+
+                      {/* Target Section (Section A, Section B, or Common) */}
+                      <div>
+                        <label className="block text-xs font-black uppercase text-[#5B4BFF] dark:text-indigo-400 mb-1.5">
+                          Target Student Section *
+                        </label>
+                        <select
+                          value={targetSections[0] || 'All'}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setTargetSections(val === 'All' ? ['All'] : [val]);
+                          }}
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/50 text-[#5B4BFF] font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                        >
+                          <option value="All">🌐 All Sections (Common Exam)</option>
+                          <option value="Section A">🎯 Section A Only</option>
+                          <option value="Section B">🎯 Section B Only</option>
+                          <option value="Section C">🎯 Section C Only</option>
+                          <option value="Section D">🎯 Section D Only</option>
+                        </select>
                       </div>
 
                       <div>
-                        <label className="block text-xs font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1.5">
-                          Target Total Marks *
-                        </label>
-                        <input
-                          type="number"
-                          value={paperTotalMarks}
-                          onChange={(e) => setPaperTotalMarks(Number(e.target.value))}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#00C48C] font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
-                          required
-                        />
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="text-xs font-black uppercase text-[#1B1E28] dark:text-slate-300">
+                            Time &amp; Marks *
+                          </label>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            type="number"
+                            title="Duration Minutes"
+                            value={paperDuration}
+                            onChange={(e) => setPaperDuration(Number(e.target.value))}
+                            className="w-full px-2 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#F36C21] shadow-sm"
+                            placeholder="Mins"
+                            required
+                          />
+                          <input
+                            type="number"
+                            title="Total Target Marks"
+                            value={paperTotalMarks}
+                            onChange={(e) => setPaperTotalMarks(Number(e.target.value))}
+                            className="w-full px-2 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:border-[#F36C21] shadow-sm"
+                            placeholder="Marks"
+                            required
+                          />
+                        </div>
                       </div>
                     </div>
 
@@ -2002,8 +2913,8 @@ export default function FacultyAssessmentMasterPage() {
                               </span>
                             </div>
 
-                            {/* Step 1, 2, 3 Filters Bar */}
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                            {/* Step 1, 2, 3, 4 Filters Bar */}
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                               {/* Step 1: Type Filter */}
                               <div>
                                 <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
@@ -2020,55 +2931,80 @@ export default function FacultyAssessmentMasterPage() {
                                 </select>
                               </div>
 
-                              {/* Step 2: Topic Filter */}
+                              {/* Step 2: Unit / Course Outcome (CO) Filter */}
                               <div>
-                                <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                  2. SELECT TOPIC (SINGLE CASCADE) *
+                                <label className="block text-[10px] font-black uppercase text-[#5B4BFF] dark:text-indigo-400 mb-1">
+                                  2. SELECT UNIT / COURSE OUTCOME (CO) *
                                 </label>
                                 <select
-                                  value={secFilters[sec.id]?.topic || 'ALL'}
-                                  onChange={(e) => {
-                                    const newTopic = e.target.value;
-                                    setSecFilters(prev => ({
-                                      ...prev,
-                                      [sec.id]: {
-                                        type: prev[sec.id]?.type || sec.type || 'ALL',
-                                        topic: newTopic,
-                                        competency: 'ALL' // Reset competency when topic changes
-                                      }
-                                    }));
-                                  }}
-                                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21]"
+                                  value={secFilters[sec.id]?.unit || 'ALL'}
+                                  onChange={(e) => handleUpdateSectionFilter(sec.id, 'unit', e.target.value)}
+                                  className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs focus:outline-none focus:border-[#F36C21]"
                                 >
-                                  <option value="ALL">— All Topics ({availableTopics.length}) —</option>
-                                  {availableTopics.map(t => (
-                                    <option key={t.id} value={t.name}>{t.name}</option>
+                                  <option value="ALL">— All Units / COs ({availableUnits.length}) —</option>
+                                  {availableUnits.map(u => (
+                                    <option key={u.id || u.code} value={u.code || u.id}>
+                                      {u.code}: {u.name ? (u.name.length > 30 ? u.name.slice(0, 30) + '...' : u.name) : u.code}
+                                    </option>
                                   ))}
                                 </select>
                               </div>
 
-                              {/* Step 3: Competency Filter (Single Topic Cascade) */}
+                              {/* Step 3: Topic Filter (Cascaded from CO) */}
+                              {(() => {
+                                const currentUnit = secFilters[sec.id]?.unit || 'ALL';
+                                const filteredTopics = currentUnit !== 'ALL'
+                                  ? availableTopics.filter(t => !t.unit_code || t.unit_code === currentUnit || t.id.includes(currentUnit) || t.code?.includes(currentUnit))
+                                  : availableTopics;
+                                const finalTopics = filteredTopics;
+
+                                return (
+                                  <div>
+                                    <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                      3. SELECT TOPIC (CO CASCADE)
+                                    </label>
+                                    <select
+                                      value={secFilters[sec.id]?.topic || 'ALL'}
+                                      onChange={(e) => handleUpdateSectionFilter(sec.id, 'topic', e.target.value)}
+                                      disabled={finalTopics.length === 0}
+                                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] disabled:opacity-60 disabled:cursor-not-allowed"
+                                    >
+                                      <option value="ALL">
+                                        {finalTopics.length === 0 ? '— No Topics Feeded in Master —' : `— All Topics (${finalTopics.length}) —`}
+                                      </option>
+                                      {finalTopics.map(t => (
+                                        <option key={t.id} value={t.name}>{t.name}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                );
+                              })()}
+
+                              {/* Step 4: Competency / Subtopic Filter (Cascaded from Topic) */}
                               {(() => {
                                 const currentTopicName = secFilters[sec.id]?.topic || 'ALL';
                                 const selTopicObj = availableTopics.find(t => t.name === currentTopicName || t.id === currentTopicName);
                                 const sectionCompetencies = (currentTopicName !== 'ALL' && selTopicObj)
-                                  ? dbCompetencies.filter(c => c.topic_id === selTopicObj.id)
-                                  : dbCompetencies;
+                                  ? dbCompetencies.filter(c => c.topic_id === selTopicObj.id || (selTopicObj.code && c.code?.startsWith(selTopicObj.code)))
+                                  : (currentTopicName === 'ALL' ? availableCompetencies : []);
 
                                 return (
                                   <div>
                                     <label className="block text-[10px] font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1">
-                                      3. SELECT COMPETENCY (SINGLE TOPIC CASCADE) *
+                                      4. SELECT SUBTOPIC / COMPETENCY (TOPIC CASCADE)
                                     </label>
                                     <select
                                       value={secFilters[sec.id]?.competency || 'ALL'}
                                       onChange={(e) => handleUpdateSectionFilter(sec.id, 'competency', e.target.value)}
-                                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-black text-xs focus:outline-none focus:border-[#F36C21]"
+                                      disabled={sectionCompetencies.length === 0}
+                                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-black text-xs focus:outline-none focus:border-[#F36C21] disabled:opacity-60 disabled:cursor-not-allowed"
                                     >
-                                      <option value="ALL">— All Competencies ({sectionCompetencies.length}) —</option>
+                                      <option value="ALL">
+                                        {sectionCompetencies.length === 0 ? '— No Subtopics Feeded in Master —' : `— All Subtopics / COs (${sectionCompetencies.length}) —`}
+                                      </option>
                                       {sectionCompetencies.map(c => (
                                         <option key={c.id || c.code} value={c.code}>
-                                          {c.code}: {c.description ? (c.description.length > 45 ? c.description.slice(0, 45) + '...' : c.description) : c.code}
+                                          {c.code}: {c.description ? (c.description.length > 30 ? c.description.slice(0, 30) + '...' : c.description) : c.code}
                                         </option>
                                       ))}
                                     </select>
@@ -2077,9 +3013,9 @@ export default function FacultyAssessmentMasterPage() {
                               })()}
                             </div>
 
-                            {/* Step 4: Questions Checklist Table */}
+                            {/* Step 5: Questions Checklist Table */}
                             {(() => {
-                              const secF = secFilters[sec.id] || { type: sec.type || 'ALL', topic: 'ALL', competency: 'ALL' };
+                              const secF = secFilters[sec.id] || { type: sec.type || 'ALL', unit: 'ALL', topic: 'ALL', competency: 'ALL' };
                               const getRootCode = (s?: string) => {
                                 if (!s) return '';
                                 const m = s.match(/^([A-Za-z]+\s*\d+(?:\.\d+)?)/);
@@ -2088,6 +3024,19 @@ export default function FacultyAssessmentMasterPage() {
 
                               const availableFiltered = masterBankQuestions.filter(q => {
                                 const matchType = secF.type === 'ALL' || q.mode === secF.type;
+
+                                let matchUnit = true;
+                                if (secF.unit && secF.unit !== 'ALL') {
+                                  const uCode = secF.unit.toLowerCase().trim();
+                                  matchUnit = Boolean(
+                                    (q.unit_code && q.unit_code.toLowerCase().trim() === uCode) ||
+                                    (q.unit_id && q.unit_id === secF.unit) ||
+                                    (q.unit_name && q.unit_name.toLowerCase().includes(uCode)) ||
+                                    (q.topic_code && q.topic_code.toLowerCase().includes(uCode)) ||
+                                    (q.topic && q.topic.toLowerCase().includes(uCode)) ||
+                                    (q.competency_code && q.competency_code.toLowerCase().includes(uCode))
+                                  );
+                                }
 
                                 let matchTopic = true;
                                 if (secF.topic && secF.topic !== 'ALL') {
@@ -2123,7 +3072,7 @@ export default function FacultyAssessmentMasterPage() {
                                   );
                                 }
 
-                                return matchType && matchTopic && matchComp;
+                                return matchType && matchUnit && matchTopic && matchComp;
                               });
 
                               const checkedList = secCheckedQIds[sec.id] || [];
@@ -2132,7 +3081,7 @@ export default function FacultyAssessmentMasterPage() {
                                 <div className="space-y-3 pt-2">
                                   <div className="flex items-center justify-between">
                                     <span className="text-xs font-black text-[#5B4BFF]">
-                                      Step 4: Check questions to add to {sec.name} ({availableFiltered.length} Available)
+                                      Step 5: Check questions to add to {sec.name} ({availableFiltered.length} Questions for {secF.unit === 'ALL' ? 'All Units / COs' : secF.unit})
                                     </span>
                                     {checkedList.length > 0 && (
                                       <button
@@ -2147,7 +3096,7 @@ export default function FacultyAssessmentMasterPage() {
 
                                   {availableFiltered.length === 0 ? (
                                     <div className="py-6 text-center text-[#4E5969] dark:text-slate-400 text-xs font-bold bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 rounded-xl">
-                                      No questions match the selected topic or competency filter. Try selecting a different topic or competency dropdown.
+                                      No questions match the selected unit, topic or competency filter. Try selecting a different Unit / CO or Topic dropdown.
                                     </div>
                                   ) : (
                                     <div className="max-h-64 overflow-y-auto space-y-2 pr-1 border border-[#E7EAF3] dark:border-slate-800 rounded-xl p-2.5 bg-[#F8FAFC] dark:bg-slate-900/50">
@@ -2176,18 +3125,34 @@ export default function FacultyAssessmentMasterPage() {
                                               />
                                               <div className="space-y-1.5 flex-1">
                                                 <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-relaxed">{q.question_text}</p>
+                                                {(q.image_url || q.imageUrl) && (
+                                                  <div className="mt-1">
+                                                    <img
+                                                      src={q.image_url || q.imageUrl}
+                                                      alt="Diagram"
+                                                      className="max-h-24 max-w-xs object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs"
+                                                    />
+                                                  </div>
+                                                )}
                                                 <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                                  <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">
+                                                    🏛️ {q.unit_code || 'CO1'}
+                                                  </span>
                                                   <span className={`px-2 py-0.5 rounded-full font-black border ${
                                                     q.mode === 'MCQ' ? 'bg-[#EEF2FF] text-[#5B4BFF] border-[#5B4BFF]/30' : 'bg-purple-100 text-purple-700 border-purple-300'
                                                   }`}>
                                                     {q.mode}
                                                   </span>
-                                                  <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                                                    🎯 {q.competency_code || 'PY1.1'}
-                                                  </span>
-                                                  <span className="px-2 py-0.5 rounded-full font-bold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">
-                                                    📚 {q.topic || 'General Physiology'}
-                                                  </span>
+                                                  {q.competency_code && (
+                                                    <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
+                                                      🎯 {q.competency_code}
+                                                    </span>
+                                                  )}
+                                                  {q.topic && (
+                                                    <span className="px-2 py-0.5 rounded-full font-bold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">
+                                                      📚 {q.topic}
+                                                    </span>
+                                                  )}
                                                   <span className="font-black text-[#5B4BFF]">({Number(q.max_marks || 2).toFixed(2)} Marks)</span>
                                                 </div>
                                               </div>
@@ -2230,6 +3195,15 @@ export default function FacultyAssessmentMasterPage() {
                                       <span className="font-mono text-[#5B4BFF] font-black text-sm">{qIdx + 1}.</span>
                                       <div className="space-y-1 flex-1">
                                         <p className="font-black text-[#1B1E28] dark:text-white leading-relaxed text-xs">{q.questionText}</p>
+                                        {(q.imageUrl || q.image_url) && (
+                                          <div className="mt-1.5">
+                                            <img
+                                              src={q.imageUrl || q.image_url}
+                                              alt="Diagram"
+                                              className="max-h-28 max-w-xs object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs"
+                                            />
+                                          </div>
+                                        )}
                                         <div className="flex items-center gap-2 text-[10px]">
                                           <span className="px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-black border border-[#5B4BFF]/20">
                                             {q.mode}
@@ -2326,19 +3300,25 @@ export default function FacultyAssessmentMasterPage() {
             <div className="space-y-6">
               {/* Context Bar */}
               <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-5 shadow-soft flex flex-wrap items-center justify-between gap-3 text-xs">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-[#4E5969] dark:text-slate-400 font-bold">Publishing Context:</span>
                   <span className="px-3 py-1 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-extrabold border border-[#5B4BFF]/30">
-                    🏛️ {departments.find(d => d.id === selectedDept)?.name || facultyDeptName}
+                    🏛️ {academicCascade?.college?.colg_name || tenantName || 'College'}
                   </span>
                   <span className="px-3 py-1 rounded-full bg-[#E6F9F3] text-[#00C48C] font-extrabold border border-[#00C48C]/30">
-                    📖 {subjectsForDept.find(s => s.id === selectedSubject)?.name || 'PHYSIOLOGY'}
+                    🎓 {academicCascade?.course?.course_name || 'Course'}
                   </span>
                   <span className="px-3 py-1 rounded-full bg-[#FFF4EC] text-[#F36C21] font-extrabold border border-[#F36C21]/30">
-                    🎓 CBME 2024 (NMC)
+                    🏢 {academicCascade?.branch?.branch_name || facultyDeptName}
                   </span>
-                  <span className="px-3 py-1 rounded-full bg-[#FEECEB] text-[#F04438] font-extrabold border border-[#F04438]/30">
-                    📅 Batch 2025 (1st Prof)
+                  <span className="px-3 py-1 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 font-extrabold border border-purple-200">
+                    📅 {academicCascade?.batch?.batch_name || 'Batch'}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 font-extrabold border border-blue-200">
+                    🔢 {academicCascade?.semester?.SemName || academicCascade?.semester?.name || 'Semester'}
+                  </span>
+                  <span className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 font-extrabold border border-emerald-200">
+                    📖 {academicCascade?.subject?.name || subjectsForDept.find(s => s.id === selectedSubject)?.name || 'Subject'}
                   </span>
                 </div>
               </div>
@@ -2367,11 +3347,16 @@ export default function FacultyAssessmentMasterPage() {
                         {designedPapers.length === 0 ? (
                           <option value="">No Designed Papers Found — Design Paper First in Tab 2</option>
                         ) : (
-                          designedPapers.map(p => (
-                            <option key={p.id} value={p.id}>
-                              [{p.code}] {p.name} ({p.max_marks || p.maxMarks || 100} Marks) — ✓ Approved
-                            </option>
-                          ))
+                          designedPapers.map(p => {
+                            const setLabel = p.paper_set || p.paperSet || 'Set A';
+                            const targetSecs = Array.isArray(p.target_sections) ? p.target_sections : (Array.isArray(p.targetSections) ? p.targetSections : ['All']);
+                            const targetLabel = targetSecs[0] !== 'All' ? `🎯 ${targetSecs.join(', ')}` : '🌐 Common / All Sections';
+                            return (
+                              <option key={p.id} value={p.id}>
+                                [{setLabel}] [{p.code}] {p.name} ({p.max_marks || p.maxMarks || 100} Marks) — {targetLabel} — ✓ Approved
+                              </option>
+                            );
+                          })
                         )}
                       </select>
                     </div>
@@ -2385,9 +3370,14 @@ export default function FacultyAssessmentMasterPage() {
                         onChange={(e) => setPublishTargetBatch(e.target.value)}
                         className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] shadow-sm"
                       >
-                        <option value="2025-MBBS">Batch 2025-MBBS (1st Professional Current)</option>
-                        <option value="2024-MBBS">Batch 2024-MBBS (2nd Professional)</option>
-                        <option value="2023-MBBS">Batch 2023-MBBS (3rd Professional)</option>
+                        {academicCascade?.batch && (
+                          <option value={academicCascade.batch.batch_name || String(academicCascade.batch.batch_cd)}>
+                            {academicCascade.batch.batch_name} — {academicCascade.course?.course_name || 'Active Course'} ({academicCascade.semester?.SemName || 'Current'})
+                          </option>
+                        )}
+                        <option value="Batch 2024">Batch 2024</option>
+                        <option value="Batch 2025">Batch 2025</option>
+                        <option value="Batch 2026">Batch 2026</option>
                       </select>
                     </div>
                   </div>
@@ -2474,8 +3464,21 @@ export default function FacultyAssessmentMasterPage() {
                         {designedPapers.map((dp) => (
                           <tr key={dp.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
                             <td className="py-4 px-4 align-top">
-                              <span className="font-black text-[#1B1E28] dark:text-white text-xs block">{dp.name}</span>
-                              <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-bold">Physiology — Batch 2025 (1st Prof)</span>
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">
+                                  📑 {dp.paper_set || dp.paperSet || 'Set A'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">
+                                  {(() => {
+                                    const ts = Array.isArray(dp.target_sections) ? dp.target_sections : (Array.isArray(dp.targetSections) ? dp.targetSections : ['All']);
+                                    return ts[0] !== 'All' ? `🎯 ${ts.join(', ')}` : '🌐 Common / All Sections';
+                                  })()}
+                                </span>
+                              </div>
+                              <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-snug">{dp.name}</p>
+                              <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-bold block mt-0.5">
+                                {dp.subject_name || academicCascade?.subject?.name || 'Subject'} — {dp.batch_code || academicCascade?.batch?.batch_name || 'Active Batch'}
+                              </span>
                             </td>
                             <td className="py-4 px-4 align-top font-mono text-[#5B4BFF] font-black">
                               {dp.code}

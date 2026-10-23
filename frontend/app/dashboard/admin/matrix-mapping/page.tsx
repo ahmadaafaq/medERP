@@ -4,6 +4,9 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { usePathname } from 'next/navigation';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
 import {
   fetchCourses,
   fetchBranches,
@@ -95,9 +98,64 @@ const getAuthHeaders = (): Record<string, string> => {
   };
 };
 
+// Academic Scoping & Section Normalization Helpers
+const normalizeSection = (val: string): string => {
+  const v = String(val || '').trim().toLowerCase();
+  if (!v || v === 'all' || v === 'all sections') return 'all';
+  if (v === '1' || v === 'section a' || v === 'sec a' || v === 'a') return '1';
+  if (v === '2' || v === 'section b' || v === 'sec b' || v === 'b') return '2';
+  if (v === '3' || v === 'section c' || v === 'sec c' || v === 'c') return '3';
+  if (v === '4' || v === 'section d' || v === 'sec d' || v === 'd') return '4';
+  if (v === '5' || v === 'section e' || v === 'sec e' || v === 'e') return '5';
+  return v;
+};
+
+const isSectionMatch = (linkSec: string, selectedSec: string): boolean => {
+  if (!selectedSec || selectedSec === 'all' || selectedSec === 'All Sections') return true;
+  if (!linkSec || linkSec === 'all' || linkSec === 'All Sections') return true;
+  if (linkSec.trim().toLowerCase() === selectedSec.trim().toLowerCase()) return true;
+  return normalizeSection(linkSec) === normalizeSection(selectedSec);
+};
+
+const isBatchMatch = (linkBatch: string, selectedBatchVal: string, batchesList: AcademicBatch[]): boolean => {
+  if (!selectedBatchVal || selectedBatchVal === 'all') return true;
+  if (!linkBatch || linkBatch === 'all') return true;
+  const lb = String(linkBatch).trim().toLowerCase();
+  const sb = String(selectedBatchVal).trim().toLowerCase();
+  if (lb === sb) return true;
+  const matchB = batchesList.find(b => String(b.batch_cd).trim().toLowerCase() === lb || String(b.year).trim().toLowerCase() === lb);
+  if (matchB) {
+    if (String(matchB.batch_cd).trim().toLowerCase() === sb || String(matchB.year).trim().toLowerCase() === sb) return true;
+  }
+  const matchS = batchesList.find(b => String(b.batch_cd).trim().toLowerCase() === sb || String(b.year).trim().toLowerCase() === sb);
+  if (matchS) {
+    if (String(matchS.batch_cd).trim().toLowerCase() === lb || String(matchS.year).trim().toLowerCase() === lb) return true;
+  }
+  return false;
+};
+
+const formatSectionLabel = (sec: string) => {
+  const norm = normalizeSection(sec);
+  if (norm === '1') return 'Section A (1)';
+  if (norm === '2') return 'Section B (2)';
+  if (norm === '3') return 'Section C (3)';
+  if (norm === '4') return 'Section D (4)';
+  if (norm === '5') return 'Section E (5)';
+  return sec.startsWith('Section') ? sec : `Section ${sec}`;
+};
+
 export default function MatrixMappingPage() {
   const pathname = usePathname();
-  const isFaculty = pathname?.includes('/dashboard/faculty');
+  const [userRole, setUserRole] = useState<string>('');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const r = (localStorage.getItem('role') || localStorage.getItem('auth_role') || '').toUpperCase();
+      setUserRole(r);
+    }
+  }, []);
+
+  const isFaculty = pathname?.includes('/dashboard/faculty') || userRole === 'FACULTY';
   const role: 'admin' | 'faculty' = isFaculty ? 'faculty' : 'admin';
 
   // Active Tab: 1. CO - PO Mapping(Matrix) | 2. PO - PEO Mapping(Matrix)
@@ -118,6 +176,230 @@ export default function MatrixMappingPage() {
   const [branches, setBranches] = useState<AcademicBranch[]>([]);
   const [batches, setBatches] = useState<AcademicBatch[]>([]);
   const [subjects, setSubjects] = useState<Subject[]>([]);
+
+  // Academic Hierarchy Cascading State (Faculty Linked)
+  const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
+
+  // Cascading Selection Handler for Faculty Scope
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setAcademicCascade(state);
+    const cCd = state.college?.colg_cd ? String(state.college.colg_cd) : selectedCollege;
+    const crsCd = state.course?.course_cd ? String(state.course.course_cd) : 'all';
+    const brCd = state.branch?.branch_cd ? String(state.branch.branch_cd) : 'all';
+    const batCd = state.batch?.batch_cd ? String(state.batch.batch_cd) : (state.batch?.year ? String(state.batch.year) : 'all');
+    const semCd = state.semester?.sem_cd ? String(state.semester.sem_cd) : 'all';
+    const secCd = state.section ? String(state.section) : 'all';
+    const subCd = state.subject?.code || state.subject?.id || '';
+
+    setSelectedCollege(cCd);
+    setSelectedCourse(crsCd);
+    setSelectedBranch(brCd);
+    setSelectedBatch(batCd);
+    setSelectedSemester(semCd);
+    setSelectedSection(secCd);
+
+    if (state.allSubjects && state.allSubjects.length > 0) {
+      setSubjects(
+        state.allSubjects.map((s) => ({
+          id: s.id || s.code,
+          code: s.code,
+          name: s.name,
+          course_cd: crsCd !== 'all' ? crsCd : undefined,
+          branch_cd: brCd !== 'all' ? brCd : undefined,
+          sem_cd: semCd !== 'all' ? semCd : undefined,
+        }))
+      );
+    }
+
+    if (subCd && subCd !== selectedSubject) {
+      setSelectedSubject(subCd);
+    }
+  };
+
+  // Faculty Linked State (for faculty scope isolation)
+  const [facultyLinks, setFacultyLinks] = useState<any[]>([]);
+  const [facultyLinksLoaded, setFacultyLinksLoaded] = useState<boolean>(false);
+
+  // Cascading Available Scopes for Faculty Linkages (supports single & multiple linked scopes)
+  const displayCourses = useMemo(() => {
+    if (!isFaculty || !facultyLinksLoaded) return courses;
+    if (facultyLinks.length === 0) return [];
+    const map = new Map<string, AcademicCourse>();
+    facultyLinks.forEach((l) => {
+      const cd = String(l.resolved_course_cd || l.course_cd || '').trim();
+      if (!cd) return;
+      if (!map.has(cd)) {
+        const match = courses.find((c) => String(c.course_cd) === cd || String((c as any).code) === cd);
+        const name = l.resolved_course_name || l.course_name || match?.course_name || (match as any)?.name || `Course ${cd}`;
+        map.set(cd, {
+          course_cd: cd,
+          course_name: name,
+          is_active: true,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, courses]);
+
+  const displayBranches = useMemo(() => {
+    if (!isFaculty || !facultyLinksLoaded) return branches;
+    if (facultyLinks.length === 0) return [];
+    const filtered = facultyLinks.filter((l) => {
+      if (selectedCourse === 'all') return true;
+      const cCd = String(l.resolved_course_cd || l.course_cd || '').trim();
+      return cCd === String(selectedCourse).trim();
+    });
+    const map = new Map<string, AcademicBranch>();
+    filtered.forEach((l) => {
+      const bCd = String(l.resolved_branch_cd || l.branch_cd || '').trim();
+      if (!bCd) return;
+      if (!map.has(bCd)) {
+        const match = branches.find((b) => String(b.branch_cd) === bCd || String((b as any).code) === bCd);
+        const name = l.resolved_branch_name || l.branch_name || match?.branch_name || (match as any)?.name || `Branch ${bCd}`;
+        map.set(bCd, {
+          branch_cd: bCd,
+          branch_name: name,
+          course_cd: selectedCourse !== 'all' ? selectedCourse : String(l.resolved_course_cd || l.course_cd || ''),
+          is_active: true,
+        });
+      }
+    });
+    return Array.from(map.values());
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, branches, selectedCourse]);
+
+  const displayBatches = useMemo(() => {
+    if (!isFaculty || !facultyLinksLoaded) return batches;
+    if (facultyLinks.length === 0) return [];
+    const filtered = facultyLinks.filter((l) => {
+      const cCd = String(l.resolved_course_cd || l.course_cd || '').trim();
+      const bCd = String(l.resolved_branch_cd || l.branch_cd || '').trim();
+      if (selectedCourse !== 'all' && cCd !== String(selectedCourse).trim()) return false;
+      if (selectedBranch !== 'all' && bCd !== String(selectedBranch).trim()) return false;
+      return true;
+    });
+    const map = new Map<string, AcademicBatch>();
+    filtered.forEach((l) => {
+      const batCd = String(l.resolved_batch_cd || l.batch_cd || '').trim();
+      if (!batCd) return;
+      if (!map.has(batCd)) {
+        const match = batches.find((b) => String(b.batch_cd) === batCd || String(b.year) === batCd);
+        const yr = match?.year ? Number(match.year) : Number(batCd) || undefined;
+        map.set(batCd, {
+          batch_cd: batCd,
+          batch_name: `Batch ${yr || batCd}`,
+          year: yr,
+          course_cd: selectedCourse !== 'all' ? selectedCourse : String(l.resolved_course_cd || l.course_cd || ''),
+          is_active: true,
+        });
+      }
+    });
+    const result = Array.from(map.values());
+    return result.length > 0 ? result : batches;
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, batches, selectedCourse, selectedBranch]);
+
+  const displaySemesters = useMemo(() => {
+    const allSems = [1, 2, 3, 4, 5, 6, 7, 8];
+    if (!isFaculty || !facultyLinksLoaded) return allSems;
+    if (facultyLinks.length === 0) return [];
+    const filtered = facultyLinks.filter((l) => {
+      const cCd = String(l.resolved_course_cd || l.course_cd || '').trim();
+      const bCd = String(l.resolved_branch_cd || l.branch_cd || '').trim();
+      const batCd = String(l.resolved_batch_cd || l.batch_cd || '').trim();
+      if (selectedCourse !== 'all' && cCd !== String(selectedCourse).trim()) return false;
+      if (selectedBranch !== 'all' && bCd !== String(selectedBranch).trim()) return false;
+      if (selectedBatch !== 'all' && batCd && !isBatchMatch(batCd, selectedBatch, batches)) return false;
+      return true;
+    });
+    const set = new Set<number>();
+    filtered.forEach((l) => {
+      const raw = String(l.resolved_sem_cd || l.sem_cd || l.semester || '').replace(/\D/g, '');
+      const num = Number(raw);
+      if (num > 0) set.add(num);
+    });
+    const arr = Array.from(set).sort((a, b) => a - b);
+    return arr.length > 0 ? arr : allSems;
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, selectedCourse, selectedBranch, selectedBatch, batches]);
+
+  const displaySections = useMemo(() => {
+    const defaultSections = [
+      { code: '1', label: 'Section A (1)' },
+      { code: '2', label: 'Section B (2)' },
+      { code: '3', label: 'Section C (3)' },
+      { code: '4', label: 'Section D (4)' },
+    ];
+    if (!isFaculty || !facultyLinksLoaded) return defaultSections;
+    if (facultyLinks.length === 0) return [];
+    const filtered = facultyLinks.filter((l) => {
+      const cCd = String(l.resolved_course_cd || l.course_cd || '').trim();
+      const bCd = String(l.resolved_branch_cd || l.branch_cd || '').trim();
+      const batCd = String(l.resolved_batch_cd || l.batch_cd || '').trim();
+      const sVal = String(l.resolved_sem_cd || l.sem_cd || l.semester || '').replace(/\D/g, '');
+      if (selectedCourse !== 'all' && cCd !== String(selectedCourse).trim()) return false;
+      if (selectedBranch !== 'all' && bCd !== String(selectedBranch).trim()) return false;
+      if (selectedBatch !== 'all' && batCd && !isBatchMatch(batCd, selectedBatch, batches)) return false;
+      if (selectedSemester !== 'all' && sVal && sVal !== String(selectedSemester).replace(/\D/g, '').trim()) return false;
+      return true;
+    });
+    const set = new Set<string>();
+    filtered.forEach((l) => {
+      const sec = String(l.section || '1').trim();
+      if (sec) set.add(sec);
+    });
+    const list = Array.from(set).sort().map((sec) => ({
+      code: sec,
+      label: formatSectionLabel(sec),
+    }));
+    return list.length > 0 ? list : defaultSections;
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, selectedCourse, selectedBranch, selectedBatch, selectedSemester, batches]);
+
+  // Synchronize faculty cascading selections when linked scopes load
+  useEffect(() => {
+    if (!isFaculty || !facultyLinksLoaded || facultyLinks.length === 0) return;
+    if (displayCourses.length > 0 && (selectedCourse === 'all' || !displayCourses.some(c => String(c.course_cd) === String(selectedCourse)))) {
+      setSelectedCourse(String(displayCourses[0].course_cd));
+    }
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, displayCourses, selectedCourse]);
+
+  useEffect(() => {
+    if (!isFaculty || !facultyLinksLoaded || facultyLinks.length === 0) return;
+    if (displayBranches.length > 0 && (selectedBranch === 'all' || !displayBranches.some(b => String(b.branch_cd) === String(selectedBranch)))) {
+      setSelectedBranch(String(displayBranches[0].branch_cd));
+    }
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, displayBranches, selectedBranch]);
+
+  useEffect(() => {
+    if (!isFaculty || !facultyLinksLoaded || facultyLinks.length === 0) return;
+    if (displayBatches.length > 0 && (selectedBatch === 'all' || !displayBatches.some(b => String(b.batch_cd || b.year) === String(selectedBatch)))) {
+      setSelectedBatch(String(displayBatches[0].batch_cd || displayBatches[0].year));
+    }
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, displayBatches, selectedBatch]);
+
+  useEffect(() => {
+    if (!isFaculty || !facultyLinksLoaded || facultyLinks.length === 0) return;
+    if (displaySemesters.length > 0 && (selectedSemester === 'all' || !displaySemesters.some(s => String(s) === String(selectedSemester)))) {
+      setSelectedSemester(String(displaySemesters[0]));
+    }
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, displaySemesters, selectedSemester]);
+
+  useEffect(() => {
+    if (!isFaculty || !facultyLinksLoaded || facultyLinks.length === 0) return;
+    if (displaySections.length > 0 && (selectedSection === 'all' || !displaySections.some(sec => String(sec.code) === String(selectedSection)))) {
+      setSelectedSection(String(displaySections[0].code));
+    }
+  }, [isFaculty, facultyLinksLoaded, facultyLinks, displaySections, selectedSection]);
+
+  // Whenever active cascade filter values change in faculty mode, ensure subjects are re-evaluated
+  useEffect(() => {
+    if (!isFaculty || !facultyLinksLoaded) return;
+    executeLoadSubjects(
+      selectedCollege,
+      selectedCourse,
+      selectedBranch,
+      selectedBatch,
+      selectedSemester,
+      selectedSection
+    );
+  }, [isFaculty, facultyLinksLoaded, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection]);
 
   // OBE Outcomes & Units
   const [pos, setPos] = useState<ProgramOutcome[]>([]);
@@ -159,6 +441,25 @@ export default function MatrixMappingPage() {
     }, 4500);
   };
 
+  // Helper to get logged-in faculty user ID / empId
+  const getLoggedInFacultyId = (): string => {
+    if (typeof window === 'undefined') return '';
+    const directEmp = localStorage.getItem('emp_id') || localStorage.getItem('empid') || localStorage.getItem('employeeId');
+    if (directEmp && directEmp.trim() !== '') return directEmp.trim();
+    try {
+      const raw = localStorage.getItem('user');
+      if (raw) {
+        const u = JSON.parse(raw);
+        return u.emp_id || u.faculty_id || u.profile?.emp_id || u.profile?.id || u.id || u.userId || u.sub || '';
+      }
+    } catch {}
+    return (
+      localStorage.getItem('facultyId') ||
+      localStorage.getItem('userId') ||
+      ''
+    );
+  };
+
   // 1. Initial Load: Colleges -> Courses -> Branches -> Batches -> Subjects
   useEffect(() => {
     let isMounted = true;
@@ -190,8 +491,60 @@ export default function MatrixMappingPage() {
         if (!isMounted) return;
         setCourses(courseList);
 
-        const initialCourse = courseList.length > 0 ? courseList[0].course_cd : 'all';
+        let initialCourse = courseList.length > 0 ? courseList[0].course_cd : 'all';
+        let initialBranch = 'all';
+        let initialBatch = 'all';
+        let initialSem = 'all';
+        let initialSection = 'all';
+        let fetchedFacultyLinks: any[] = [];
+
+        // When logged in as Faculty, automatically align cascade to faculty's linked subject scope
+        if (isFaculty) {
+          const facId = getLoggedInFacultyId();
+          if (facId) {
+            try {
+              const facSubRes = await fetch(
+                `${API_BASE}/faculty-subjects?tenant=${encodeURIComponent(slug)}&facultyId=${encodeURIComponent(facId)}`,
+                { headers: getAuthHeaders() }
+              );
+              if (facSubRes.ok) {
+                const fj = await facSubRes.json();
+                const fItems = Array.isArray(fj.data) ? fj.data : Array.isArray(fj) ? fj : [];
+                fetchedFacultyLinks = fItems;
+                setFacultyLinks(fItems);
+                setFacultyLinksLoaded(true);
+                if (fItems.length > 0) {
+                  const first = fItems[0];
+                  if (first.resolved_course_cd || first.course_cd) {
+                    const cMatch = courseList.find(c => String(c.course_cd) === String(first.resolved_course_cd || first.course_cd));
+                    if (cMatch) initialCourse = cMatch.course_cd;
+                    else initialCourse = String(first.resolved_course_cd || first.course_cd);
+                  }
+                  if (first.resolved_branch_cd || first.branch_cd) {
+                    initialBranch = String(first.resolved_branch_cd || first.branch_cd);
+                  }
+                  if (first.resolved_batch_cd || first.batch_cd) {
+                    initialBatch = String(first.resolved_batch_cd || first.batch_cd);
+                  }
+                  if (first.resolved_sem_cd || first.sem_cd || first.semester) {
+                    initialSem = String(first.resolved_sem_cd || first.sem_cd || first.semester).replace(/\D/g, '') || 'all';
+                  }
+                  if (first.section) {
+                    initialSection = String(first.section);
+                  }
+                }
+              }
+            } catch (e) {
+              console.warn('[MatrixMapping] Initial faculty links check note:', e);
+            }
+          }
+        }
+
         setSelectedCourse(initialCourse);
+        if (initialBranch !== 'all') setSelectedBranch(initialBranch);
+        if (initialBatch !== 'all') setSelectedBatch(initialBatch);
+        if (initialSem !== 'all') setSelectedSemester(initialSem);
+        if (initialSection !== 'all') setSelectedSection(initialSection);
 
         // Fetch branches and batches for this course
         if (initialCourse !== 'all') {
@@ -203,11 +556,15 @@ export default function MatrixMappingPage() {
           setBranches(branchList);
           setBatches(batchList);
 
-          const initialBatch = batchList.length > 0 ? String(batchList[0].year || batchList[0].batch_cd) : 'all';
-          setSelectedBatch(initialBatch);
+          if (!isFaculty && initialBatch === 'all') {
+            initialBatch = batchList.length > 0 ? String(batchList[0].year || batchList[0].batch_cd) : 'all';
+            setSelectedBatch(initialBatch);
+          }
 
           // Load subjects for initial cascading selection
-          await executeLoadSubjects(activeColgCd, initialCourse, 'all', initialBatch, 'all', 'all', slug);
+          await executeLoadSubjects(activeColgCd, initialCourse, initialBranch, initialBatch, initialSem, initialSection, slug, fetchedFacultyLinks);
+        } else {
+          await executeLoadSubjects(activeColgCd, 'all', 'all', 'all', 'all', 'all', slug, fetchedFacultyLinks);
         }
       } catch (err) {
         console.error('[MatrixMapping] Initial cascading load error:', err);
@@ -230,11 +587,80 @@ export default function MatrixMappingPage() {
     batchVal: string,
     semVal: string,
     secVal: string,
-    customSlug?: string
+    customSlug?: string,
+    passedLinks?: any[]
   ) => {
     setLoadingSubjects(true);
     const slug = customSlug || getActiveTenantSlug();
     try {
+      // E. FACULTY SCOPE ISOLATION: When user is Faculty, strictly show ONLY linked subjects
+      if (isFaculty) {
+        let links = (passedLinks && passedLinks.length > 0) ? passedLinks : facultyLinks;
+        if (!links || links.length === 0) {
+          const facId = getLoggedInFacultyId();
+          if (facId) {
+            try {
+              const facSubRes = await fetch(
+                `${API_BASE}/faculty-subjects?tenant=${encodeURIComponent(slug)}&facultyId=${encodeURIComponent(facId)}`,
+                { headers: getAuthHeaders() }
+              );
+              if (facSubRes.ok) {
+                const fj = await facSubRes.json();
+                links = Array.isArray(fj.data) ? fj.data : Array.isArray(fj) ? fj : [];
+                setFacultyLinks(links);
+                setFacultyLinksLoaded(true);
+              }
+            } catch (e) {
+              console.warn('[MatrixMapping] faculty-subjects load error:', e);
+            }
+          }
+        }
+
+        const matchingLinks = (links || []).filter((l: any) => {
+          const c = String(l.resolved_course_cd || l.course_cd || '').trim();
+          const b = String(l.resolved_branch_cd || l.branch_cd || '').trim();
+          const bat = String(l.resolved_batch_cd || l.batch_cd || '').trim();
+          const s = String(l.resolved_sem_cd || l.sem_cd || l.semester || '').replace(/\D/g, '').trim();
+          const sec = String(l.section || '1').trim();
+
+          if (courseCd !== 'all' && c && c !== String(courseCd).trim()) return false;
+          if (branchCd !== 'all' && b && b !== String(branchCd).trim()) return false;
+          if (batchVal !== 'all' && bat && !isBatchMatch(bat, batchVal, batches)) return false;
+          if (semVal !== 'all' && s && s !== String(semVal).replace(/\D/g, '').trim()) return false;
+          // Note: Do NOT filter out subjects by section so that both theory and lab subjects remain visible
+          return true;
+        });
+
+        const subsMap = new Map<string, Subject>();
+        matchingLinks.forEach((l: any) => {
+          const code = String(l.subject_code || l.code || l.subject_id || l.id).trim();
+          if (!code) return;
+          if (!subsMap.has(code)) {
+            subsMap.set(code, {
+              id: String(l.subject_id || l.id || code),
+              code: code,
+              name: String(l.subject_name || l.name || l.mst_sub_name || code),
+              course_cd: l.resolved_course_cd || l.course_cd || courseCd,
+              branch_cd: l.resolved_branch_cd || l.branch_cd || (branchCd !== 'all' ? branchCd : undefined),
+              sem_cd: l.resolved_sem_cd || l.sem_cd || (semVal !== 'all' ? semVal : undefined),
+            });
+          }
+        });
+
+        const facultySubs = Array.from(subsMap.values());
+        setSubjects(facultySubs);
+        if (facultySubs.length > 0) {
+          setSelectedSubject((prev) => {
+            const found = facultySubs.find((s) => s.code === prev || s.id === prev);
+            return found ? (found.code || found.id) : (facultySubs[0].code || facultySubs[0].id);
+          });
+        } else {
+          setSelectedSubject('');
+        }
+        // STRICT: Never fall through to loading other unlinked database subjects for faculty
+        return facultySubs;
+      }
+
       let loadedSubs: Subject[] = [];
 
       // A. Try live SRMS timetable-subjects if SRMS tenant and course selected
@@ -269,8 +695,10 @@ export default function MatrixMappingPage() {
 
       // B. Fetch from DB (admin-master subjects)
       let dbSubs: Subject[] = [];
+      const facId = getLoggedInFacultyId();
       try {
-        const res = await fetch(`${API_BASE}/subjects?tenant=${encodeURIComponent(slug)}`, {
+        const facParam = (isFaculty && facId) ? `&facultyId=${encodeURIComponent(facId)}` : '';
+        const res = await fetch(`${API_BASE}/subjects?tenant=${encodeURIComponent(slug)}${facParam}`, {
           headers: getAuthHeaders(),
         });
         if (res.ok) {
@@ -317,6 +745,7 @@ export default function MatrixMappingPage() {
       });
 
       const finalSubjects = merged.length > 0 ? merged : (courseCd !== 'all' ? dbSubs.filter(s => !s.course_cd || String(s.course_cd) === String(courseCd)) : dbSubs);
+
       setSubjects(finalSubjects);
 
       if (finalSubjects.length > 0) {
@@ -398,6 +827,10 @@ export default function MatrixMappingPage() {
     setSelectedSubject('');
 
     const slug = getActiveTenantSlug();
+    if (isFaculty) {
+      await executeLoadSubjects(selectedCollege, courseCd, 'all', 'all', 'all', 'all', slug);
+      return;
+    }
     if (courseCd !== 'all') {
       try {
         const [branchList, batchList] = await Promise.all([
@@ -1146,7 +1579,18 @@ export default function MatrixMappingPage() {
     showToast('Exported PO-PEO Matrix CSV', 'info');
   };
 
-  const currentSubjectObj = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
+  const currentSubjectObj =
+    subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject) ||
+    (academicCascade?.subject
+      ? {
+          id: academicCascade.subject.id || academicCascade.subject.code,
+          code: academicCascade.subject.code,
+          name: academicCascade.subject.name,
+          course_cd: academicCascade.course?.course_cd,
+          branch_cd: academicCascade.branch?.branch_cd,
+          sem_cd: academicCascade.semester?.sem_cd ? String(academicCascade.semester.sem_cd) : undefined,
+        }
+      : undefined);
 
   return (
     <div className="flex min-h-screen bg-[#F6F8FC] dark:bg-[#0F172A] text-slate-900 dark:text-slate-100 font-sans transition-colors duration-200">
@@ -1231,217 +1675,236 @@ export default function MatrixMappingPage() {
             </div>
           </div>
 
-          {/* CASCADING FILTER BAR adhering to Theme.md & RestrictAPI.md */}
-          <div className="p-5 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4 print:hidden">
-            <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
-              <div className="flex items-center gap-2 text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
-                <Filter className="w-4 h-4 text-[#5B4BFF]" />
-                <span>Curriculum & Program Scope Filters</span>
-                <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 normal-case hidden sm:inline">
-                  (College → Course → Branch → Batch → Semester → Section → Load Subjects)
-                </span>
-              </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-slate-500 font-medium text-[11px]">Active Institution:</span>
-                <span className="font-bold text-[#5B4BFF] bg-[#5B4BFF]/10 px-3 py-1 rounded-lg border border-[#5B4BFF]/20 text-xs">
-                  {colleges.find((c) => String(c.colg_cd) === String(selectedCollege))?.colg_name ||
-                   colleges.find((c) => c.slug === selectedCollege)?.colg_name ||
-                   getActiveTenantSlug()}
-                </span>
-              </div>
-            </div>
-
-            {/* 7-Step Cascading Controls Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
-              {/* 1. College */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  1. College / Campus
-                </label>
-                <select
-                  value={selectedCollege}
-                  onChange={(e) => handleCollegeChange(e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
-                >
-                  {colleges.map((c) => (
-                    <option key={c.colg_cd} value={String(c.colg_cd)}>
-                      {c.colg_name} {c.colg_cd ? `(${c.colg_cd})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 2. Course */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  2. Program / Course
-                </label>
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => handleCourseChange(e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
-                >
-                  <option value="all">All Courses</option>
-                  {courses.map((c, idx) => (
-                    <option key={c.course_cd || idx} value={String(c.course_cd)}>
-                      {c.course_name || c.course_cd}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 3. Branch */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  3. Branch / Department
-                </label>
-                <select
-                  value={selectedBranch}
-                  onChange={(e) => handleBranchChange(e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
-                >
-                  <option value="all">All Branches</option>
-                  {branches.map((b, idx) => (
-                    <option key={b.branch_cd || idx} value={String(b.branch_cd)}>
-                      {b.branch_name || b.branch_cd}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 4. Batch */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  4. Batch Year
-                </label>
-                <select
-                  value={selectedBatch}
-                  onChange={(e) => handleBatchChange(e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
-                >
-                  <option value="all">All Batches</option>
-                  {batches.length > 0 ? (
-                    batches.map((b, idx) => {
-                      const yr = String(b.year || b.batch_cd || '');
-                      return (
-                        <option key={String(b.batch_cd || idx)} value={yr}>
-                          Batch {yr}
-                        </option>
-                      );
-                    })
-                  ) : (
-                    <>
-                      <option value="2024">Batch 2024</option>
-                      <option value="2023">Batch 2023</option>
-                      <option value="2022">Batch 2022</option>
-                      <option value="2021">Batch 2021</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              {/* 5. Semester */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  5. Semester / Phase
-                </label>
-                <select
-                  value={selectedSemester}
-                  onChange={(e) => handleSemesterChange(e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
-                >
-                  <option value="all">All Semesters</option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((s) => (
-                    <option key={s} value={String(s)}>
-                      Semester {s}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* 6. Section */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  6. Section
-                </label>
-                <select
-                  value={selectedSection}
-                  onChange={(e) => handleSectionChange(e.target.value)}
-                  className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
-                >
-                  <option value="all">All Sections</option>
-                  <option value="1">Section 1 (A)</option>
-                  <option value="2">Section 2 (B)</option>
-                  <option value="3">Section 3 (C)</option>
-                  <option value="4">Section 4 (D)</option>
-                </select>
-              </div>
-
-              {/* 7. Load Subjects Button */}
-              <div>
-                <button
-                  type="button"
-                  onClick={handleManualLoadSubjects}
-                  disabled={loadingSubjects}
-                  className="w-full h-10 px-3 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-[#4E3FE6] active:scale-[0.98] rounded-xl shadow-md shadow-[#5B4BFF]/25 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
-                  title="Query and load curriculum subjects matching cascading filters"
-                >
-                  {loadingSubjects ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Loading...</span>
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="w-3.5 h-3.5" />
-                      <span>Load Subjects</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Subject Selector Row */}
-            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-              <div className="flex-1">
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
-                  Active Subject / Course Code ({subjects.length} loaded)
-                </label>
-                <select
-                  value={selectedSubject}
-                  onChange={(e) => handleSubjectChange(e.target.value)}
-                  disabled={activeTab === 'po-peo'}
-                  className={`w-full h-10 px-3 text-xs border rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium transition-all ${
-                    activeTab === 'po-peo'
-                      ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-dashed border-slate-300 dark:border-slate-700 cursor-not-allowed'
-                      : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 text-slate-900 dark:text-slate-100 font-bold'
-                  }`}
-                >
-                  {subjects.length === 0 ? (
-                    <option value="">No subjects found for selection. Click "Load Subjects"</option>
-                  ) : (
-                    subjects.map((s) => (
-                      <option key={s.id || s.code} value={s.code || s.id}>
-                        [{s.code}] {s.name}
-                      </option>
-                    ))
-                  )}
-                </select>
-              </div>
-
-              {currentSubjectObj && activeTab === 'co-po' && (
-                <div className="flex items-center gap-2 self-end md:self-auto bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 px-3 py-2 rounded-xl text-xs">
-                  <BookOpen className="w-4 h-4 text-[#5B4BFF]" />
-                  <span className="font-extrabold text-[#1B1E28] dark:text-white">
-                    {currentSubjectObj.name}
-                  </span>
-                  <span className="font-black text-[#5B4BFF] bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 text-[11px]">
-                    {currentSubjectObj.code}
+          {/* CASCADING FILTER BAR: Faculty Cascading Component or Admin Filter Bar */}
+          {isFaculty ? (
+            <FacultyAcademicCascadingDropdown
+              onSelectionChange={handleAcademicCascadeChange}
+              selectedCollegeCd={academicCascade?.college?.colg_cd || selectedCollege}
+              selectedCourseCd={academicCascade?.course?.course_cd || (selectedCourse !== 'all' ? selectedCourse : undefined)}
+              selectedBranchCd={academicCascade?.branch?.branch_cd || (selectedBranch !== 'all' ? selectedBranch : undefined)}
+              selectedBatchCd={academicCascade?.batch?.batch_cd ? String(academicCascade.batch.batch_cd) : (selectedBatch !== 'all' ? selectedBatch : undefined)}
+              selectedSemCd={academicCascade?.semester?.sem_cd ? String(academicCascade.semester.sem_cd) : (selectedSemester !== 'all' ? selectedSemester : undefined)}
+              selectedSecCd={selectedSection !== 'all' ? selectedSection : undefined}
+              selectedSubjectCd={selectedSubject}
+              showSubject={true}
+              showSection={true}
+              onlyLinkedSubjects={true}
+              title="🎓 Faculty Academic Hierarchy Cascading"
+              subtitle="College → Course → Branch → Batch → Semester → Subject → Section"
+            />
+          ) : (
+            <div className="p-5 rounded-[22px] bg-white dark:bg-[#1B1E28] border border-[#E7EAF3] dark:border-slate-800 shadow-[0_4px_20px_rgba(0,0,0,0.03)] space-y-4 print:hidden">
+              <div className="flex flex-wrap items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 gap-2">
+                <div className="flex items-center gap-2 text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
+                  <Filter className="w-4 h-4 text-[#5B4BFF]" />
+                  <span>Curriculum & Program Scope Filters</span>
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 normal-case hidden sm:inline">
+                    (College → Course → Branch → Batch → Semester → Section → Load Subjects)
                   </span>
                 </div>
-              )}
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-500 font-medium text-[11px]">Active Institution:</span>
+                  <span className="font-bold text-[#5B4BFF] bg-[#5B4BFF]/10 px-3 py-1 rounded-lg border border-[#5B4BFF]/20 text-xs">
+                    {colleges.find((c) => String(c.colg_cd) === String(selectedCollege))?.colg_name ||
+                     colleges.find((c) => c.slug === selectedCollege)?.colg_name ||
+                     getActiveTenantSlug()}
+                  </span>
+                </div>
+              </div>
+
+              {/* 7-Step Cascading Controls Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3 items-end">
+                {/* 1. College */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    1. College / Campus
+                  </label>
+                  <select
+                    value={selectedCollege}
+                    onChange={(e) => handleCollegeChange(e.target.value)}
+                    className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                  >
+                    {colleges.map((c) => (
+                      <option key={c.colg_cd} value={String(c.colg_cd)}>
+                        {c.colg_name} {c.colg_cd ? `(${c.colg_cd})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 2. Course */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    2. Program / Course
+                  </label>
+                  <select
+                    value={selectedCourse}
+                    onChange={(e) => handleCourseChange(e.target.value)}
+                    className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                  >
+                    <option value="all">All Courses</option>
+                    {displayCourses.map((c, idx) => (
+                      <option key={c.course_cd || idx} value={String(c.course_cd)}>
+                        {c.course_name || c.course_cd}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 3. Branch */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    3. Branch / Department
+                  </label>
+                  <select
+                    value={selectedBranch}
+                    onChange={(e) => handleBranchChange(e.target.value)}
+                    className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                  >
+                    <option value="all">All Branches</option>
+                    {displayBranches.map((b, idx) => (
+                      <option key={b.branch_cd || idx} value={String(b.branch_cd)}>
+                        {b.branch_name || b.branch_cd}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 4. Batch */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    4. Batch Year
+                  </label>
+                  <select
+                    value={selectedBatch}
+                    onChange={(e) => handleBatchChange(e.target.value)}
+                    className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                  >
+                    <option value="all">All Batches</option>
+                    {displayBatches.length > 0 ? (
+                      displayBatches.map((b, idx) => {
+                        const yr = String(b.year || b.batch_cd || '');
+                        return (
+                          <option key={String(b.batch_cd || idx)} value={String(b.batch_cd || yr)}>
+                            Batch {yr}
+                          </option>
+                        );
+                      })
+                    ) : (
+                      <>
+                        <option value="2024">Batch 2024</option>
+                        <option value="2023">Batch 2023</option>
+                        <option value="2022">Batch 2022</option>
+                        <option value="2021">Batch 2021</option>
+                      </>
+                    )}
+                  </select>
+                </div>
+
+                {/* 5. Semester */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    5. Semester / Phase
+                  </label>
+                  <select
+                    value={selectedSemester}
+                    onChange={(e) => handleSemesterChange(e.target.value)}
+                    className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                  >
+                    <option value="all">All Semesters</option>
+                    {displaySemesters.map((s) => (
+                      <option key={s} value={String(s)}>
+                        Semester {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 6. Section */}
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    6. Section
+                  </label>
+                  <select
+                    value={selectedSection}
+                    onChange={(e) => handleSectionChange(e.target.value)}
+                    className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
+                  >
+                    <option value="all">All Sections</option>
+                    {displaySections.map((sec) => (
+                      <option key={sec.code} value={sec.code}>
+                        {sec.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* 7. Load Subjects Button */}
+                <div>
+                  <button
+                    type="button"
+                    onClick={handleManualLoadSubjects}
+                    disabled={loadingSubjects}
+                    className="w-full h-10 px-3 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-[#4E3FE6] active:scale-[0.98] rounded-xl shadow-md shadow-[#5B4BFF]/25 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50"
+                    title="Query and load curriculum subjects matching cascading filters"
+                  >
+                    {loadingSubjects ? (
+                      <>
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        <span>Loading...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Load Subjects</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Subject Selector Row */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div className="flex-1">
+                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                    Active Subject / Course Code ({subjects.length} loaded)
+                  </label>
+                  <select
+                    value={selectedSubject}
+                    onChange={(e) => handleSubjectChange(e.target.value)}
+                    disabled={activeTab === 'po-peo'}
+                    className={`w-full h-10 px-3 text-xs border rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium transition-all ${
+                      activeTab === 'po-peo'
+                        ? 'bg-slate-100 dark:bg-slate-800 text-slate-400 border-dashed border-slate-300 dark:border-slate-700 cursor-not-allowed'
+                        : 'bg-[#F6F8FC] dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-800 text-slate-900 dark:text-slate-100 font-bold'
+                    }`}
+                  >
+                    {subjects.length === 0 ? (
+                      <option value="">No subjects found for selection. Click "Load Subjects"</option>
+                    ) : (
+                      subjects.map((s) => (
+                        <option key={s.id || s.code} value={s.code || s.id}>
+                          [{s.code}] {s.name}
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
+
+                {currentSubjectObj && activeTab === 'co-po' && (
+                  <div className="flex items-center gap-2 self-end md:self-auto bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-900 px-3 py-2 rounded-xl text-xs">
+                    <BookOpen className="w-4 h-4 text-[#5B4BFF]" />
+                    <span className="font-extrabold text-[#1B1E28] dark:text-white">
+                      {currentSubjectObj.name}
+                    </span>
+                    <span className="font-black text-[#5B4BFF] bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-indigo-200 dark:border-indigo-800 text-[11px]">
+                      {currentSubjectObj.code}
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* ========================================================================= */}
           {/* TAB 1: CO - PO MAPPING (MATRIX)                                           */}

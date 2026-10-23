@@ -56,6 +56,24 @@ export function isSrmsTenant(slug?: string): boolean {
   return s.includes('srms');
 }
 
+/** Get clean human-readable tenant or college name */
+export function getTenantName(): string {
+  if (typeof window === 'undefined') return 'SRMS College of Engineering & Technology';
+  try {
+    const raw = localStorage.getItem('user') || localStorage.getItem('auth_user');
+    if (raw) {
+      const u = JSON.parse(raw);
+      if (u.collegeName) return u.collegeName;
+      if (u.tenantName) return u.tenantName;
+      if (u.profile?.collegeName) return u.profile.collegeName;
+      if (u.firmName) return u.firmName;
+    }
+    const name = localStorage.getItem('tenantName') || localStorage.getItem('collegeName');
+    if (name) return name;
+  } catch {}
+  return 'SRMS College of Engineering & Technology';
+}
+
 function getAuthToken(): string {
   if (typeof window === 'undefined') return '';
   return localStorage.getItem('token') || '';
@@ -324,6 +342,30 @@ async function srmsFetchColleges(slug: string): Promise<AcademicCollege[]> {
   }));
 }
 
+export interface AcademicSemester {
+  id: string;
+  code: string;
+  sem_cd: number;
+  name: string;
+  SemName?: string;
+}
+
+export interface AcademicSubject {
+  id: string;
+  code: string;
+  name: string;
+  sub_cd?: string;
+  sub_name?: string;
+  mst_sub_name?: string;
+  sub_addinfo?: string;
+  course_cd?: string | number;
+  branch_cd?: string | number;
+  batch_cd?: string | number;
+  sem_cd?: string | number;
+  SubTyp?: string;
+  department_id?: string;
+}
+
 // ─── Public API ──────────────────────────────────────────────────────────────
 
 /**
@@ -365,3 +407,276 @@ export async function fetchColleges(slug: string): Promise<AcademicCollege[]> {
   }
   return pgFetchColleges(slug);
 }
+
+/**
+ * Fetch semesters — SRMS API for srms tenants, PostgreSQL / computed for all others.
+ */
+export async function fetchSemesters(
+  slug: string,
+  colgCd?: string,
+  courseCd?: string,
+  branchCd?: string,
+  batchCd?: string
+): Promise<AcademicSemester[]> {
+  const cd = colgCd || '1';
+  const crs = courseCd || '1';
+  const br = branchCd || '1';
+  const bat = batchCd || '17';
+
+  const params = new URLSearchParams({
+    colgcd: cd,
+    coursecd: crs,
+    branchcd: br,
+    batchcd: bat,
+    tenant: slug,
+  });
+
+  try {
+    const res = await fetch(`/api/srms/semesters?${params.toString()}`, {
+      headers: makeHeaders(slug),
+    }).catch(() => null);
+
+    if (res?.ok) {
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.data || []);
+      if (list.length > 0) {
+        return list.map((s: any) => ({
+          id: String(s.sem_cd || s.code || s.id),
+          code: String(s.sem_cd || s.code || s.id),
+          sem_cd: Number(s.sem_cd || s.code || s.id),
+          name: s.name || `Semester ${s.sem_cd || s.code || s.id}`,
+          SemName: s.SemName || s.name || `Semester ${s.sem_cd || s.code || s.id}`,
+        }));
+      }
+    }
+  } catch (e) {
+    console.warn('[useTenantAcademicData] fetchSemesters error:', e);
+  }
+
+  // Fallback: standard semesters based on course code
+  const crsUpper = String(crs).toUpperCase();
+  const maxSems = (crsUpper === '3' || crsUpper === '4' || crsUpper === '5' || crsUpper === '6' || crsUpper === 'MCA' || crsUpper === 'MBA')
+    ? 4
+    : (crsUpper === '12' || crsUpper === '13' || crsUpper === '7' || crsUpper === 'BCA' || crsUpper === 'BBA')
+      ? 6
+      : (crsUpper === '11' || crsUpper === 'BALLB')
+        ? 10
+        : 8;
+  const ords = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th', '10th'];
+  const fallbackList: AcademicSemester[] = [];
+  for (let i = 1; i <= maxSems; i++) {
+    fallbackList.push({
+      id: String(i),
+      code: String(i),
+      sem_cd: i,
+      name: `Semester ${i}`,
+      SemName: `${ords[i - 1] || `${i}th`} Semester`,
+    });
+  }
+  return fallbackList;
+}
+
+/**
+ * Fetch subjects for a specific College, Course, Branch, Batch, and Semester.
+ */
+export async function fetchSubjects(
+  slug: string,
+  colgCd?: string,
+  courseCd?: string,
+  branchCd?: string,
+  batchCd?: string,
+  semCd?: string
+): Promise<AcademicSubject[]> {
+  const cd = colgCd || '1';
+  const crs = courseCd || '1';
+  const br = branchCd || '1';
+  const bat = batchCd || '17';
+  const sem = semCd || '1';
+
+  const params = new URLSearchParams({
+    colgcd: cd,
+    coursecd: crs,
+    branchcd: br,
+    batchcd: bat,
+    semcd: sem,
+    tenant: slug,
+  });
+
+  try {
+    const res = await fetch(`/api/srms/all-subjects?${params.toString()}`, {
+      headers: makeHeaders(slug),
+    }).catch(() => null);
+
+    if (res?.ok) {
+      const data = await res.json();
+      const list = Array.isArray(data) ? data : (data.data || []);
+      if (list.length > 0) {
+        return list.map((s: any) => {
+          const subCd = String(s.sub_cd || s.code || s.id || '');
+          const subName = String(s.sub_name || s.name || '');
+          const mstName = String(s.mst_sub_name || s.name || subName);
+          return {
+            id: subCd || String(s.id || ''),
+            code: subCd,
+            name: mstName ? `${subName} — ${mstName}` : subName,
+            sub_cd: subCd,
+            sub_name: subName,
+            mst_sub_name: mstName,
+            sub_addinfo: s.sub_addinfo,
+            course_cd: s.course_cd,
+            branch_cd: s.branch_cd,
+            batch_cd: s.batch_cd,
+            sem_cd: s.sem_cd,
+            SubTyp: s.SubTyp,
+            department_id: s.department_id,
+          };
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('[useTenantAcademicData] fetchSubjects error:', e);
+  }
+
+  // Fallback to admin-master/subjects
+  try {
+    const res = await fetch(`${API_BASE}/admin-master/subjects?tenant=${encodeURIComponent(slug)}`, {
+      headers: makeHeaders(slug),
+    }).catch(() => null);
+    if (res?.ok) {
+      const json = await res.json();
+      const list = Array.isArray(json) ? json : (json.data || []);
+      return list.map((s: any) => ({
+        id: String(s.id || s.code || ''),
+        code: String(s.code || s.id || ''),
+        name: String(s.name || s.title || 'Subject'),
+        sub_cd: String(s.code || ''),
+        sub_name: String(s.name || ''),
+        mst_sub_name: String(s.name || ''),
+        department_id: s.department_id,
+      }));
+    }
+  } catch {}
+
+  return [];
+}
+
+export interface FacultySubjectLink {
+  id: string;
+  faculty_id: string;
+  faculty_code?: string;
+  faculty_name?: string;
+  subject_id: string;
+  subject_code?: string;
+  subject_name?: string;
+  course_cd?: string;
+  course_name?: string;
+  branch_cd?: string;
+  branch_name?: string;
+  batch_cd?: string;
+  batch_name?: string;
+  batch_year?: string | number;
+  sem_cd?: string;
+  section?: string;
+  college_id?: string;
+  college_name?: string;
+  college_code?: string;
+  college_slug?: string;
+}
+
+/**
+ * Fetch linked subjects for a faculty member.
+ */
+export async function fetchFacultyLinkedSubjects(
+  slug: string,
+  facultyId?: string
+): Promise<FacultySubjectLink[]> {
+  let fid = facultyId;
+  let userObj: any = {};
+  if (typeof window !== 'undefined') {
+    try {
+      userObj = JSON.parse(localStorage.getItem('user') || localStorage.getItem('auth_user') || '{}');
+      if (!fid) {
+        fid =
+          userObj.emp_id ||
+          userObj.faculty_id ||
+          userObj.faculty_code ||
+          userObj.profile?.emp_id ||
+          userObj.profile?.faculty_id ||
+          userObj.profile?.id ||
+          userObj.id ||
+          userObj.sub ||
+          localStorage.getItem('empid') ||
+          localStorage.getItem('emp_id') ||
+          localStorage.getItem('facultyId') ||
+          localStorage.getItem('faculty_code') ||
+          '';
+      }
+    } catch {}
+  }
+
+  // 1. Try with facultyId query param
+  if (fid) {
+    const url = `${API_BASE}/admin-master/faculty-subjects?tenant=${encodeURIComponent(slug)}&facultyId=${encodeURIComponent(fid)}`;
+    try {
+      const res = await fetch(url, { headers: makeHeaders(slug) }).catch(() => null);
+      if (res?.ok) {
+        const json = await res.json();
+        const list = Array.isArray(json) ? json : (json.data || []);
+        if (list.length > 0) return list;
+      }
+    } catch (err) {
+      console.warn('[useTenantAcademicData] fetchFacultyLinkedSubjects query error:', err);
+    }
+  }
+
+  // 2. Fallback: Fetch all tenant faculty-subjects and match by id, code, name or email
+  try {
+    const allUrl = `${API_BASE}/admin-master/faculty-subjects?tenant=${encodeURIComponent(slug)}`;
+    const allRes = await fetch(allUrl, { headers: makeHeaders(slug) }).catch(() => null);
+    if (allRes?.ok) {
+      const allJson = await allRes.json();
+      const allList = Array.isArray(allJson) ? allJson : (allJson.data || []);
+      if (allList.length > 0) {
+        const matched = allList.filter((l: any) => {
+          if (fid && (
+            String(l.faculty_id || '').toLowerCase() === String(fid).toLowerCase() ||
+            String(l.faculty_code || '').toLowerCase() === String(fid).toLowerCase() ||
+            String(l.emp_id || '').toLowerCase() === String(fid).toLowerCase()
+          )) return true;
+
+          const uName = String(userObj?.name || userObj?.full_name || '').trim().toLowerCase();
+          const lName = String(l.faculty_name || '').trim().toLowerCase();
+          if (uName && lName && (uName === lName || uName.includes(lName) || lName.includes(uName))) return true;
+
+          const uEmail = String(userObj?.email || '').trim().toLowerCase();
+          const lEmail = String(l.faculty_email || '').trim().toLowerCase();
+          if (uEmail && lEmail && uEmail === lEmail) return true;
+
+          return false;
+        });
+        if (matched.length > 0) return matched;
+      }
+    }
+  } catch (err) {
+    console.warn('[useTenantAcademicData] fetchFacultyLinkedSubjects allList fallback error:', err);
+  }
+
+  // 3. Fallback to auth/me cached subjects if available
+  if (Array.isArray(userObj?.profile?.subjects) && userObj.profile.subjects.length > 0) {
+    return userObj.profile.subjects.map((s: any) => ({
+      id: s.id || s.code || 'sub',
+      faculty_id: fid || userObj.id || '',
+      subject_id: s.id || s.code,
+      subject_code: s.code || s.id,
+      subject_name: s.name || s.title || 'Assigned Subject',
+      course_cd: s.course_cd,
+      branch_cd: s.branch_cd,
+      batch_cd: s.batch_cd,
+      sem_cd: s.sem_cd,
+      section: s.section,
+    }));
+  }
+
+  return [];
+}
+

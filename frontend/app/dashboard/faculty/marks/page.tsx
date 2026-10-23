@@ -304,11 +304,20 @@ export default function FacultyMarksPage() {
       let userDeptNameStr = typeof window !== 'undefined' ? localStorage.getItem('departmentName') || '' : '';
       let userSubjId = typeof window !== 'undefined' ? localStorage.getItem('subjectId') || '' : '';
 
+      let facIdParam = '';
+      if (typeof window !== 'undefined') {
+        try {
+          const u = JSON.parse(localStorage.getItem('user') || '{}');
+          facIdParam = u.faculty_id || u.profile?.id || u.id || u.sub || u.emp_id || localStorage.getItem('empid') || '';
+        } catch {}
+      }
+
       const meRes = await fetch(`${API_BASE}/auth/me`, { headers: h }).catch(() => null);
       if (meRes && meRes.ok) {
         const json = await meRes.json();
         const meData = json.data || json;
         const profile = meData.profile || {};
+        facIdParam = facIdParam || profile.id || profile.emp_id || meData.id || '';
         userDeptId = userDeptId || profile.department_id || meData.departmentId || meData.department_id || '';
         userDeptNameStr = userDeptNameStr || profile.department_name || meData.departmentName || meData.department_name || '';
         userSubjId = userSubjId || profile.subject_id || meData.subjectId || meData.subject_id || '';
@@ -316,12 +325,13 @@ export default function FacultyMarksPage() {
       }
 
       // 2. Fetch all master data in parallel
-      const [dRes, sRes, bRes, linkRes, profRes] = await Promise.all([
+      const [dRes, sRes, bRes, linkRes, profRes, facSubRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers: h }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}${facIdParam ? `&facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/admin-master/professional-linkers?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers: h }).catch(() => null),
+        facIdParam ? fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${slug}&facultyId=${encodeURIComponent(facIdParam)}`, { headers: h }).catch(() => null) : Promise.resolve(null),
       ]);
 
       const parseList = (j: any) => Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
@@ -330,7 +340,27 @@ export default function FacultyMarksPage() {
       let fetchedSubjects: Subject[] = [];
 
       if (dRes && dRes.ok) { fetchedDepts = parseList(await dRes.json()); setDepartments(fetchedDepts); }
-      if (sRes && sRes.ok) { fetchedSubjects = parseList(await sRes.json()); setAllSubjects(fetchedSubjects); }
+      if (sRes && sRes.ok) { fetchedSubjects = parseList(await sRes.json()); }
+
+      let linkedItems: any[] = [];
+      if (facSubRes && facSubRes.ok) {
+        linkedItems = parseList(await facSubRes.json());
+      }
+      if (linkedItems.length > 0) {
+        const linkedKeys = new Set(linkedItems.map((l: any) => String(l.subject_code || l.subject_id || '').toLowerCase()));
+        const filtered = fetchedSubjects.filter((s: any) =>
+          linkedKeys.has(String(s.code || '').toLowerCase()) ||
+          linkedKeys.has(String(s.id || '').toLowerCase()) ||
+          linkedKeys.has(String(s.name || '').toLowerCase())
+        );
+        fetchedSubjects = filtered.length > 0 ? filtered : linkedItems.map((l: any) => ({
+          id: l.subject_id || l.id,
+          code: l.subject_code || 'SUB',
+          name: l.subject_name || 'Subject',
+          department_id: l.department_id,
+        }));
+      }
+      setAllSubjects(fetchedSubjects);
 
       if (fetchedDepts.length > 0) {
         const cleanUserDept = (userDeptNameStr || facultyDeptName || '').toLowerCase().replace('department of ', '').trim();

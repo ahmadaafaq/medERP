@@ -11,7 +11,7 @@ export class ExaminationService {
   async createPaper(tenantSlug: string, dto: CreateExamPaperDto, user?: any) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const sectionsJson = JSON.stringify(dto.sections || []);
-    const userId = user?.userId || user?.sub || user?.id || null;
+    const userId = user?.userId || user?.sub || user?.id || (dto as any).createdBy || (dto as any).facultyId || null;
     const validUserId = userId && this.isUUID(userId) ? userId : null;
     const rawDeptId = dto.departmentId || dto.department_id;
     const validDeptId = rawDeptId && this.isUUID(rawDeptId) ? rawDeptId : null;
@@ -25,7 +25,7 @@ export class ExaminationService {
       const validId = dto.id && this.isUUID(dto.id) ? dto.id : null;
       const existing = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, status, version FROM examination_papers WHERE ($1::uuid IS NOT NULL AND id = $1::uuid) OR code = $2 LIMIT 1`,
+        `SELECT id, status, version, created_by FROM examination_papers WHERE ($1::uuid IS NOT NULL AND id = $1::uuid) OR code = $2 LIMIT 1`,
         [validId, dto.code],
       );
 
@@ -33,12 +33,25 @@ export class ExaminationService {
         const targetId = existing[0].id;
         const prevStatus = existing[0].status;
         const currentVersion = Number(existing[0].version || 1);
+        const ownerId = existing[0].created_by;
+
+        // Confidentiality check: if an existing paper belongs to another faculty, prevent overwrite
+        const rawRole = (user?.role || (dto as any).role || '').toUpperCase();
+        const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+        const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+        if (ownerId && validUserId && String(ownerId) !== String(validUserId) && !isAdmin && !isHod) {
+          throw new BadRequestException('Confidentiality violation: You cannot modify a question paper prepared by another faculty member.');
+        }
 
         let nextStatus = dto.status || prevStatus || 'DRAFT';
         let nextVersion = dto.version ? Number(dto.version) : currentVersion;
         if (prevStatus === 'CHANGES_REQUESTED' && dto.status === 'PENDING_HOD_APPROVAL') {
           nextVersion = currentVersion + 1;
         }
+
+        const paperSet = dto.paperSet || dto.paper_set || 'Set A';
+        const targetSections = dto.targetSections || dto.target_sections || ['All'];
+        const targetSectionsJson = JSON.stringify(Array.isArray(targetSections) ? targetSections : [targetSections]);
 
         const res = await this.tenantSchemaService.queryInTenant(
           slug,
@@ -48,8 +61,11 @@ export class ExaminationService {
                sections = $10::jsonb, status = $11, department_id = $12, colg_cd = $13,
                course_cd = $14, branch_cd = $15, batch_cd = $16, semester = $17, section = $18,
                academic_year = $19, version = $20, hod_remarks = COALESCE($21, hod_remarks),
-               question_remarks = COALESCE($22::jsonb, question_remarks), updated_at = NOW()
-           WHERE id = $23 RETURNING *`,
+               question_remarks = COALESCE($22::jsonb, question_remarks), 
+               paper_set = COALESCE($23, paper_set),
+               target_sections = COALESCE($24::jsonb, target_sections),
+               created_by = COALESCE($25::uuid, created_by), updated_at = NOW()
+           WHERE id = $26 RETURNING *`,
           [
             dto.code,
             dto.name,
@@ -73,6 +89,9 @@ export class ExaminationService {
             nextVersion,
             dto.hodRemarks || null,
             dto.questionRemarks ? JSON.stringify(dto.questionRemarks) : null,
+            paperSet,
+            targetSectionsJson,
+            validUserId,
             targetId,
           ],
         );
@@ -82,6 +101,9 @@ export class ExaminationService {
       const initialStatus = dto.status || 'DRAFT';
       const initialVersion = dto.version ? Number(dto.version) : 1;
       const qRemarksJson = JSON.stringify(dto.questionRemarks || {});
+      const paperSet = dto.paperSet || dto.paper_set || 'Set A';
+      const targetSections = dto.targetSections || dto.target_sections || ['All'];
+      const targetSectionsJson = JSON.stringify(Array.isArray(targetSections) ? targetSections : [targetSections]);
 
       if (validId) {
         const res = await this.tenantSchemaService.queryInTenant(
@@ -90,8 +112,8 @@ export class ExaminationService {
             id, code, name, subject_id, batch_id, exam_date, max_marks, passing_marks, 
             type, duration_minutes, sections, status, department_id, colg_cd, course_cd, 
             branch_cd, batch_cd, semester, section, academic_year, version, hod_remarks, 
-            question_remarks, created_by, created_at, updated_at
-          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::jsonb, $24, NOW(), NOW()) RETURNING *`,
+            question_remarks, paper_set, target_sections, created_by, created_at, updated_at
+          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23::jsonb, $24, $25::jsonb, $26, NOW(), NOW()) RETURNING *`,
           [
             validId,
             dto.code,
@@ -116,6 +138,8 @@ export class ExaminationService {
             initialVersion,
             dto.hodRemarks || null,
             qRemarksJson,
+            paperSet,
+            targetSectionsJson,
             validUserId,
           ],
         );
@@ -128,8 +152,8 @@ export class ExaminationService {
           code, name, subject_id, batch_id, exam_date, max_marks, passing_marks, 
           type, duration_minutes, sections, status, department_id, colg_cd, course_cd, 
           branch_cd, batch_cd, semester, section, academic_year, version, hod_remarks, 
-          question_remarks, created_by, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22::jsonb, $23, NOW(), NOW()) RETURNING *`,
+          question_remarks, paper_set, target_sections, created_by, created_at, updated_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22::jsonb, $23, $24::jsonb, $25, NOW(), NOW()) RETURNING *`,
         [
           dto.code,
           dto.name,
@@ -153,6 +177,8 @@ export class ExaminationService {
           initialVersion,
           dto.hodRemarks || null,
           qRemarksJson,
+          paperSet,
+          targetSectionsJson,
           validUserId,
         ],
       );
@@ -163,14 +189,70 @@ export class ExaminationService {
     }
   }
 
-  async getPapers(tenantSlug: string, filters?: {
-    status?: string; departmentId?: string; colgCd?: string; courseCd?: string;
-    branchCd?: string; batchCd?: string; semester?: string; section?: string;
-  }) {
+  async getPapers(
+    tenantSlug: string,
+    filters?: {
+      status?: string;
+      departmentId?: string;
+      colgCd?: string;
+      courseCd?: string;
+      branchCd?: string;
+      batchCd?: string;
+      semester?: string;
+      section?: string;
+      facultyId?: string;
+      createdBy?: string;
+      role?: string;
+    },
+    user?: any,
+  ) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const whereClauses: string[] = [];
     const params: any[] = [];
     let pIdx = 1;
+
+    // ─── ROLE-BASED QUESTION PAPER CONFIDENTIALITY ACCESS CONTROL ───
+    // 1. Admin/SuperAdmin/Principal -> full preview across all departments
+    // 2. HOD of department -> can preview papers from their department
+    // 3. Faculty -> STRICT CONFIDENTIALITY: can ONLY view question papers that he/she prepared.
+    //    Other faculties from the same department cannot see it.
+    const rawRole = (user?.role || filters?.role || '').toUpperCase();
+    const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+    const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+    const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
+
+    const userId = user?.userId || user?.sub || user?.id || filters?.createdBy || filters?.facultyId || null;
+    const validUserId = userId && this.isUUID(userId) ? userId : null;
+
+    if (!isAdmin) {
+      if (isHod) {
+        // HOD can preview question papers belonging to their department
+        const targetDept = filters?.departmentId || user?.departmentId || user?.department;
+        if (targetDept) {
+          if (this.isUUID(targetDept)) {
+            whereClauses.push(`p.department_id::text = $${pIdx++}`);
+            params.push(targetDept);
+          } else {
+            whereClauses.push(`(p.branch_cd = $${pIdx} OR p.department_id::text = $${pIdx})`);
+            params.push(targetDept);
+            pIdx++;
+          }
+        }
+      } else if (isFaculty || validUserId) {
+        // Faculty strictly sees only their prepared question papers
+        // Other faculties from the same department cannot view it
+        if (validUserId) {
+          whereClauses.push(`p.created_by::text = $${pIdx++}`);
+          params.push(validUserId);
+        } else if (filters?.createdBy || filters?.facultyId) {
+          whereClauses.push(`p.created_by::text = $${pIdx++}`);
+          params.push(filters.createdBy || filters.facultyId);
+        } else {
+          // Strict confidentiality: Block leakage if faculty user is unidentifiable
+          whereClauses.push(`1 = 0`);
+        }
+      }
+    }
 
     if (filters?.status && filters.status !== 'ALL') {
       whereClauses.push(`p.status = $${pIdx++}`);
@@ -228,7 +310,7 @@ export class ExaminationService {
     );
   }
 
-  async getPaperById(tenantSlug: string, id: string) {
+  async getPaperById(tenantSlug: string, id: string, user?: any) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const res = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -246,7 +328,31 @@ export class ExaminationService {
        WHERE p.id::text = $1 LIMIT 1`,
       [id],
     );
-    return res[0] || null;
+    const paper = res[0] || null;
+    if (!paper) return null;
+
+    // Strict confidentiality check on paper preview
+    if (user) {
+      const rawRole = (user.role || '').toUpperCase();
+      const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+      const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+      const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
+      const userId = user.userId || user.sub || user.id || null;
+
+      if (!isAdmin) {
+        if (isFaculty && paper.created_by && userId && String(paper.created_by) !== String(userId)) {
+          throw new BadRequestException('Confidentiality violation: You are not authorized to view a question paper prepared by another faculty member.');
+        }
+        if (isHod) {
+          const targetDept = user.departmentId || user.department;
+          if (targetDept && paper.department_id && String(paper.department_id) !== String(targetDept)) {
+            throw new BadRequestException('Confidentiality violation: You are not authorized to view question papers outside your department.');
+          }
+        }
+      }
+    }
+
+    return paper;
   }
 
   async submitResult(tenantSlug: string, userId: string | null, dto: SubmitResultDto) {
@@ -467,8 +573,8 @@ export class ExaminationService {
          question_text, option_a, option_b, option_c, option_d, correct_option,
          difficulty_level, competency_code, has_sub_questions, sub_questions, max_marks,
          topic_id, competency_id, unit_id, unit_code, unit_name, topic_code, sub_topic_id, sub_topic_code,
-         colg_cd, course_cd, branch_cd, batch_cd, semester, section
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
+         colg_cd, course_cd, branch_cd, batch_cd, semester, section, image_url
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
        RETURNING *`,
       [
         this.isUUID(dto.collegeId) ? dto.collegeId : null,
@@ -502,13 +608,14 @@ export class ExaminationService {
         dto.batchCd || null,
         dto.semester || null,
         dto.section || null,
+        dto.imageUrl || dto.image_url || null,
       ],
     );
     return res[0];
   }
 
   async getQuestions(tenantSlug: string, query: {
-    departmentId?: string; subjectId?: string; mode?: string; professionalPhase?: string; topicId?: string; topic?: string; competencyId?: string; competencyCode?: string; unitCode?: string;
+    departmentId?: string; subjectId?: string; mode?: string; professionalPhase?: string; topicId?: string; topic?: string; competencyId?: string; competencyCode?: string; unitCode?: string; unitId?: string;
     colgCd?: string; courseCd?: string; branchCd?: string; batchCd?: string; semester?: string; section?: string;
   } = {}) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
@@ -554,6 +661,13 @@ export class ExaminationService {
     if (query.subjectId && this.isUUID(query.subjectId)) {
       params.push(query.subjectId);
       sql += ` AND (q.subject_id::text = $${params.length}::text OR q.subject_id IS NULL OR q.department_id::text IN (SELECT department_id::text FROM subjects WHERE id::text = $${params.length}::text AND department_id IS NOT NULL))`;
+    }
+    if (query.unitId && this.isUUID(query.unitId)) {
+      params.push(query.unitId);
+      sql += ` AND (q.unit_id::text = $${params.length}::text OR q.unit_code = $${params.length})`;
+    } else if (query.unitCode && query.unitCode.trim() && query.unitCode.toUpperCase() !== 'ALL') {
+      params.push(query.unitCode.trim());
+      sql += ` AND (LOWER(TRIM(q.unit_code)) = LOWER($${params.length}) OR LOWER(TRIM(q.unit_name)) LIKE '%' || LOWER($${params.length}) || '%')`;
     }
     if (query.mode && query.mode !== 'all') {
       params.push(query.mode.toUpperCase());
@@ -651,8 +765,37 @@ export class ExaminationService {
     return { success: true, message: 'Question removed successfully' };
   }
 
-  async deletePaper(tenantSlug: string, id: string) {
+  async deletePaper(tenantSlug: string, id: string, user?: any) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id, created_by, department_id FROM examination_papers WHERE id::text = $1 LIMIT 1`,
+      [id],
+    );
+    if (!existing || existing.length === 0) {
+      throw new NotFoundException('Examination paper not found');
+    }
+
+    if (user) {
+      const rawRole = (user.role || '').toUpperCase();
+      const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+      const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+      const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
+      const userId = user.userId || user.sub || user.id || null;
+
+      if (!isAdmin) {
+        if (isFaculty && existing[0].created_by && userId && String(existing[0].created_by) !== String(userId)) {
+          throw new BadRequestException('Confidentiality violation: You cannot delete a question paper prepared by another faculty member.');
+        }
+        if (isHod) {
+          const targetDept = user.departmentId || user.department;
+          if (targetDept && existing[0].department_id && String(existing[0].department_id) !== String(targetDept)) {
+            throw new BadRequestException('Confidentiality violation: You cannot delete question papers outside your department.');
+          }
+        }
+      }
+    }
+
     // Delete any results for this paper first, then delete the paper
     await this.tenantSchemaService.queryInTenant(
       slug,

@@ -81,6 +81,17 @@ export class InternshipsController {
     };
   }
 
+  private getEffectiveSlug(tenantSlug?: string, queryTenant?: string, req?: any): string {
+    return (
+      queryTenant ||
+      tenantSlug ||
+      req?.headers?.['x-tenant-slug'] ||
+      (req?.user as any)?.tenantSlug ||
+      (req?.user as any)?.slug ||
+      'srms-cet-bareilly'
+    );
+  }
+
   @Public()
   @Post('create')
   async createProgram(
@@ -88,8 +99,9 @@ export class InternshipsController {
     @Body() dto: CreateInternshipProgramDto,
     @Request() req: any,
   ) {
+    const slug = this.getEffectiveSlug(tenantSlug, (dto as any)?.tenant, req);
     const user = this.extractUser(req, dto);
-    return this.internshipsService.createProgram(tenantSlug, dto, user);
+    return this.internshipsService.createProgram(slug, dto, user);
   }
 
   @Public()
@@ -101,7 +113,7 @@ export class InternshipsController {
     @Query('student_id') queryStudentId: string,
     @Request() req: any,
   ) {
-    const slug = queryTenant || tenantSlug;
+    const slug = this.getEffectiveSlug(tenantSlug, queryTenant, req);
     const user = this.extractUser(req);
     if (queryRegNo && !user.registration_no) {
       user.registration_no = queryRegNo;
@@ -122,7 +134,7 @@ export class InternshipsController {
     @Query('tenant') queryTenant: string,
     @Request() req: any,
   ) {
-    const slug = queryTenant || tenantSlug;
+    const slug = this.getEffectiveSlug(tenantSlug, queryTenant, req);
     const user = this.extractUser(req);
     return this.internshipsService.listPrograms(slug, user, category, feeType, campusType);
   }
@@ -132,8 +144,11 @@ export class InternshipsController {
   async getProgramById(
     @TenantSlug() tenantSlug: string,
     @Param('id') id: string,
+    @Query('tenant') queryTenant: string,
+    @Request() req: any,
   ) {
-    return this.internshipsService.getProgramById(tenantSlug, id);
+    const slug = this.getEffectiveSlug(tenantSlug, queryTenant, req);
+    return this.internshipsService.getProgramById(slug, id);
   }
 
   @Public()

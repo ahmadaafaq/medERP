@@ -2135,8 +2135,10 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS section VARCHAR(50);
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
-        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_name VARCHAR(250);
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS image_url TEXT;
+        ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS paper_set VARCHAR(50) DEFAULT 'Set A';
+        ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS target_sections JSONB DEFAULT '["All"]'::jsonb;
       EXCEPTION WHEN OTHERS THEN NULL; END $$;
     `).catch(() => { });
 

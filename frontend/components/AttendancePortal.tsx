@@ -603,7 +603,41 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       if (res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data)) {
-          const subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
+          let subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
+
+          if (role === 'FACULTY' && typeof window !== 'undefined') {
+            try {
+              let fid = '';
+              const raw = localStorage.getItem('user');
+              if (raw) {
+                const u = JSON.parse(raw);
+                fid = u.emp_id || u.faculty_id || u.id || u.sub || '';
+              }
+              if (!fid) fid = localStorage.getItem('empid') || localStorage.getItem('emp_id') || localStorage.getItem('facultyId') || '';
+              if (fid) {
+                const token = localStorage.getItem('token') || '';
+                const facRes = await fetch(
+                  `/api/v1/admin-master/faculty-subjects?tenant=${encodeURIComponent(userTenantSlug || 'srms-cet-bareilly')}&facultyId=${encodeURIComponent(fid)}`,
+                  { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
+                ).catch(() => null);
+                if (facRes && facRes.ok) {
+                  const fj = await facRes.json();
+                  const fItems = Array.isArray(fj.data) ? fj.data : Array.isArray(fj) ? fj : [];
+                  if (fItems.length > 0) {
+                    const linkedCodes = new Set(fItems.map((f: any) => String(f.subject_code || f.subject_id || '').trim().toLowerCase()));
+                    const filtered = subList.filter((s) =>
+                      linkedCodes.has(String(s.sub_cd || '').trim().toLowerCase()) ||
+                      linkedCodes.has(String(s.sub_name || '').trim().toLowerCase())
+                    );
+                    if (filtered.length > 0) subList = filtered;
+                  }
+                }
+              }
+            } catch (err) {
+              console.warn('[AttendancePortal] Faculty subject filtering note:', err);
+            }
+          }
+
           setMatrixSubjects(subList);
 
           const studentsList: MatrixStudent[] = json.data.map((stud: any, idx: number) => {
