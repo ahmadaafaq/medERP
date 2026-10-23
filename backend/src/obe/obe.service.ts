@@ -613,7 +613,7 @@ export class ObeService {
   // ─── 5. FACULTY DASHBOARD ────────────────────────────────────────────────────
 
   async getFacultyDashboard(tenantSlug: string, params: {
-    facultyId?: string; semester?: string; batchYear?: number; courseCd?: string; branchCd?: string;
+    facultyId?: string; subjectCode?: string; semester?: string; batchYear?: number; courseCd?: string; branchCd?: string;
   }) {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
@@ -625,9 +625,25 @@ export class ObeService {
       targetsP.push(params.facultyId);
       targetsQ += ` AND (faculty_id::text = $${targetsP.length} OR faculty_id IS NULL)`;
     }
+    if (params.subjectCode) {
+      targetsP.push(params.subjectCode);
+      targetsQ += ` AND (subject_code = $${targetsP.length} OR subject_code IS NULL)`;
+    }
     if (params.semester) {
       targetsP.push(params.semester);
       targetsQ += ` AND (semester = $${targetsP.length} OR semester IS NULL)`;
+    }
+    if (params.courseCd) {
+      targetsP.push(params.courseCd);
+      targetsQ += ` AND (course_cd = $${targetsP.length} OR course_cd IS NULL)`;
+    }
+    if (params.branchCd) {
+      targetsP.push(params.branchCd);
+      targetsQ += ` AND (branch_cd = $${targetsP.length} OR branch_cd IS NULL)`;
+    }
+    if (params.batchYear) {
+      targetsP.push(params.batchYear);
+      targetsQ += ` AND (batch_year = $${targetsP.length} OR batch_year IS NULL)`;
     }
     targetsQ += ` ORDER BY subject_code, unit_code`;
     const targets = await this.tenantSchemaService.queryInTenant(slug, targetsQ, targetsP).catch(() => []);
@@ -635,9 +651,11 @@ export class ObeService {
     // Load CO attainment results for same scope
     let attQ = `SELECT * FROM co_attainment_results WHERE 1=1`;
     const attP: any[] = [];
+    if (params.subjectCode) { attP.push(params.subjectCode); attQ += ` AND (subject_code = $${attP.length} OR subject_code IS NULL)`; }
     if (params.semester) { attP.push(params.semester); attQ += ` AND (semester = $${attP.length} OR semester IS NULL)`; }
     if (params.batchYear) { attP.push(params.batchYear); attQ += ` AND (batch_year = $${attP.length} OR batch_year IS NULL)`; }
     if (params.courseCd) { attP.push(params.courseCd); attQ += ` AND (course_cd = $${attP.length} OR course_cd IS NULL)`; }
+    if (params.branchCd) { attP.push(params.branchCd); attQ += ` AND (branch_cd = $${attP.length} OR branch_cd IS NULL)`; }
     attQ += ` ORDER BY computed_at DESC`;
     const attainments = await this.tenantSchemaService.queryInTenant(slug, attQ, attP).catch(() => []);
 

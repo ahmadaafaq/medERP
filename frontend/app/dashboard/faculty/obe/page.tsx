@@ -142,7 +142,14 @@ export default function FacultyObePage() {
   const facultyId = getFacultyId();
 
   // Load dashboard data with dynamic parameters
-  const loadDashboard = useCallback(async (customSubject?: string, customSemester?: string, customSection?: string) => {
+  const loadDashboard = useCallback(async (
+    customSubject?: string,
+    customSemester?: string,
+    customSection?: string,
+    customCourse?: string,
+    customBranch?: string,
+    customBatch?: string,
+  ) => {
     setLoading(true);
     try {
       const activeTenant = getTenant();
@@ -153,10 +160,21 @@ export default function FacultyObePage() {
       const targetSub = customSubject !== undefined ? customSubject : selectedSubject;
       const targetSem = customSemester !== undefined ? customSemester : semester;
       const targetSec = customSection !== undefined ? customSection : selectedSection;
+      const targetCourse = customCourse !== undefined ? customCourse : academicCascade?.course?.course_cd;
+      const targetBranch = customBranch !== undefined ? customBranch : academicCascade?.branch?.branch_cd;
+      const defaultBatch = academicCascade?.batch?.year
+        ? String(academicCascade.batch.year)
+        : academicCascade?.batch?.batch_cd
+        ? String(academicCascade.batch.batch_cd)
+        : '';
+      const targetBatch = customBatch !== undefined ? customBatch : defaultBatch;
 
       if (targetSub) params.append('subjectCode', targetSub);
       if (targetSem) params.append('semester', targetSem);
       if (targetSec && targetSec !== 'all') params.append('section', targetSec);
+      if (targetCourse) params.append('courseCd', targetCourse);
+      if (targetBranch) params.append('branchCd', targetBranch);
+      if (targetBatch) params.append('batchYear', String(targetBatch));
 
       const res = await fetch(`${API_BASE}/obe/faculty-dashboard?${params}`, { headers: getHeaders() });
       if (res.ok) {
@@ -169,21 +187,28 @@ export default function FacultyObePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedSubject, semester, selectedSection]);
+  }, [selectedSubject, semester, selectedSection, academicCascade]);
 
   // Handle live cascading change from FacultyAcademicCascadingDropdown
   const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
     setAcademicCascade(state);
-    const subCd = state.subject?.code || state.subject?.id || '';
+    const subCd = state.subject?.code || state.subject?.sub_cd || state.subject?.id || '';
     const semVal = state.semester?.sem_cd ? String(state.semester.sem_cd) : state.semester?.code || '';
     const secVal = state.section || 'all';
+    const courseVal = state.course?.course_cd || '';
+    const branchVal = state.branch?.branch_cd || '';
+    const batchVal = state.batch?.year
+      ? String(state.batch.year)
+      : state.batch?.batch_cd
+      ? String(state.batch.batch_cd)
+      : '';
 
     setSelectedSubject(subCd);
     setSemester(semVal);
     setSelectedSection(secVal);
 
     // Live downstream refresh when active cascade state changes
-    loadDashboard(subCd, semVal, secVal);
+    loadDashboard(subCd, semVal, secVal, courseVal, branchVal, batchVal);
   };
 
   // Initial dashboard load on mount
@@ -199,11 +224,13 @@ export default function FacultyObePage() {
       if (selectedSubject) params.append('subjectCode', selectedSubject);
       if (semester) params.append('semester', semester);
       if (selectedSection && selectedSection !== 'all') params.append('section', selectedSection);
+      if (academicCascade?.course?.course_cd) params.append('courseCd', academicCascade.course.course_cd);
+      if (academicCascade?.branch?.branch_cd) params.append('branchCd', academicCascade.branch.branch_cd);
       const res = await fetch(`${API_BASE}/obe/surveys?${params}`, { headers: getHeaders() });
       if (res.ok) { const json = await res.json(); setSurveys(json.data || []); }
     };
     load();
-  }, [activeTab, selectedSubject, semester, selectedSection]);
+  }, [activeTab, selectedSubject, semester, selectedSection, academicCascade]);
 
   // Compute CO attainment for selected subject
   const computeAttainment = async () => {
@@ -213,6 +240,14 @@ export default function FacultyObePage() {
       const params = new URLSearchParams({ tenant: getTenant(), subjectCode: selectedSubject });
       if (semester) params.append('semester', semester);
       if (selectedSection && selectedSection !== 'all') params.append('section', selectedSection);
+      if (academicCascade?.course?.course_cd) params.append('courseCd', academicCascade.course.course_cd);
+      if (academicCascade?.branch?.branch_cd) params.append('branchCd', academicCascade.branch.branch_cd);
+      const bYear = academicCascade?.batch?.year
+        ? String(academicCascade.batch.year)
+        : academicCascade?.batch?.batch_cd
+        ? String(academicCascade.batch.batch_cd)
+        : '';
+      if (bYear) params.append('batchYear', bYear);
       const res = await fetch(`${API_BASE}/obe/attainment/co?${params}`, { headers: getHeaders() });
       const json = await res.json();
       if (json.success) {
@@ -226,6 +261,19 @@ export default function FacultyObePage() {
     finally { setComputing(false); }
   };
 
+  // Helper for batch year as number
+  const getBatchYearNum = (): number | undefined => {
+    if (academicCascade?.batch?.year) {
+      const n = Number(academicCascade.batch.year);
+      if (!isNaN(n)) return n;
+    }
+    if (academicCascade?.batch?.batch_cd) {
+      const n = Number(academicCascade.batch.batch_cd);
+      if (!isNaN(n)) return n;
+    }
+    return undefined;
+  };
+
   // Save CO target
   const saveTarget = async (subjectCode: string, unitCode: string, targetLevel: number) => {
     try {
@@ -236,6 +284,9 @@ export default function FacultyObePage() {
         target_level: targetLevel,
         semester: semester || undefined,
         section: selectedSection !== 'all' ? selectedSection : undefined,
+        course_cd: academicCascade?.course?.course_cd || undefined,
+        branch_cd: academicCascade?.branch?.branch_cd || undefined,
+        batch_year: getBatchYearNum(),
       };
       const res = await fetch(`${API_BASE}/obe/targets?tenant=${getTenant()}`, {
         method: 'POST', headers: getHeaders(), body: JSON.stringify(body),
@@ -263,6 +314,9 @@ export default function FacultyObePage() {
             target_level: defaultLevel,
             semester: semester || undefined,
             section: selectedSection !== 'all' ? selectedSection : undefined,
+            course_cd: academicCascade?.course?.course_cd || undefined,
+            branch_cd: academicCascade?.branch?.branch_cd || undefined,
+            batch_year: getBatchYearNum(),
           }),
         });
       }
@@ -295,6 +349,9 @@ export default function FacultyObePage() {
           faculty_id: facultyId || undefined,
           semester: semester || undefined,
           section: selectedSection !== 'all' ? selectedSection : undefined,
+          course_cd: academicCascade?.course?.course_cd || undefined,
+          branch_cd: academicCascade?.branch?.branch_cd || undefined,
+          batch_year: getBatchYearNum(),
         }),
       });
       const json = await res.json();
@@ -370,7 +427,7 @@ export default function FacultyObePage() {
               onlyLinkedSubjects={true}
               showSection={true}
               showSubject={true}
-              onSelectionChange={handleAcademicCascadeChange}
+              onSelectionChange={(state: AcademicCascadingState) => handleAcademicCascadeChange(state)}
             />
           </div>
 
@@ -380,9 +437,21 @@ export default function FacultyObePage() {
               <span style={{ fontSize: 12, fontWeight: 800, textTransform: 'uppercase', color: '#6b7280' }}>
                 Active Scope:
               </span>
-              <span style={{ padding: '5px 12px', borderRadius: 10, background: '#F0EFFF', color: '#5B4BFF', fontSize: 12, fontWeight: 700 }}>
-                {selectedSubject ? `Subject: ${academicCascade?.subject?.name || selectedSubject} (${selectedSubject})` : 'No Subject Selected'}
-              </span>
+              {academicCascade?.course?.course_name && (
+                <span style={{ padding: '5px 12px', borderRadius: 10, background: '#F0F2F5', color: '#1B1E28', fontSize: 12, fontWeight: 700 }}>
+                  {academicCascade.course.course_name}
+                </span>
+              )}
+              {academicCascade?.branch?.branch_name && (
+                <span style={{ padding: '5px 12px', borderRadius: 10, background: '#F0F2F5', color: '#1B1E28', fontSize: 12, fontWeight: 700 }}>
+                  {academicCascade.branch.branch_name}
+                </span>
+              )}
+              {academicCascade?.batch?.batch_name && (
+                <span style={{ padding: '5px 12px', borderRadius: 10, background: '#F0F2F5', color: '#1B1E28', fontSize: 12, fontWeight: 700 }}>
+                  Batch {academicCascade.batch.batch_name}
+                </span>
+              )}
               {semester && (
                 <span style={{ padding: '5px 12px', borderRadius: 10, background: '#E6F9F3', color: '#00875a', fontSize: 12, fontWeight: 700 }}>
                   Sem {semester}
@@ -393,6 +462,9 @@ export default function FacultyObePage() {
                   Section {selectedSection}
                 </span>
               )}
+              <span style={{ padding: '5px 12px', borderRadius: 10, background: '#F0EFFF', color: '#5B4BFF', fontSize: 12, fontWeight: 700 }}>
+                {selectedSubject ? `Subject: ${academicCascade?.subject?.name || academicCascade?.subject?.sub_name || selectedSubject} (${selectedSubject})` : 'No Subject Selected'}
+              </span>
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

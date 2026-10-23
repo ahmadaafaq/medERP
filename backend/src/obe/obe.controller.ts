@@ -151,13 +151,14 @@ export class ObeController {
   async getFacultyDashboard(
     @TenantSlug() tenant: string,
     @Query('facultyId') facultyId?: string,
+    @Query('subjectCode') subjectCode?: string,
     @Query('semester') semester?: string,
     @Query('batchYear') batchYear?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
   ) {
     return this.obeService.getFacultyDashboard(tenant, {
-      facultyId, semester,
+      facultyId, subjectCode, semester,
       batchYear: batchYear ? Number(batchYear) : undefined,
       courseCd, branchCd,
     });
