@@ -1,6 +1,7 @@
 import {
-  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards,
+  Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards, Res,
 } from '@nestjs/common';
+import { Response } from 'express';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { StudentMasterService } from './student-master.service';
 import {
@@ -146,6 +147,19 @@ export class StudentMasterController {
     @Body('students') students: any[],
   ) {
     return this.studentMasterService.syncLiveStudents(tenantSlug, students || []);
+  }
+
+  @Get('import-template')
+  @ApiOperation({ summary: 'Download dynamic Excel (.xlsx) student import template with tenant-scoped courses & branches' })
+  @Public()
+  async downloadImportTemplate(
+    @TenantSlug() tenantSlug: string,
+    @Res() res: Response,
+  ) {
+    const buffer = await this.studentMasterService.generateImportTemplate(tenantSlug);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename=student_import_template_${tenantSlug || 'college'}.xlsx`);
+    return res.send(buffer);
   }
 
   @Post('bulk')

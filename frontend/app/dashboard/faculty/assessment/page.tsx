@@ -1662,7 +1662,7 @@ export default function FacultyAssessmentMasterPage() {
       competencyCode: cleanCompCode,
       subTopicId: selectedCompetencyId || null,
       subTopicCode: cleanCompCode,
-      colgCd: academicCascade?.college?.colg_cd || '1',
+      colgCd: academicCascade?.college?.colg_cd || (slug.toLowerCase().includes('srms') ? '1' : null),
       courseCd: academicCascade?.course?.course_cd || null,
       branchCd: academicCascade?.branch?.branch_cd || null,
       batchCd: academicCascade?.batch?.batch_cd || null,
@@ -1692,7 +1692,7 @@ export default function FacultyAssessmentMasterPage() {
       competencyCode: cleanCompCode,
       subTopicId: selectedCompetencyId || null,
       subTopicCode: cleanCompCode,
-      colgCd: academicCascade?.college?.colg_cd || '1',
+      colgCd: academicCascade?.college?.colg_cd || (slug.toLowerCase().includes('srms') ? '1' : null),
       courseCd: academicCascade?.course?.course_cd || null,
       branchCd: academicCascade?.branch?.branch_cd || null,
       batchCd: academicCascade?.batch?.batch_cd || null,
@@ -1724,34 +1724,12 @@ export default function FacultyAssessmentMasterPage() {
         setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
         resetForm();
       } else {
-        const newQ: QuestionItem = {
-          id: Date.now().toString(),
-          ...payload as any,
-          topic: payload.topic,
-          question_text: payload.questionText,
-          difficulty_level: payload.difficultyLevel,
-          competency_code: payload.competencyCode,
-          max_marks: payload.maxMarks,
-          image_url: questionImage || null,
-        };
-        setQuestions([newQ, ...questions]);
-        setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
-        resetForm();
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = Array.isArray(errJson.message) ? errJson.message.join(', ') : (errJson.message || 'Failed to save question to question bank.');
+        setAlert({ type: 'error', message: errMsg });
       }
-    } catch {
-      const newQ: QuestionItem = {
-        id: Date.now().toString(),
-        ...payload as any,
-        topic: payload.topic,
-        question_text: payload.questionText,
-        difficulty_level: payload.difficultyLevel,
-        competency_code: payload.competencyCode,
-        max_marks: payload.maxMarks,
-        image_url: questionImage || null,
-      };
-      setQuestions([newQ, ...questions]);
-      setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
-      resetForm();
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err?.message || 'Network error while saving question.' });
     } finally {
       setSaving(false);
     }

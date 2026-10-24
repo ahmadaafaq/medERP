@@ -293,6 +293,10 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  unitId?: string;
+
+  @IsString()
+  @IsOptional()
   unitCode?: string;
 
   @IsString()
@@ -301,7 +305,23 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  topicCode?: string;
+
+  @IsString()
+  @IsOptional()
+  subTopicId?: string;
+
+  @IsString()
+  @IsOptional()
   subTopicCode?: string;
+
+  @IsString()
+  @IsOptional()
+  subtopicId?: string;
+
+  @IsString()
+  @IsOptional()
+  subtopicName?: string;
 
   @IsString()
   @IsOptional()

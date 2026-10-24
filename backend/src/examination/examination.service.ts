@@ -565,6 +565,209 @@ export class ExaminationService {
 
   async createQuestion(tenantSlug: string, dto: any, user?: any) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+
+    // 1. Ensure table schema columns exist
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS created_by UUID;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS subtopic_id UUID;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS subtopic_name VARCHAR;`
+    );
+
+    // 2. Resolve Subject (UUID or Code)
+    let resolvedSubjectId: string | null = null;
+    let resolvedSubjectCode: string | null = null;
+    let resolvedSubjectName: string | null = null;
+    const rawSubject = dto.subjectId || dto.subjectCode;
+    if (rawSubject) {
+      if (this.isUUID(rawSubject)) {
+        const subRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name FROM subjects WHERE id = $1 LIMIT 1`,
+          [rawSubject]
+        );
+        if (subRows && subRows.length > 0) {
+          resolvedSubjectId = subRows[0].id;
+          resolvedSubjectCode = subRows[0].code;
+          resolvedSubjectName = subRows[0].name;
+        } else {
+          resolvedSubjectId = rawSubject;
+        }
+      } else {
+        const subRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name FROM subjects WHERE code = $1 OR code ILIKE $1 OR name ILIKE $1 LIMIT 1`,
+          [rawSubject]
+        );
+        if (subRows && subRows.length > 0) {
+          resolvedSubjectId = subRows[0].id;
+          resolvedSubjectCode = subRows[0].code;
+          resolvedSubjectName = subRows[0].name;
+        }
+      }
+    }
+
+    // 3. Resolve Unit and validate hierarchy (Unit -> Subject)
+    let resolvedUnitId: string | null = null;
+    let resolvedUnitCode = dto.unitCode || null;
+    let resolvedUnitName = dto.unitName || null;
+    const rawUnit = dto.unitId || dto.unitCode;
+    if (rawUnit) {
+      let unitRows: any[] = [];
+      if (this.isUUID(rawUnit)) {
+        unitRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, subject_id, subject_code FROM units WHERE id = $1 LIMIT 1`,
+          [rawUnit]
+        );
+      } else {
+        unitRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, subject_id, subject_code FROM units 
+           WHERE (code = $1 OR code ILIKE $1 OR name ILIKE $1) 
+             AND (subject_id = $2::text OR subject_code = $3 OR $2::text IS NULL) 
+           LIMIT 1`,
+          [rawUnit, resolvedSubjectId, resolvedSubjectCode || rawSubject]
+        );
+        if (!unitRows.length) {
+          unitRows = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id, code, name, subject_id, subject_code FROM units WHERE code = $1 OR code ILIKE $1 OR name ILIKE $1 LIMIT 1`,
+            [rawUnit]
+          );
+        }
+      }
+
+      if (unitRows && unitRows.length > 0) {
+        const u = unitRows[0];
+        resolvedUnitId = u.id;
+        resolvedUnitCode = u.code || resolvedUnitCode;
+        resolvedUnitName = u.name || resolvedUnitName;
+
+        // Hierarchy validation: verify Unit belongs to Subject
+        if (resolvedSubjectId && u.subject_id) {
+          const matchSub = String(u.subject_id) === String(resolvedSubjectId) ||
+            (resolvedSubjectCode && String(u.subject_code) === String(resolvedSubjectCode));
+          if (!matchSub) {
+            throw new BadRequestException(
+              `Hierarchy Validation Failed: Unit '${resolvedUnitCode || u.name}' does not belong to the selected subject '${resolvedSubjectCode || rawSubject}'.`
+            );
+          }
+        }
+      } else if (this.isUUID(dto.unitId)) {
+        resolvedUnitId = dto.unitId;
+      }
+    }
+
+    // 4. Resolve Topic and validate hierarchy (Topic -> Unit)
+    let resolvedTopicId: string | null = null;
+    let resolvedTopicCode = dto.topicCode || null;
+    let resolvedTopicName = dto.topic || null;
+    const rawTopic = dto.topicId || dto.topicCode || dto.topic;
+    if (rawTopic) {
+      let topicRows: any[] = [];
+      if (this.isUUID(rawTopic)) {
+        topicRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, unit_id, unit_code, subject_id, subject_code FROM topics WHERE id = $1 LIMIT 1`,
+          [rawTopic]
+        );
+      } else {
+        topicRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, unit_id, unit_code, subject_id, subject_code FROM topics 
+           WHERE (code = $1 OR code ILIKE $1 OR name ILIKE $1) 
+             AND (unit_id = $2::text OR unit_code = $3 OR $2::text IS NULL)
+           LIMIT 1`,
+          [rawTopic, resolvedUnitId, resolvedUnitCode]
+        );
+        if (!topicRows.length) {
+          topicRows = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id, code, name, unit_id, unit_code, subject_id, subject_code FROM topics WHERE code = $1 OR code ILIKE $1 OR name ILIKE $1 LIMIT 1`,
+            [rawTopic]
+          );
+        }
+      }
+
+      if (topicRows && topicRows.length > 0) {
+        const t = topicRows[0];
+        resolvedTopicId = t.id;
+        resolvedTopicCode = t.code || resolvedTopicCode;
+        resolvedTopicName = t.name || resolvedTopicName;
+
+        // Hierarchy validation: verify Topic belongs to Unit
+        if (resolvedUnitId && t.unit_id) {
+          const matchUnit = String(t.unit_id) === String(resolvedUnitId) ||
+            (resolvedUnitCode && String(t.unit_code) === String(resolvedUnitCode));
+          if (!matchUnit) {
+            throw new BadRequestException(
+              `Hierarchy Validation Failed: Topic '${resolvedTopicName || t.code}' does not belong to the selected unit '${resolvedUnitCode || 'selected'}'.`
+            );
+          }
+        }
+      } else if (this.isUUID(dto.topicId)) {
+        resolvedTopicId = dto.topicId;
+      }
+    }
+
+    // 5. Resolve Subtopic / Competency and validate hierarchy (Subtopic -> Topic)
+    let resolvedCompId: string | null = null;
+    let resolvedCompCode = dto.competencyCode || dto.subTopicCode || null;
+    let resolvedCompName: string | null = null;
+    const rawSubTopic = dto.subTopicId || dto.competencyId || dto.competencyCode || dto.subTopicCode;
+    if (rawSubTopic) {
+      let compRows: any[] = [];
+      if (this.isUUID(rawSubTopic)) {
+        compRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, topic_id, topic_code, unit_id, unit_code FROM competencies WHERE id = $1 LIMIT 1`,
+          [rawSubTopic]
+        );
+      } else {
+        compRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code, name, topic_id, topic_code, unit_id, unit_code FROM competencies 
+           WHERE (code = $1 OR code ILIKE $1 OR name ILIKE $1) 
+             AND (topic_id = $2::text OR topic_code = $3 OR $2::text IS NULL)
+           LIMIT 1`,
+          [rawSubTopic, resolvedTopicId, resolvedTopicCode]
+        );
+        if (!compRows.length) {
+          compRows = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id, code, name, topic_id, topic_code, unit_id, unit_code FROM competencies WHERE code = $1 OR code ILIKE $1 OR name ILIKE $1 LIMIT 1`,
+            [rawSubTopic]
+          );
+        }
+      }
+
+      if (compRows && compRows.length > 0) {
+        const c = compRows[0];
+        resolvedCompId = c.id;
+        resolvedCompCode = c.code || resolvedCompCode;
+        resolvedCompName = c.name;
+
+        // Hierarchy validation: verify Subtopic belongs to Topic
+        if (resolvedTopicId && c.topic_id) {
+          const matchTopic = String(c.topic_id) === String(resolvedTopicId) ||
+            (resolvedTopicCode && String(c.topic_code) === String(resolvedTopicCode));
+          if (!matchTopic) {
+            throw new BadRequestException(
+              `Hierarchy Validation Failed: Subtopic/Competency '${resolvedCompCode || c.name}' does not belong to the selected topic '${resolvedTopicName || 'selected'}'.`
+            );
+          }
+        }
+      } else if (this.isUUID(dto.subTopicId || dto.competencyId)) {
+        resolvedCompId = dto.subTopicId || dto.competencyId;
+      }
+    }
+
+    // 6. Resolve created_by user
+    const rawUserId = user?.userId || user?.sub || user?.id || (dto as any).createdBy || null;
+    const resolvedCreatedBy = rawUserId && this.isUUID(rawUserId) ? rawUserId : null;
+    const finalColgCd = dto.colgCd || (slug.toLowerCase().includes('srms') ? '1' : null);
+
     const subQuestionsJson = JSON.stringify(dto.subQuestions || []);
     const res = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -573,15 +776,16 @@ export class ExaminationService {
          question_text, option_a, option_b, option_c, option_d, correct_option,
          difficulty_level, competency_code, has_sub_questions, sub_questions, max_marks,
          topic_id, competency_id, unit_id, unit_code, unit_name, topic_code, sub_topic_id, sub_topic_code,
-         colg_cd, course_cd, branch_cd, batch_cd, semester, section, image_url
-       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32)
+         subtopic_id, subtopic_name,
+         colg_cd, course_cd, branch_cd, batch_cd, semester, section, image_url, created_by
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
        RETURNING *`,
       [
         this.isUUID(dto.collegeId) ? dto.collegeId : null,
         this.isUUID(dto.departmentId) ? dto.departmentId : null,
-        this.isUUID(dto.subjectId) ? dto.subjectId : null,
+        resolvedSubjectId,
         dto.professionalPhase || null,
-        dto.topic || null,
+        resolvedTopicName || dto.topic || null,
         dto.mode,
         dto.questionText,
         dto.optionA || null,
@@ -590,25 +794,28 @@ export class ExaminationService {
         dto.optionD || null,
         dto.correctOption || null,
         dto.difficultyLevel || 'Medium',
-        dto.competencyCode || dto.subTopicCode || null,
+        resolvedCompCode || null,
         dto.hasSubQuestions ?? false,
         subQuestionsJson,
         dto.maxMarks ?? 1.0,
-        this.isUUID(dto.topicId) ? dto.topicId : null,
-        this.isUUID(dto.competencyId) ? dto.competencyId : null,
-        this.isUUID(dto.unitId) ? dto.unitId : null,
-        dto.unitCode || 'CO1',
-        dto.unitName || 'Core Unit',
-        dto.topicCode || null,
-        this.isUUID(dto.subTopicId) ? dto.subTopicId : null,
-        dto.subTopicCode || dto.competencyCode || null,
-        dto.colgCd || '1',
+        resolvedTopicId,
+        resolvedCompId,
+        resolvedUnitId,
+        resolvedUnitCode || 'CO1',
+        resolvedUnitName || 'Core Unit',
+        resolvedTopicCode,
+        resolvedCompId,
+        resolvedCompCode,
+        resolvedCompId,
+        resolvedCompName || null,
+        finalColgCd,
         dto.courseCd || null,
         dto.branchCd || null,
         dto.batchCd || null,
         dto.semester || null,
         dto.section || null,
         dto.imageUrl || dto.image_url || null,
+        resolvedCreatedBy,
       ],
     );
     return res[0];
@@ -658,13 +865,28 @@ export class ExaminationService {
       params.push(query.departmentId);
       sql += ` AND (q.department_id::text = $${params.length}::text OR q.department_id IS NULL)`;
     }
-    if (query.subjectId && this.isUUID(query.subjectId)) {
-      params.push(query.subjectId);
-      sql += ` AND (q.subject_id::text = $${params.length}::text OR q.subject_id IS NULL OR q.department_id::text IN (SELECT department_id::text FROM subjects WHERE id::text = $${params.length}::text AND department_id IS NOT NULL))`;
+    if (query.subjectId && query.subjectId !== 'ALL' && query.subjectId.trim() !== '') {
+      params.push(query.subjectId.trim());
+      const pIdx = params.length;
+      if (this.isUUID(query.subjectId.trim())) {
+        sql += ` AND (q.subject_id::text = $${pIdx}::text OR q.subject_id IS NULL OR q.department_id::text IN (SELECT department_id::text FROM subjects WHERE id::text = $${pIdx}::text AND department_id IS NOT NULL))`;
+      } else {
+        sql += ` AND (
+          s.code = $${pIdx}
+          OR LOWER(s.name) LIKE '%' || LOWER($${pIdx}) || '%'
+          OR q.course_cd = $${pIdx}
+          OR q.subject_id::text IN (SELECT id::text FROM subjects WHERE code = $${pIdx} OR LOWER(name) LIKE '%' || LOWER($${pIdx}) || '%')
+        )`;
+      }
     }
-    if (query.unitId && this.isUUID(query.unitId)) {
-      params.push(query.unitId);
-      sql += ` AND (q.unit_id::text = $${params.length}::text OR q.unit_code = $${params.length})`;
+    if (query.unitId && query.unitId !== 'ALL' && query.unitId.trim() !== '') {
+      params.push(query.unitId.trim());
+      const pIdx = params.length;
+      if (this.isUUID(query.unitId.trim())) {
+        sql += ` AND (q.unit_id::text = $${pIdx}::text OR q.unit_code = $${pIdx})`;
+      } else {
+        sql += ` AND (LOWER(TRIM(q.unit_code)) = LOWER($${pIdx}) OR LOWER(TRIM(q.unit_name)) LIKE '%' || LOWER($${pIdx}) || '%')`;
+      }
     } else if (query.unitCode && query.unitCode.trim() && query.unitCode.toUpperCase() !== 'ALL') {
       params.push(query.unitCode.trim());
       sql += ` AND (LOWER(TRIM(q.unit_code)) = LOWER($${params.length}) OR LOWER(TRIM(q.unit_name)) LIKE '%' || LOWER($${params.length}) || '%')`;

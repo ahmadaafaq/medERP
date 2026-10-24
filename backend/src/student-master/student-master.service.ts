@@ -1,7 +1,8 @@
-import { Injectable, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ConflictException, Logger } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { TenantSchemaService } from '../database/tenant-schema.service';
+import * as XLSX from 'xlsx';
 import {
   CreateStudentDto, UpdateStudentDto, BulkLinkProfessionalDto, BulkLinkGroupDto, BulkCreateStudentsDto,
 } from './dto/student-master.dto';
@@ -441,45 +442,28 @@ export class StudentMasterService {
         regNo = await this.generateNextRegistrationNo(slug, yearStr);
       }
 
-      // Check if student already exists by registration_no or rollno
-      let existingStudentId: string | null = null;
+      // 1. Strict duplicate validation before creation
       if (regNo) {
         const existingReg = await runner.query(`SELECT id FROM students WHERE registration_no = $1 LIMIT 1`, [regNo]);
         if (existingReg.length) {
-          existingStudentId = existingReg[0].id;
+          throw new ConflictException(`Student with Registration Number "${regNo}" already exists in this college.`);
         }
       }
-      if (!existingStudentId && dto.rollNo) {
+      if (dto.rollNo) {
         const existingRoll = await runner.query(`SELECT id FROM students WHERE rollno = $1 LIMIT 1`, [dto.rollNo]);
         if (existingRoll.length) {
-          existingStudentId = existingRoll[0].id;
+          throw new ConflictException(`Student with Roll Number "${dto.rollNo}" already exists in this college.`);
         }
       }
-
-      // If student already exists in DB, update instead of inserting duplicate entry
-      if (existingStudentId) {
-        await runner.rollbackTransaction();
-        await runner.release();
-        this.logger.log(`[StudentMaster] Student ${regNo || dto.rollNo} already exists (${existingStudentId}). Updating existing record instead of inserting new entry.`);
-        await this.updateStudent(slug, existingStudentId, {
-          ...dto,
-          registrationNo: regNo,
-        } as any);
-
-        const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
-        return {
-          id: existingStudentId,
-          registrationNo: regNo,
-          name,
-          rollNo: dto.rollNo,
-          collegeName: dto.collegeName,
-          courseCode: dto.courseCode,
-          updated: true,
-        };
+      if (dto.emailAddress) {
+        const existingEmail = await runner.query(`SELECT id FROM users WHERE email = $1 LIMIT 1`, [dto.emailAddress.toLowerCase().trim()]);
+        if (existingEmail.length) {
+          throw new ConflictException(`User with Email "${dto.emailAddress}" already exists.`);
+        }
       }
 
       // 2. Create matching user record in users table for student login
-      const studentEmail = dto.emailAddress?.trim() || `${regNo.toLowerCase()}@srms.ac.in`;
+      const studentEmail = dto.emailAddress?.trim() || `${regNo.toLowerCase()}@${slug}.mederp.app`;
       const defaultHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Hash for Password@123 / regNo
       const userRows = await runner.query(
         `INSERT INTO users (email, password_hash, role, onboarding_completed, must_change_password)
@@ -496,13 +480,15 @@ export class StudentMasterService {
         const matchYear = cleanBatchCode.match(/20\d\d/);
         if (matchYear) cleanBatchCode = `${matchYear[0]} Batch`;
       }
+      const rawBatchYear = (dto.batchCode || dto.batchId || '').match(/20\d\d/)?.[0] || dto.academicSession?.match(/\d{4}/)?.[0] || '2025';
 
-      // 4. Insert into students table with linked user_id
+      // 4. Insert into students table with linked user_id, course_cd, batch_cd, branch_id, gender, and contact
       const name = `${dto.firstName} ${dto.middleName ? dto.middleName + ' ' : ''}${dto.lastName}`.trim();
       const studentRows = await runner.query(
         `INSERT INTO students (
-           user_id, name, rollno, registration_no, is_active, phone, blood_group, photo_url
-         ) VALUES ($1, $2, $3, $4, true, $5, $6, $7) RETURNING id`,
+           user_id, name, rollno, registration_no, is_active, phone, blood_group, photo_url,
+           course_cd, batch_cd, branch_id, gender, mobile_number, admission_year
+         ) VALUES ($1, $2, $3, $4, true, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
         [
           userId || null,
           name,
@@ -511,6 +497,12 @@ export class StudentMasterService {
           dto.mobileNumber || null,
           dto.bloodGroup || null,
           dto.photoUrl || null,
+          dto.courseCode || dto.courseId || null,
+          rawBatchYear,
+          dto.branchId || null,
+          dto.gender || 'Male',
+          dto.mobileNumber || null,
+          rawBatchYear,
         ],
       );
       const studentId = studentRows[0].id;
@@ -679,14 +671,11 @@ export class StudentMasterService {
       // 13. Insert into student_medical
       await runner.query(
         `INSERT INTO student_medical (
-           student_id, medical_history, blood_group, allergies, emergency_medical_notes, vaccination_status
-         ) VALUES ($1, $2, $3, $4, $5, $6)`,
+           student_id, medical_history, vaccination_status
+         ) VALUES ($1, $2, $3)`,
         [
           studentId,
           dto.medicalConditions || null,
-          dto.bloodGroup || null,
-          null,
-          null,
           dto.vaccinationStatus || null,
         ],
       );
@@ -694,28 +683,26 @@ export class StudentMasterService {
       // 14. Insert into student_bank_accounts
       await runner.query(
         `INSERT INTO student_bank_accounts (
-           student_id, bank_name, account_number, ifsc_code, branch_name
-         ) VALUES ($1, $2, $3, $4, $5)`,
+           student_id, bank_name, account_number, ifsc_code
+         ) VALUES ($1, $2, $3, $4)`,
         [
           studentId,
           dto.bankName || null,
           dto.accountNumber || null,
           dto.ifscCode || null,
-          null,
         ],
       );
 
       // 15. Insert into student_emergency_contacts
       await runner.query(
         `INSERT INTO student_emergency_contacts (
-           student_id, contact_name, relationship, phone_number, alternate_phone
-         ) VALUES ($1, $2, $3, $4, $5)`,
+           student_id, contact_name, relationship, phone
+         ) VALUES ($1, $2, $3, $4)`,
         [
           studentId,
           dto.emergencyContactName || dto.fatherName || null,
           dto.emergencyRelationship || 'Parent',
           dto.emergencyContactMobile || dto.fatherMobile || null,
-          null,
         ],
       );
 
@@ -729,9 +716,12 @@ export class StudentMasterService {
         collegeName: dto.collegeName,
         courseCode: dto.courseCode,
       };
-    } catch (err) {
+    } catch (err: any) {
       await runner.rollbackTransaction();
       this.logger.error(`[StudentMaster] Create student failed:`, err);
+      if (err.code === '23505') {
+        throw new ConflictException(err.detail || 'A student with this roll number, registration number, or email already exists.');
+      }
       throw err;
     } finally {
       await runner.release();
@@ -782,8 +772,11 @@ export class StudentMasterService {
              email = COALESCE($6, email),
              course_cd = COALESCE($7, course_cd),
              batch_cd = COALESCE($8, batch_cd),
+             branch_id = COALESCE($9, branch_id),
+             gender = COALESCE($10, gender),
+             mobile_number = COALESCE($11, mobile_number),
              updated_at = NOW()
-         WHERE id = $9`,
+         WHERE id = $12`,
         [
           name,
           dto.rollNo || null,
@@ -793,6 +786,9 @@ export class StudentMasterService {
           dto.emailAddress || null,
           dto.courseCode || dto.courseId || null,
           cleanBatchCd,
+          dto.branchId || null,
+          dto.gender || null,
+          dto.mobileNumber || null,
           id,
         ],
       );
@@ -973,18 +969,18 @@ export class StudentMasterService {
            hostel_required = EXCLUDED.hostel_required,
            hostel_name = EXCLUDED.hostel_name,
            room_number = EXCLUDED.room_number`,
-        [dto.hostelRequired ?? false, dto.hostelName || null, dto.roomNumber || null, id],
+        [id, dto.hostelRequired ?? false, dto.hostelName || null, dto.roomNumber || null],
       );
 
       // 9. Upsert student_emergency_contacts
       await runner.query(
         `INSERT INTO student_emergency_contacts (
-           student_id, contact_name, relationship, phone_number
+           student_id, contact_name, relationship, phone
          ) VALUES ($1, $2, $3, $4)
          ON CONFLICT (student_id) DO UPDATE SET
            contact_name = EXCLUDED.contact_name,
            relationship = EXCLUDED.relationship,
-           phone_number = EXCLUDED.phone_number`,
+           phone = EXCLUDED.phone`,
         [
           id,
           dto.emergencyContactName || dto.fatherName || null,
@@ -1018,12 +1014,11 @@ export class StudentMasterService {
       // 12. Upsert student_medical
       await runner.query(
         `INSERT INTO student_medical (
-           student_id, vaccination_status, blood_group
-         ) VALUES ($1, $2, $3)
+           student_id, vaccination_status
+         ) VALUES ($1, $2)
          ON CONFLICT (student_id) DO UPDATE SET
-           vaccination_status = EXCLUDED.vaccination_status,
-           blood_group = EXCLUDED.blood_group`,
-        [id, dto.vaccinationStatus || null, dto.bloodGroup || null],
+           vaccination_status = EXCLUDED.vaccination_status`,
+        [id, dto.vaccinationStatus || null],
       );
 
       // 13. Upsert student_documents
@@ -1724,7 +1719,7 @@ export class StudentMasterService {
 
     for (let index = 0; index < rawList.length; index++) {
       const row = rawList[index];
-      const rawCollege = row.collegeId || row.college_id || row.college_slug || row.collegeCode || row.colg_cd || tenantSlug || 'srms-cet-bareilly';
+      const rawCollege = row.collegeId || row.college_id || row.college_slug || row.collegeCode || row.colg_cd || tenantSlug;
       const slug = await this.resolveTenantSlug(rawCollege);
       if (!slug || slug === 'all') {
         results.failed.push({
@@ -1760,7 +1755,7 @@ export class StudentMasterService {
         const bloodGroup = String(row.bloodGroup || row.blood_group || '').trim() || null;
         const gender = String(row.gender || 'Male').trim();
         const dob = row.dob || row.dateOfBirth || row.date_of_birth || null;
-        const courseCd = String(row.courseCode || row.course_code || row.courseId || row.course_cd || '2').trim();
+        const courseCd = String(row.courseCode || row.course_code || row.courseId || row.course_cd || '1').trim();
         const branchId = row.branchId || row.branch_id || row.branchCode || row.branch_cd || null;
         const rawBatchStr = String(row.batchCode || row.batch_code || row.batchId || row.batch_cd || row.batch_year || '2025').trim();
         const matchBatchYear = rawBatchStr.match(/20\d\d/);
@@ -1768,7 +1763,7 @@ export class StudentMasterService {
         const cleanBatchCode = `${cleanBatchYear} Batch`;
         const batchCd = cleanBatchYear;
         const residencyType = String(row.residencyType || row.residency_type || 'Day Scholar').trim();
-        const collegeName = String(row.collegeName || row.college_name || 'SRMS CET Bareilly').trim();
+        const collegeName = String(row.collegeName || row.college_name || slug.toUpperCase()).trim();
         const photoUrl = row.photoUrl || row.photo_url || null;
 
         // Auto-generate regNo if missing
@@ -1777,7 +1772,7 @@ export class StudentMasterService {
           regNo = await this.generateNextRegistrationNo(slug, yearStr);
         }
 
-        const studentEmail = email || `${regNo.toLowerCase()}@srms.ac.in`;
+        const studentEmail = email || `${regNo.toLowerCase()}@${slug}.mederp.app`;
         const defaultHash = '$2b$12$eImiTXuWVxfM37uY4JANjO5e.eZ.W8h8W/2i.tE8v9jX.'; // Default Password@123
 
         // Upsert User
@@ -1922,6 +1917,92 @@ export class StudentMasterService {
     }
 
     return results;
+  }
+
+  async generateImportTemplate(tenantSlug: string): Promise<Buffer> {
+    const slug = await this.resolveTenantSlug(tenantSlug) || 'team-university';
+    const schema = `tenant_${slug}`;
+
+    const [courses, branches, batches] = await Promise.all([
+      this.dataSource.query(`SELECT course_cd, name FROM "${schema}".courses WHERE is_active = true ORDER BY name ASC`).catch(() => []),
+      this.dataSource.query(`SELECT branch_cd, name FROM "${schema}".branches WHERE is_active = true ORDER BY name ASC`).catch(() => []),
+      this.dataSource.query(`SELECT batch_cd, batch_name, year FROM "${schema}".batches WHERE is_active = true ORDER BY year DESC`).catch(() => []),
+    ]);
+
+    const defaultCourse = courses[0]?.course_cd || '1';
+    const defaultBranch = branches[0]?.branch_cd || '1';
+    const defaultBatch = batches[0]?.year || '2025';
+
+    const sampleData = [
+      {
+        registration_no: '20250001',
+        roll_no: '25001',
+        first_name: 'Aarav',
+        middle_name: '',
+        last_name: 'Sharma',
+        email: `aarav.sharma@${slug}.mederp.app`,
+        phone: '9876543210',
+        gender: 'Male',
+        dob: '2004-05-15',
+        blood_group: 'B+',
+        college_code: slug,
+        course_code: defaultCourse,
+        branch_code: defaultBranch,
+        batch_year: String(defaultBatch),
+        residency_type: 'Day Scholar',
+        father_name: 'Rajesh Sharma',
+        father_mobile: '9876543219',
+        mother_name: 'Sunita Sharma',
+        permanent_address: '123 Main Street',
+        city: 'City',
+        state: 'State',
+        pincode: '110001',
+      },
+      {
+        registration_no: '20250002',
+        roll_no: '25002',
+        first_name: 'Ananya',
+        middle_name: '',
+        last_name: 'Verma',
+        email: `ananya.verma@${slug}.mederp.app`,
+        phone: '9876543211',
+        gender: 'Female',
+        dob: '2005-02-20',
+        blood_group: 'O+',
+        college_code: slug,
+        course_code: defaultCourse,
+        branch_code: defaultBranch,
+        batch_year: String(defaultBatch),
+        residency_type: 'Hosteller',
+        father_name: 'Sanjay Verma',
+        father_mobile: '9876543218',
+        mother_name: 'Meena Verma',
+        permanent_address: '45 Park Avenue',
+        city: 'City',
+        state: 'State',
+        pincode: '110002',
+      },
+    ];
+
+    const wb = XLSX.utils.book_new();
+
+    const wsStudents = XLSX.utils.json_to_sheet(sampleData);
+    XLSX.utils.book_append_sheet(wb, wsStudents, 'Students_Template');
+
+    const refCourses = courses.map((c: any) => ({ 'Course Code': c.course_cd, 'Course Name': c.name }));
+    const refBranches = branches.map((b: any) => ({ 'Branch Code': b.branch_cd, 'Branch Name': b.name }));
+    const refBatches = batches.map((b: any) => ({ 'Batch Year / Code': b.batch_cd || b.year, 'Batch Name': b.batch_name || `${b.year} Batch` }));
+
+    const wsCourses = XLSX.utils.json_to_sheet(refCourses.length ? refCourses : [{ 'Course Code': '1', 'Course Name': 'Default Course' }]);
+    XLSX.utils.book_append_sheet(wb, wsCourses, 'Allowed_Courses');
+
+    const wsBranches = XLSX.utils.json_to_sheet(refBranches.length ? refBranches : [{ 'Branch Code': '1', 'Branch Name': 'Default Branch' }]);
+    XLSX.utils.book_append_sheet(wb, wsBranches, 'Allowed_Branches');
+
+    const wsBatches = XLSX.utils.json_to_sheet(refBatches.length ? refBatches : [{ 'Batch Year / Code': '2025', 'Batch Name': '2025 Batch' }]);
+    XLSX.utils.book_append_sheet(wb, wsBatches, 'Allowed_Batches');
+
+    return XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   }
 }
 

@@ -325,6 +325,11 @@ export default function StudentMasterPage() {
   const [metadataLoading, setMetadataLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const showToast = (type: 'success' | 'error', message: string) => {
+    setToast({ type, message });
+    setTimeout(() => setToast(null), 5000);
+  };
 
   // SRMS Live Student Sync Modal States
   const [isSyncModalOpen, setIsSyncModalOpen] = useState(false);
@@ -1138,24 +1143,27 @@ export default function StudentMasterPage() {
       const tenantSlug = getActiveTenantSlug();
       const res = await fetch(`${API_BASE}/student-master/${studentId}?tenant=${tenantSlug}`, {
         method: 'DELETE',
-        headers: { 'Authorization': `Bearer ${token}` },
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': tenantSlug,
+        },
       });
       if (res.ok) {
-        alert('Student profile deleted successfully from database.');
+        showToast('success', 'Student profile deleted successfully from database.');
         fetchStudents();
       } else {
-        const json = await res.json();
-        alert(json.message || 'Failed to delete student record.');
+        const json = await res.json().catch(() => ({}));
+        showToast('error', json.message || 'Failed to delete student record.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to delete student', err);
-      alert('Network error while deleting student record.');
+      showToast('error', err?.message || 'Network error while deleting student record.');
     }
   };
 
   const handleFormSubmit = async () => {
     if (!formData.declarationSigned) {
-      alert('Please check the digital declaration box in Step 6 to confirm candidate details validation.');
+      showToast('error', 'Please check the digital declaration box in Step 6 to confirm candidate details validation.');
       return;
     }
 
@@ -1163,7 +1171,7 @@ export default function StudentMasterPage() {
       const token = localStorage.getItem('token') || '';
       // Use the college slug from the form's selected college or active tenant
       const formCollege = colleges.find((c) => c.id === formData.collegeId || c.code === formData.collegeId || c.colg_cd === formData.collegeId || c.slug === formData.collegeId);
-      const tenantSlug = formCollege?.slug || getActiveTenantSlug() || 'srms-cet-bareilly';
+      const tenantSlug = formCollege?.slug || getActiveTenantSlug();
       const url = editModeId
         ? `${API_BASE}/student-master/${editModeId}?tenant=${tenantSlug}`
         : `${API_BASE}/student-master?tenant=${tenantSlug}`;
@@ -1201,35 +1209,59 @@ export default function StudentMasterPage() {
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': tenantSlug,
         },
         body: JSON.stringify(payload),
       });
 
-      const result = await res.json();
+      const result = await res.json().catch(() => ({}));
       if (res.ok) {
-        alert(editModeId ? 'Student profile updated successfully in PostgreSQL database.' : 'Student registration completed successfully.');
+        showToast('success', editModeId ? 'Student profile updated successfully in PostgreSQL database.' : 'Student registration completed successfully.');
         setIsModalOpen(false);
         setEditModeId(null);
+        setFormData((prev) => ({
+          ...prev,
+          firstName: '',
+          middleName: '',
+          lastName: '',
+          registrationNo: '',
+          rollNo: '',
+          mobileNumber: '',
+          emailAddress: '',
+          caste: '',
+          aadhaarNo: '',
+          panNo: '',
+          passportNo: '',
+          fatherName: '',
+          motherName: '',
+          permanentAddress1: '',
+          permanentCity: '',
+          permanentPincode: '',
+          accountNumber: '',
+          ifscCode: '',
+          declarationSigned: false,
+        }));
         fetchStudents();
       } else {
         const errorDetail = Array.isArray(result.message) ? result.message.join(', ') : result.message;
-        alert(`Error: ${errorDetail || 'Failed to save student profile.'}`);
+        showToast('error', errorDetail || 'Failed to save student profile.');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to submit student form', err);
+      showToast('error', err?.message || 'Network error while submitting student form.');
     }
   };
 
   const validateStep = (step: number): boolean => {
     if (step === 1) {
       if (!formData.collegeId || !formData.courseId || !formData.sessionId || !formData.batchId || !formData.registrationNo) {
-        alert('Please complete all academic enrollments, including Course, Session, Batch and generated Registration Number.');
+        showToast('error', 'Please complete all academic enrollments, including Course, Session, Batch and generated Registration Number.');
         return false;
       }
     }
     if (step === 2) {
       if (!formData.firstName || !formData.lastName || !formData.mobileNumber) {
-        alert('First Name, Last Name and Mobile Number are required.');
+        showToast('error', 'First Name, Last Name and Mobile Number are required.');
         return false;
       }
     }
@@ -1540,19 +1572,30 @@ export default function StudentMasterPage() {
           message: json.error || json.message || 'Error occurred while syncing students from SRMS portal.',
         });
       }
-    } catch (err: any) {
-      setSyncResult({
-        success: false,
-        count: 0,
-        message: err?.message || 'Network communication failure with SRMS sync proxy.',
+    } c  // Download official Excel/CSV Sample Template for Student Bulk Import
+  const handleDownloadStudentSampleFormat = async () => {
+    const slug = getActiveTenantSlug() || 'college';
+    try {
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(`${API_BASE}/student-master/import-template?tenant=${slug}`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-    } finally {
-      setSyncing(false);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `student_import_template_${slug}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+    } catch (err) {
+      console.warn('Backend xlsx template download fallback to CSV:', err);
     }
-  };
 
-  // Download official Excel/CSV Sample Template for Student Bulk Import
-  const handleDownloadStudentSampleFormat = () => {
     const headers = [
       'registration_no',
       'roll_no',
@@ -1578,6 +1621,10 @@ export default function StudentMasterPage() {
       'pincode',
     ];
 
+    const currentCourse = allCourses[0]?.course_cd || allCourses[0]?.code || '1';
+    const currentBranch = allBranches[0]?.branch_cd || allBranches[0]?.code || '1';
+    const currentBatch = allBatches[0]?.batch_cd || allBatches[0]?.year || '2025';
+
     const sampleRows = [
       [
         '20250001',
@@ -1585,23 +1632,23 @@ export default function StudentMasterPage() {
         'Aarav',
         'Kumar',
         'Sharma',
-        'aarav.sharma@srms.ac.in',
+        `aarav.sharma@${slug}.mederp.app`,
         '9876543210',
         'Male',
         '2004-05-15',
         'B+',
-        '1',
-        '2',
-        '1',
-        '2025',
+        importTargetCollege || '1',
+        currentCourse,
+        currentBranch,
+        String(currentBatch),
         'Day Scholar',
         'Rajesh Sharma',
         '9876543219',
         'Sunita Sharma',
-        '123 Civil Lines',
-        'Bareilly',
-        'Uttar Pradesh',
-        '243001',
+        '123 University Campus Road',
+        'City',
+        'State',
+        '110001',
       ],
       [
         '20250002',
@@ -1609,95 +1656,23 @@ export default function StudentMasterPage() {
         'Ananya',
         '',
         'Verma',
-        'ananya.verma@srms.ac.in',
+        `ananya.verma@${slug}.mederp.app`,
         '9876543211',
         'Female',
         '2005-02-20',
         'O+',
-        '1',
-        '2',
-        '1',
-        '2025',
+        importTargetCollege || '1',
+        currentCourse,
+        currentBranch,
+        String(currentBatch),
         'Hosteller',
         'Sanjay Verma',
         '9876543218',
         'Meena Verma',
-        '45 Model Town',
-        'Bareilly',
-        'Uttar Pradesh',
-        '243005',
-      ],
-      [
-        '20250003',
-        '25003',
-        'Rohan',
-        'Singh',
-        'Chauhan',
-        'rohan.chauhan@srms.ac.in',
-        '9876543212',
-        'Male',
-        '2004-09-10',
-        'A+',
-        '1',
-        '2',
-        '1',
-        '2025',
-        'Day Scholar',
-        'Vikram Chauhan',
-        '9876543217',
-        'Pooja Chauhan',
-        '78 Station Road',
-        'Bareilly',
-        'Uttar Pradesh',
-        '243002',
-      ],
-      [
-        '20250004',
-        '25004',
-        'Pooja',
-        '',
-        'Gupta',
-        'pooja.gupta@srms.ac.in',
-        '9876543213',
-        'Female',
-        '2004-11-28',
-        'AB+',
-        '1',
-        '2',
-        '1',
-        '2025',
-        'Hosteller',
-        'Manish Gupta',
-        '9876543216',
-        'Aarti Gupta',
-        '90 Rajendra Nagar',
-        'Bareilly',
-        'Uttar Pradesh',
-        '243122',
-      ],
-      [
-        '20250005',
-        '25005',
-        'Sameer',
-        'Ali',
-        'Khan',
-        'sameer.khan@srms.ac.in',
-        '9876543214',
-        'Male',
-        '2004-07-04',
-        'O-',
-        '1',
-        '2',
-        '1',
-        '2025',
-        'Day Scholar',
-        'Aslam Khan',
-        '9876543215',
-        'Fatima Khan',
-        '12 Rampur Garden',
-        'Bareilly',
-        'Uttar Pradesh',
-        '243001',
+        '45 Central Avenue',
+        'City',
+        'State',
+        '110002',
       ],
     ];
 
@@ -1713,7 +1688,7 @@ export default function StudentMasterPage() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'MedERP_Student_Bulk_Import_Sample.csv');
+    link.setAttribute('download', `Student_Bulk_Import_${slug}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -2194,6 +2169,18 @@ export default function StudentMasterPage() {
       <main className="flex-1 min-w-0 max-w-full overflow-y-auto overflow-x-hidden pb-10">
         <Header title="Student Directory & Enrolled Records" />
 
+        {/* Alert Toast Notification */}
+        {toast && (
+          <div className="w-full max-w-full px-3 sm:px-6 lg:px-8 mt-4">
+            <div className={`p-4 rounded-2xl text-xs font-bold flex items-center justify-between border shadow-sm ${
+              toast.type === 'success' ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30' : 'bg-[#FEECEB] text-[#F04438] border-[#F04438]/30'
+            }`}>
+              <span>{toast.type === 'success' ? '✅' : '⚠️'} {toast.message}</span>
+              <button onClick={() => setToast(null)} className="text-[#7B8794] hover:text-[#1B1E28] font-black">✕</button>
+            </div>
+          </div>
+        )}
+
         <div className="w-full max-w-full px-3 sm:px-6 lg:px-8 mt-4 sm:mt-6">
           {/* Filtering Console */}
           <div className="p-3.5 sm:p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all mb-6 sm:mb-8">
@@ -2496,15 +2483,17 @@ export default function StudentMasterPage() {
                 >
                   Apply
                 </button>
-                <button
-                  type="button"
-                  onClick={handleOpenSyncModal}
-                  className="h-7.5 py-1 px-2.5 rounded-lg font-extrabold text-[10.5px] bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white border border-[#F36C21] shadow-xs flex items-center gap-1 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
-                  title="Live sync student enrollment from SRMS ERP Portal"
-                >
-                  <span className="text-xs">⚡</span>
-                  <span>Sync SRMS</span>
-                </button>
+                {getActiveTenantSlug().toLowerCase().includes('srms') && (
+                  <button
+                    type="button"
+                    onClick={handleOpenSyncModal}
+                    className="h-7.5 py-1 px-2.5 rounded-lg font-extrabold text-[10.5px] bg-gradient-to-r from-[#F36C21] to-[#FF8C42] hover:from-[#E05C12] hover:to-[#F36C21] text-white border border-[#F36C21] shadow-xs flex items-center gap-1 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+                    title="Live sync student enrollment from SRMS ERP Portal"
+                  >
+                    <span className="text-xs">⚡</span>
+                    <span>Sync SRMS</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => {
@@ -2512,14 +2501,14 @@ export default function StudentMasterPage() {
                     setImportParsedRows([]);
                     setImportFileName('');
                     setImportResult(null);
-                    const col = selectedCollege !== 'all' ? selectedCollege.replace(/['"]/g, '') : '1';
-                    const crs = selectedCourse !== 'all' ? selectedCourse.replace(/['"]/g, '') : '2';
-                    const br = selectedBranch !== 'all' ? selectedBranch.replace(/['"]/g, '') : '1';
-                    const bat = selectedBatch !== 'all' ? selectedBatch.replace(/['"]/g, '') : '18';
-                    setImportTargetCollege(col);
-                    setImportTargetCourse(crs);
-                    setImportTargetBranch(br);
-                    setImportTargetBatch(bat);
+                    const targetCol = selectedCollege !== 'all' ? selectedCollege.replace(/['"]/g, '') : (colleges[0]?.code || colleges[0]?.colg_cd || colleges[0]?.slug || '1');
+                    const targetCrs = selectedCourse !== 'all' ? selectedCourse.replace(/['"]/g, '') : (allCourses[0]?.course_cd || allCourses[0]?.code || '1');
+                    const targetBr = selectedBranch !== 'all' ? selectedBranch.replace(/['"]/g, '') : (allBranches[0]?.branch_cd || allBranches[0]?.code || '1');
+                    const targetBat = selectedBatch !== 'all' ? selectedBatch.replace(/['"]/g, '') : (allBatches[0]?.batch_cd || allBatches[0]?.code || '2025');
+                    setImportTargetCollege(targetCol);
+                    setImportTargetCourse(targetCrs);
+                    setImportTargetBranch(targetBr);
+                    setImportTargetBatch(targetBat);
                   }}
                   className="h-7.5 py-1 px-2.5 rounded-lg font-extrabold text-[10.5px] bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white border border-emerald-500 shadow-xs flex items-center gap-1 shrink-0 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
                   title="Import Bulk Students from Excel / CSV spreadsheet"
@@ -4615,33 +4604,37 @@ export default function StudentMasterPage() {
                     <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">Target College (colg_cd) *</label>
                     <select
                       value={importTargetCollege}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const newColg = e.target.value;
                         setImportTargetCollege(newColg);
-                        // Dynamically update course & branch based on target college
-                        if (newColg === '4') {
-                          setImportTargetCourse('6'); // B.Pharm
-                          setImportTargetBranch('1');
-                        } else if (newColg === '5') {
-                          setImportTargetCourse('4'); // MBA
-                          setImportTargetBranch('1');
-                        } else if (newColg === '11') {
-                          setImportTargetCourse('1'); // MBBS
-                          setImportTargetBranch('1');
-                        } else {
-                          setImportTargetCourse('2'); // B.Tech
-                          setImportTargetBranch('1'); // CS
+                        const foundCol = colleges.find(c => c.code === newColg || c.colg_cd === newColg || c.slug === newColg || c.id === newColg);
+                        if (foundCol?.slug) {
+                          const tData = await loadTenantData(foundCol.slug);
+                          setAllCourses(tData.courses || []);
+                          setAllBranches(tData.branches || []);
+                          setAllBatches(tData.batches || []);
+                          if (tData.courses && tData.courses.length > 0) {
+                            const firstCourse = tData.courses[0].course_cd || tData.courses[0].code;
+                            setImportTargetCourse(firstCourse);
+                            const brs = (tData.branches || []).filter((b: any) => !b.course_cd || String(b.course_cd) === String(firstCourse));
+                            setImportTargetBranch(brs[0]?.branch_cd || brs[0]?.code || tData.branches?.[0]?.branch_cd || '1');
+                          }
+                          if (tData.batches && tData.batches.length > 0) {
+                            setImportTargetBatch(tData.batches[0].batch_cd || tData.batches[0].code || '2025');
+                          }
                         }
                       }}
                       className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
                     >
-                      <option value="1">[#1] SRMS CET, Bareilly</option>
-                      <option value="2">[#2] SRMS CETR, Bareilly</option>
-                      <option value="3">[#3] SRMS CET, Lucknow</option>
-                      <option value="4">[#4] SRMS College of Pharmacy, Bareilly</option>
-                      <option value="5">[#5] SRMS IBS, Lucknow</option>
-                      <option value="6">[#6] SRMS College of Nursing & Paramedical</option>
-                      <option value="11">[#11] SRMS Institute of Medical Sciences (IMS)</option>
+                      {colleges && colleges.length > 0 ? (
+                        colleges.map((col) => (
+                          <option key={col.id || col.slug || col.code} value={col.code || col.colg_cd || col.slug || col.id}>
+                            {`[#${col.code || col.colg_cd || col.slug}] ${col.name}`}
+                          </option>
+                        ))
+                      ) : (
+                        <option value={importTargetCollege}>[#{importTargetCollege}] Active Institution</option>
+                      )}
                     </select>
                   </div>
 
@@ -4653,35 +4646,21 @@ export default function StudentMasterPage() {
                       onChange={(e) => {
                         const newCourse = e.target.value;
                         setImportTargetCourse(newCourse);
-                        setImportTargetBranch('1');
+                        const brs = allBranches.filter((b) => !b.course_cd || String(b.course_cd) === String(newCourse));
+                        if (brs.length > 0) {
+                          setImportTargetBranch(brs[0].branch_cd || brs[0].code || '1');
+                        }
                       }}
                       className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
                     >
-                      {importTargetCollege === '4' ? (
-                        <>
-                          <option value="6">[#6] B.Pharm (Pharmacy)</option>
-                          <option value="21">[#21] M.Pharm</option>
-                        </>
-                      ) : importTargetCollege === '5' ? (
-                        <>
-                          <option value="4">[#4] MBA (Management Studies)</option>
-                          <option value="31">[#31] BBA (Business Administration)</option>
-                        </>
-                      ) : importTargetCollege === '11' ? (
-                        <>
-                          <option value="1">[#1] MBBS (Bachelor of Medicine)</option>
-                          <option value="11">[#11] MD / MS (Postgraduate)</option>
-                          <option value="12">[#12] B.Sc Nursing / Paramedical</option>
-                        </>
+                      {allCourses && allCourses.length > 0 ? (
+                        allCourses.map((crs) => (
+                          <option key={crs.id || crs.course_cd || crs.code} value={crs.course_cd || crs.code}>
+                            {`[#${crs.course_cd || crs.code}] ${crs.name}`}
+                          </option>
+                        ))
                       ) : (
-                        <>
-                          <option value="2">[#2] B.Tech</option>
-                          <option value="13">[#13] BCA (Computer Applications)</option>
-                          <option value="3">[#3] MCA (Master of Computer Applications)</option>
-                          <option value="4">[#4] MBA (Management Studies)</option>
-                          <option value="5">[#5] M.Tech (Master of Technology)</option>
-                          <option value="6">[#6] B.Pharm (Pharmacy)</option>
-                        </>
+                        <option value="1">[#1] Core Academic Course</option>
                       )}
                     </select>
                   </div>
@@ -4689,40 +4668,29 @@ export default function StudentMasterPage() {
                   {/* Branch */}
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase">Default Branch (branch_cd) *</label>
-                    <select
-                      value={importTargetBranch}
-                      onChange={(e) => setImportTargetBranch(e.target.value)}
-                      className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
-                    >
-                      {importTargetCourse === '2' || importTargetCourse === '5' ? (
-                        <>
-                          <option value="1">[#1] CS (Computer Science & Engg)</option>
-                          <option value="2">[#2] IT (Information Technology)</option>
-                          <option value="3">[#3] EC (Electronics & Comm)</option>
-                          <option value="4">[#4] EE (Electrical Engg)</option>
-                          <option value="5">[#5] EN (Electrical & Electronics)</option>
-                          <option value="6">[#6] ME (Mechanical Engg)</option>
-                          <option value="7">[#7] AI & ML (Artificial Intelligence)</option>
-                        </>
-                      ) : importTargetCourse === '13' ? (
-                        <option value="1">[#1] BCA (Computer Applications)</option>
-                      ) : importTargetCourse === '3' ? (
-                        <option value="1">[#1] MCA (Computer Applications)</option>
-                      ) : importTargetCourse === '4' ? (
-                        <option value="1">[#1] MBA (Management Studies)</option>
-                      ) : importTargetCourse === '31' ? (
-                        <option value="1">[#1] BBA (Business Administration)</option>
-                      ) : importTargetCourse === '6' || importTargetCourse === '21' ? (
-                        <>
-                          <option value="1">[#1] Pharmaceutics</option>
-                          <option value="2">[#2] Pharmacology</option>
-                          <option value="3">[#3] Pharmacognosy</option>
-                          <option value="4">[#4] Pharmaceutical Chemistry</option>
-                        </>
-                      ) : (
-                        <option value="1">[#1] General</option>
-                      )}
-                    </select>
+                    {(() => {
+                      const matchingBranches = allBranches.filter(
+                        (b) => !b.course_cd || String(b.course_cd) === String(importTargetCourse)
+                      );
+                      const brList = matchingBranches.length > 0 ? matchingBranches : allBranches;
+                      return (
+                        <select
+                          value={importTargetBranch}
+                          onChange={(e) => setImportTargetBranch(e.target.value)}
+                          className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
+                        >
+                          {brList && brList.length > 0 ? (
+                            brList.map((br) => (
+                              <option key={br.id || br.branch_cd || br.code} value={br.branch_cd || br.code}>
+                                {`[#${br.branch_cd || br.code}] ${br.name}`}
+                              </option>
+                            ))
+                          ) : (
+                            <option value="1">[#1] Core Branch</option>
+                          )}
+                        </select>
+                      );
+                    })()}
                   </div>
 
                   {/* Batch */}
@@ -4733,12 +4701,19 @@ export default function StudentMasterPage() {
                       onChange={(e) => setImportTargetBatch(e.target.value)}
                       className="w-full h-9 px-2.5 text-xs font-bold rounded-xl bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 focus:outline-none focus:border-emerald-500 text-slate-900 dark:text-white cursor-pointer"
                     >
-                      <option value="18">[#18] 2025 Batch</option>
-                      <option value="17">[#17] 2024 Batch</option>
-                      <option value="16">[#16] 2023 Batch</option>
-                      <option value="15">[#15] 2022 Batch</option>
-                      <option value="14">[#14] 2021 Batch</option>
-                      <option value="13">[#13] 2020 Batch</option>
+                      {allBatches && allBatches.length > 0 ? (
+                        allBatches.map((bat) => (
+                          <option key={bat.id || bat.batch_cd || bat.code} value={bat.batch_cd || bat.code}>
+                            {`[#${bat.batch_cd || bat.code}] ${bat.code || bat.year} Batch`}
+                          </option>
+                        ))
+                      ) : (
+                        <>
+                          <option value="2025">[#2025] 2025 Batch</option>
+                          <option value="2024">[#2024] 2024 Batch</option>
+                          <option value="2023">[#2023] 2023 Batch</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
