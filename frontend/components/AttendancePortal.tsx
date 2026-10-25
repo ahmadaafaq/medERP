@@ -1,6 +1,14 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import {
+  getTenantSlug,
+  isSrmsTenant,
+  fetchColleges,
+  fetchCourses,
+  fetchBranches,
+  fetchBatches,
+} from '@/hooks/useTenantAcademicData';
 
 interface SubjectSummary {
   sub_cd: string;
@@ -369,22 +377,34 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
   const handleCollegeChange = async (colgCode: string) => {
     setSelectedCollege(colgCode);
+    const slug = userTenantSlug || getTenantSlug();
     try {
-      const res = await fetch(`/api/srms/courses?colgcd=${colgCode}&tenant=${userTenantSlug}`);
-      if (res.ok) {
-        const j = await res.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mapped = list.map((c: any) => ({
-          id: String(c.course_cd || c.code || '13'),
-          code: String(c.course_cd || c.code || '13'),
-          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
-        }));
-        setCoursesList(mapped);
-        if (mapped.length > 0) {
-          const firstCourse = mapped[0].code;
-          setSelectedCourse(firstCourse);
-          fetchBranchesAndBatches(colgCode, firstCourse, mapped);
+      let mapped: DropdownItem[] = [];
+      if (isSrmsTenant(slug)) {
+        const res = await fetch(`/api/srms/courses?colgcd=${colgCode}&tenant=${slug}`);
+        if (res.ok) {
+          const j = await res.json();
+          const list = Array.isArray(j) ? j : j.data || [];
+          mapped = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '13'),
+            code: String(c.course_cd || c.code || '13'),
+            name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+          }));
         }
+      } else {
+        const crsList = await fetchCourses(slug, colgCode);
+        mapped = crsList.map((c) => ({
+          id: String(c.course_cd),
+          code: String(c.course_cd),
+          name: c.course_name,
+        }));
+      }
+
+      setCoursesList(mapped);
+      if (mapped.length > 0) {
+        const firstCourse = mapped[0].code;
+        setSelectedCourse(firstCourse);
+        fetchBranchesAndBatches(colgCode, firstCourse, mapped, slug);
       }
     } catch (e) {
       console.warn('Error changing college:', e);
@@ -403,89 +423,85 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const fetchAcademicMetadata = async () => {
     try {
       let roleVal = role || 'STUDENT';
-      let userColg = '1';
-      let userSlug = 'srms-cet-bareilly';
+      const userSlug = getTenantSlug();
+      const isSrms = isSrmsTenant(userSlug);
+      let userColg = typeof window !== 'undefined'
+        ? localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || (isSrms ? '1' : userSlug)
+        : (isSrms ? '1' : userSlug);
+
       if (typeof window !== 'undefined') {
         roleVal = (localStorage.getItem('role') || localStorage.getItem('auth_role') || role || 'STUDENT').toUpperCase();
-        userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
-        userSlug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly')
-          .replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
-        if (userSlug === 'srms-cet') userSlug = 'srms-cet-bareilly';
-        if (userSlug === 'srms-cetr') userSlug = 'srms-cetr-bareilly';
         setUserRole(roleVal);
         setUserColgCd(userColg);
         setUserTenantSlug(userSlug);
       }
 
-      const [colgRes, crsRes] = await Promise.all([
-        fetch('/api/srms/colleges').catch(() => null),
-        fetch(`/api/srms/courses?colgcd=${userColg}&tenant=${userSlug}`).catch(() => null),
-      ]);
-
       let loadedColleges: DropdownItem[] = [];
-      if (colgRes && colgRes.ok) {
-        const j = await colgRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mappedList: DropdownItem[] = list.map((c: any) => ({
-          id: String(c.colg_cd || c.code || '1'),
-          code: String(c.colg_cd || c.code || '1'),
-          name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
-        }));
+      let mappedCourses: DropdownItem[] = [];
 
-        const storedColgName =
-          typeof window !== 'undefined'
-            ? localStorage.getItem('college_name') ||
-              localStorage.getItem('tenantName') ||
-              localStorage.getItem('collegeName')
-            : '';
-        const fallbackColgName =
-          storedColgName ||
-          (userSlug.includes('rimt') || userSlug.includes('rajshree')
-            ? 'Rajshree Institute of Management & Technology'
-            : userSlug.includes('srms')
-            ? 'SRMS CET,BAREILLY'
-            : 'Institution');
+      if (isSrms) {
+        const [colgRes, crsRes] = await Promise.all([
+          fetch('/api/srms/colleges').catch(() => null),
+          fetch(`/api/srms/courses?colgcd=${userColg}&tenant=${userSlug}`).catch(() => null),
+        ]);
 
-        loadedColleges = mappedList;
-        const myCol = mappedList.find((c: any) => String(c.code) === String(userColg) || String(c.id) === String(userColg));
-        if (myCol) {
-          setSelectedCollege(myCol.code || '1');
-        } else if (mappedList.length > 0) {
-          setSelectedCollege(mappedList[0].code || '1');
+        if (colgRes && colgRes.ok) {
+          const j = await colgRes.json();
+          const list = Array.isArray(j) ? j : j.data || [];
+          loadedColleges = list.map((c: any) => ({
+            id: String(c.colg_cd || c.code || '1'),
+            code: String(c.colg_cd || c.code || '1'),
+            name: c.colg_name || c.name || `College ${c.colg_cd || 1}`,
+          }));
         }
+
+        if (crsRes && crsRes.ok) {
+          const j = await crsRes.json();
+          const list = Array.isArray(j) ? j : j.data || [];
+          mappedCourses = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '1'),
+            code: String(c.course_cd || c.code || '1'),
+            name: c.course_name || c.name || `Course ${c.course_cd || 1}`,
+          }));
+        }
+      } else {
+        const [colgs, crss] = await Promise.all([
+          fetchColleges(userSlug),
+          fetchCourses(userSlug, userColg),
+        ]);
+        loadedColleges = colgs.map((c) => ({
+          id: c.colg_cd,
+          code: c.colg_cd,
+          name: c.colg_name || (c as any).name || 'College',
+        }));
+        mappedCourses = crss.map((c) => ({
+          id: String(c.course_cd),
+          code: String(c.course_cd),
+          name: c.course_name,
+        }));
+      }
+
+      if (loadedColleges.length > 0) {
         setCollegesList(loadedColleges);
+        const myCol = loadedColleges.find((c) => c.code === userColg || c.id === userColg) || loadedColleges[0];
+        setSelectedCollege(myCol.code);
       } else {
         const storedColgName =
           typeof window !== 'undefined'
             ? localStorage.getItem('college_name') ||
               localStorage.getItem('tenantName') ||
-              localStorage.getItem('collegeName')
-            : '';
-        const fallbackColgName =
-          storedColgName ||
-          (userSlug.includes('rimt') || userSlug.includes('rajshree')
-            ? 'Rajshree Institute of Management & Technology'
-            : userSlug.includes('srms')
-            ? 'SRMS CET,BAREILLY'
-            : 'Institution');
-        const defaultCol = [{ id: userColg, code: userColg, name: fallbackColgName }];
+              localStorage.getItem('collegeName') ||
+              'Institution'
+            : 'Institution';
+        const defaultCol = [{ id: userColg, code: userColg, name: storedColgName }];
         setCollegesList(defaultCol);
         setSelectedCollege(userColg);
       }
 
-      if (crsRes && crsRes.ok) {
-        const j = await crsRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mappedCourses: DropdownItem[] = list.map((c: any) => ({
-          id: String(c.course_cd || c.code || '1'),
-          code: String(c.course_cd || c.code || '1'),
-          name: c.course_name || c.name || `Course ${c.course_cd || 1}`,
-        }));
-        setCoursesList(mappedCourses);
-        const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '1');
+      setCoursesList(mappedCourses);
+      const crsToUse = selectedCourse || (mappedCourses[0] ? mappedCourses[0].code : '');
+      if (crsToUse) {
         fetchBranchesAndBatches(userColg, crsToUse, mappedCourses, userSlug);
-      } else {
-        setCoursesList([]);
       }
     } catch (err) {
       console.warn('Failed to fetch academic metadata:', err);
@@ -498,112 +514,128 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     customCourses?: DropdownItem[],
     customSlug?: string
   ) => {
-    const effectiveColg = colg || selectedCollege || '1';
-    const effectiveCrs = crs || selectedCourse || '1';
-    const slug = customSlug || userTenantSlug || 'srms-cet-bareilly';
+    const slug = customSlug || userTenantSlug || getTenantSlug();
+    const isSrms = isSrmsTenant(slug);
+    const effectiveColg = colg || selectedCollege || (isSrms ? '1' : '');
+    const effectiveCrs = crs || selectedCourse || '';
     const activeCourses = (customCourses && customCourses.length > 0) ? customCourses : coursesList;
 
     try {
-      const [brRes, btRes] = await Promise.all([
-        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
-        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
-      ]);
+      if (isSrms) {
+        const [brRes, btRes] = await Promise.all([
+          fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
+          fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${slug}`).catch(() => null),
+        ]);
 
-      const courseObj = activeCourses.find(
-        (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
-      );
-      const defaultCourseName = effectiveCrs === '1' ? 'B.TECH.' : effectiveCrs === '4' ? 'MBA' : effectiveCrs === '13' ? 'BCA' : effectiveCrs === '3' ? 'MCA' : 'Department';
-      const courseName = (courseObj?.name || defaultCourseName)
-        .replace(/^\[#\d+\]\s*/, '')
-        .trim();
+        const courseObj = activeCourses.find(
+          (c) => String(c.code) === String(effectiveCrs) || String(c.id) === String(effectiveCrs)
+        );
+        const defaultCourseName = effectiveCrs === '1' ? 'B.TECH.' : effectiveCrs === '4' ? 'MBA' : effectiveCrs === '13' ? 'BCA' : effectiveCrs === '3' ? 'MCA' : 'Department';
+        const courseName = (courseObj?.name || defaultCourseName)
+          .replace(/^\[#\d+\]\s*/, '')
+          .trim();
 
-      const fallbackBranches = CET_COURSE_BRANCHES[effectiveCrs] || [
-        { id: '1', code: '1', name: `${courseName} Department` }
-      ];
+        const fallbackBranches = CET_COURSE_BRANCHES[effectiveCrs] || [
+          { id: '1', code: '1', name: `${courseName} Department` }
+        ];
 
-      if (brRes && brRes.ok) {
-        const j = await brRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
+        if (brRes && brRes.ok) {
+          const j = await brRes.json();
+          const list = Array.isArray(j) ? j : j.data || [];
 
-        const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : fallbackBranches).map((b: any) => {
-          const rawName = (b.branch_name || b.name || '').trim();
-          const validName =
-            rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
-              ? rawName
-              : (CET_COURSE_BRANCHES[effectiveCrs]?.[0]?.name || `${courseName} Department`);
-          return {
-            id: String(b.branch_cd || b.code || '1'),
-            code: String(b.branch_cd || b.code || '1'),
-            name: validName,
-          };
-        });
-
-        if (mapped.length > 0) {
-          setBranchesList(mapped);
-          setSelectedBranch((prev) => {
-            const match = mapped.find((b) => String(b.code) === String(prev));
-            return match ? match.code : mapped[0].code;
+          const mapped: DropdownItem[] = (Array.isArray(list) && list.length > 0 ? list : fallbackBranches).map((b: any) => {
+            const rawName = (b.branch_name || b.name || '').trim();
+            const validName =
+              rawName && rawName !== '-' && rawName !== 'null' && rawName !== 'NONE' && !rawName.toLowerCase().includes('general')
+                ? rawName
+                : (CET_COURSE_BRANCHES[effectiveCrs]?.[0]?.name || `${courseName} Department`);
+            return {
+              id: String(b.branch_cd || b.code || '1'),
+              code: String(b.branch_cd || b.code || '1'),
+              name: validName,
+            };
           });
+
+          if (mapped.length > 0) {
+            setBranchesList(mapped);
+            setSelectedBranch((prev) => {
+              const match = mapped.find((b) => String(b.code) === String(prev));
+              return match ? match.code : mapped[0].code;
+            });
+          } else {
+            setBranchesList(fallbackBranches);
+            setSelectedBranch(fallbackBranches[0].code);
+          }
         } else {
           setBranchesList(fallbackBranches);
           setSelectedBranch(fallbackBranches[0].code);
         }
-      } else {
-        setBranchesList(fallbackBranches);
-        setSelectedBranch(fallbackBranches[0].code);
-      }
 
-      if (btRes && btRes.ok) {
-        const j = await btRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        const mapped = list.map((b: any) => ({
-          id: String(b.batch_cd || b.code || b.batch_id || '2'),
-          code: String(b.batch_cd || b.code || b.batch_id || '2'),
-          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
-        }));
-        if (mapped.length > 0) {
-          setBatchesList(mapped);
-          setSelectedBatch((prev) => {
-            const exists = mapped.some((b: any) => String(b.code) === String(prev));
-            return exists ? prev : mapped[0].code;
-          });
+        if (btRes && btRes.ok) {
+          const j = await btRes.json();
+          const list = Array.isArray(j) ? j : j.data || [];
+          const mapped = list.map((b: any) => ({
+            id: String(b.batch_cd || b.code || b.batch_id || '2'),
+            code: String(b.batch_cd || b.code || b.batch_id || '2'),
+            name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
+          }));
+          if (mapped.length > 0) {
+            setBatchesList(mapped);
+            setSelectedBatch((prev) => {
+              const exists = mapped.some((b: any) => String(b.code) === String(prev));
+              return exists ? prev : mapped[0].code;
+            });
+          }
         }
+      } else {
+        const [brList, btList] = await Promise.all([
+          fetchBranches(slug, effectiveCrs, effectiveColg),
+          fetchBatches(slug, effectiveCrs, effectiveColg),
+        ]);
+        const mappedBranches = brList.map((b) => ({ id: b.branch_cd, code: b.branch_cd, name: b.branch_name }));
+        const mappedBatches = btList.map((b) => ({ id: String(b.batch_cd), code: String(b.batch_cd), name: b.batch_name }));
+        setBranchesList(mappedBranches);
+        setBatchesList(mappedBatches);
+        if (mappedBranches.length > 0) setSelectedBranch(mappedBranches[0].code);
+        if (mappedBatches.length > 0) setSelectedBatch(mappedBatches[0].code);
       }
     } catch (err) {
       console.warn('Failed to fetch branches & batches:', err);
     }
   };
 
-  // Fetch Live Attendance Matrix from SRMS with sub_cd
+  // Fetch Live Attendance Matrix (SRMS for SRMS tenants, PostgreSQL for non-SRMS)
   const fetchLiveAttendanceMatrix = async () => {
+    const slug = userTenantSlug || getTenantSlug();
     try {
       setLoadingMatrix(true);
-      const payload = {
-        colg_cd: Number(selectedCollege || 1),
-        course_cd: Number(selectedCourse || 4),
-        branch_cd: Number(selectedBranch || 1),
-        batch_cd: Number(selectedBatch || 16),
-        sem_cd: Number(selectedSem || 3),
-        section_cd: selectedSection === 'all' ? null : Number(selectedSection || 1),
-        fdt: fromDate,
-        tdt: toDate,
-        tenantSlug: userTenantSlug || 'srms-cet-bareilly',
-      };
+      if (isSrmsTenant(slug)) {
+        const payload = {
+          colg_cd: Number(selectedCollege || 1),
+          course_cd: Number(selectedCourse || 4),
+          branch_cd: Number(selectedBranch || 1),
+          batch_cd: Number(selectedBatch || 16),
+          sem_cd: Number(selectedSem || 3),
+          section_cd: selectedSection === 'all' ? null : Number(selectedSection || 1),
+          fdt: fromDate,
+          tdt: toDate,
+          tenantSlug: slug,
+        };
 
-      const res = await fetch('/api/srms/student-attendance', {
-        method: 'POST',
-        cache: 'no-store',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-tenant-slug': userTenantSlug || 'srms-cet-bareilly',
-        },
-        body: JSON.stringify(payload),
-      });
+        const res = await fetch('/api/srms/student-attendance', {
+          method: 'POST',
+          cache: 'no-store',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-tenant-slug': slug,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      if (res.ok) {
-        const json = await res.json();
-        if (json.success && Array.isArray(json.data)) {
-          let subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
+        if (res.ok) {
+          const json = await res.json();
+          if (json.success && Array.isArray(json.data)) {
+            let subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
 
           if (role === 'FACULTY' && typeof window !== 'undefined') {
             try {
@@ -702,10 +734,51 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           return studentsList;
         }
       }
+    } else {
+        // Non-SRMS Tenant: Query PostgreSQL students directly
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+        const studRes = await fetch(
+          `/api/v1/users/students?tenant=${slug}&courseCd=${selectedCourse}&batchCd=${selectedBatch}&semCd=${selectedSem}`,
+          { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'x-tenant-slug': slug } }
+        ).catch(() => null);
+
+        if (studRes && studRes.ok) {
+          const studJson = await studRes.json();
+          const rawList = Array.isArray(studJson.data?.data)
+            ? studJson.data.data
+            : Array.isArray(studJson.data)
+            ? studJson.data
+            : Array.isArray(studJson)
+            ? studJson
+            : [];
+
+          const studentsList: MatrixStudent[] = rawList.map((stud: any, idx: number) => ({
+            s_no: idx + 1,
+            college: typeof window !== 'undefined' ? (localStorage.getItem('tenantName') || localStorage.getItem('collegeName') || 'Institution') : 'Institution',
+            rollno: stud.rollno || stud.rollNo || stud.registration_no || stud.regNo || `#${idx + 1}`,
+            registration_no: stud.registration_no || stud.regNo || stud.rollno || `#${idx + 1}`,
+            name: stud.name || 'Student',
+            course: coursesList.find((c) => c.code === selectedCourse)?.name || 'Course',
+            batch: batchesList.find((b) => b.code === selectedBatch)?.name || 'Batch',
+            semester: String(selectedSem),
+            section: stud.section || 'A (1)',
+            TotalPresentPercentage: `${parseFloat(stud.attendance_percentage || stud.attendancePct || 80).toFixed(2)}%`,
+            attendance: {},
+          }));
+
+          setMatrixStudents(studentsList);
+          if (studentsList.length > 0 && !selectedStudentUid) {
+            setSelectedStudentUid(studentsList[0].registration_no);
+            setSelectedStudentName(studentsList[0].name);
+            setSelectedStudentRoll(studentsList[0].rollno);
+          }
+          return studentsList;
+        }
+      }
       setMatrixStudents([]);
       setMatrixSubjects([]);
     } catch (err) {
-      console.warn('Failed to fetch SRMS attendance matrix:', err);
+      console.warn('Failed to fetch attendance matrix:', err);
       setMatrixStudents([]);
     } finally {
       setLoadingMatrix(false);

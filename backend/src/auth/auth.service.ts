@@ -824,7 +824,9 @@ export class AuthService {
       if (rows[0]) {
         tenantId = rows[0].id;
         tenantName = rows[0].name;
-        colgCd = rows[0].code ? String(rows[0].code) : '1';
+        colgCd = rows[0].code
+          ? String(rows[0].code)
+          : (resolvedSlug && resolvedSlug.toLowerCase().includes('srms') ? '1' : (resolvedSlug || ''));
         firmMode = rows[0].firm_mode || 'NONMED';
       } else {
         const firmRows = await this.ds.query(
@@ -906,7 +908,7 @@ export class AuthService {
         tenantSlug: resolvedSlug ?? tenantSlug ?? null,
         tenantName,
         collegeName: tenantName,
-        colgCd: colgCd ?? '1',
+        colgCd: colgCd ?? (resolvedSlug && resolvedSlug.toLowerCase().includes('srms') ? '1' : (resolvedSlug || '')),
         firm_mode: firmMode,
         firmMode,
       },

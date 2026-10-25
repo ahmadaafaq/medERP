@@ -324,8 +324,9 @@ export default function FacultyBatchAttendanceAnalytics() {
           }
         }
       }
+    }
 
-      // If SRMS attendance was empty, fallback gracefully to database students
+      // If attendance was empty or non-SRMS tenant, fallback gracefully to database students
       if (studs.length === 0) {
         const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
         const headers: Record<string, string> = {

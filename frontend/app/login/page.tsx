@@ -525,7 +525,8 @@ export default function LoginPage() {
     setErrorMsg('');
 
     const targetSlug = selectedCollege.slug || '';
-    const targetColgCd = String(selectedCollege.colg_cd || selectedCollege.code || '1');
+    const isSrms = targetSlug.toLowerCase().includes('srms');
+    const targetColgCd = String(selectedCollege.colg_cd || selectedCollege.code || (isSrms ? '1' : targetSlug));
 
     try {
       const res = await fetch(`${API_BASE}/auth/login${targetSlug ? `?tenant=${targetSlug}` : ''}`, {
@@ -545,13 +546,14 @@ export default function LoginPage() {
         const json = await res.json();
         const authData = json.data || json;
         if (authData.accessToken) {
-          const verifiedSlug = authData.user?.tenantSlug || authData.tenantSlug || targetSlug || 'srms-cet-bareilly';
+          const verifiedSlug = authData.user?.tenantSlug || authData.user?.tenant_slug || authData.tenantSlug || targetSlug || '';
+          const userColgCd = authData.user?.colgCd || targetColgCd;
           localStorage.setItem('token', authData.accessToken);
           localStorage.setItem('refreshToken', authData.refreshToken || '');
           localStorage.setItem('tenantSlug', verifiedSlug);
           localStorage.setItem('selectedTenant', verifiedSlug);
           localStorage.setItem('tenant', verifiedSlug);
-          localStorage.setItem('colg_cd', targetColgCd);
+          localStorage.setItem('colg_cd', userColgCd);
           const rawRole = (authData.user?.role || role || '').toUpperCase();
           const isHodUser =
             role === 'HOD' ||
@@ -581,7 +583,9 @@ export default function LoginPage() {
             authData.user?.collegeName ||
             authData.user?.tenantName ||
             selectedCollege?.name ||
-            (verifiedSlug === 'srms-cet-bareilly' ? 'SRMS CET, BAREILLY' : verifiedSlug.toUpperCase());
+            (verifiedSlug.toLowerCase().includes('srms')
+              ? 'SRMS CET, BAREILLY'
+              : verifiedSlug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()));
 
           localStorage.setItem('collegeName', institutionName);
           localStorage.setItem('college_name', institutionName);

@@ -3,6 +3,10 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
+import { getTenantSlug, getTenantName } from '@/hooks/useTenantAcademicData';
 
 interface Department {
   id: string;
@@ -110,19 +114,7 @@ interface StudentRow {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
-const getTenantSlug = (): string => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
-  }
-  return 'srms-cet-bareilly';
-};
 
-const getTenantName = (): string => {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantName') || localStorage.getItem('institutionName') || '';
-  }
-  return '';
-};
 
 const defaultSections: PaperSection[] = [
   {
@@ -269,6 +261,24 @@ export default function FacultyMarksPage() {
   const [saving, setSaving] = useState<boolean>(false);
   const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
 
+  // ── Dynamic Course & Subject Linker Cascade State ────────────────────
+  const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
+
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setAcademicCascade(state);
+    if (state.subject) {
+      setSelectedSubject(state.subject.id || state.subject.code || '');
+    }
+    if (state.batch) {
+      setSelectedBatch({
+        id: String(state.batch.batch_cd),
+        code: state.batch.batch_name || String(state.batch.batch_cd),
+        name: state.batch.batch_name || `Batch ${state.batch.batch_cd}`,
+        year: state.batch.year ? Number(state.batch.year) : undefined,
+      });
+    }
+  };
+
   // ── On Mount: fetch all metadata ──────────────────────────────────────
   useEffect(() => {
     setTenantName(getTenantName());
@@ -283,15 +293,15 @@ export default function FacultyMarksPage() {
     }
   }, [selectedDept, allSubjects]);
 
-  // ── When selections change, reload papers ────────────────────────────
+  // ── When selections or cascade change, reload papers ────────────────────────────
   useEffect(() => {
-    if (metaLoaded) fetchExamPapers();
-  }, [selectedDept, selectedSubject, selectedBatch, metaLoaded]);
+    fetchExamPapers();
+  }, [selectedDept, selectedSubject, selectedBatch, academicCascade]);
 
-  // ── When batch/paper changes, reload students ────────────────────────
+  // ── When batch/paper/section changes, reload students ────────────────────────
   useEffect(() => {
-    if (selectedBatch) fetchStudentRoster();
-  }, [selectedBatch, selectedPaperId]);
+    if (selectedBatch || academicCascade?.batch) fetchStudentRoster();
+  }, [selectedBatch, selectedPaperId, academicCascade?.section, academicCascade?.batch]);
 
   const fetchAllMetadata = async () => {
     const slug = getTenantSlug();
@@ -536,20 +546,23 @@ export default function FacultyMarksPage() {
 
   // Filter papers strictly by selected subject
   const filteredPapers = useMemo(() => {
-    if (allFetchedPapers.length === 0 || !selectedSubject) return [];
-    const selSubjObj = allSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
-    const subjCode = (selSubjObj?.code || '').toLowerCase().trim();
-    const subjName = (selSubjObj?.name || '').toLowerCase().trim();
+    if (allFetchedPapers.length === 0) return [];
+    const selSubjObj: any = academicCascade?.subject || allSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
+    const subjCode = (selSubjObj?.code || selSubjObj?.sub_cd || '').toLowerCase().trim();
+    const subjName = (selSubjObj?.name || selSubjObj?.sub_name || '').toLowerCase().trim();
     const subjId = String(selSubjObj?.id || selectedSubject || '').toLowerCase().trim();
+
+    if (!subjCode && !subjName && !subjId) return allFetchedPapers;
 
     return allFetchedPapers.filter(p => {
       if (p.subject_id && String(p.subject_id).toLowerCase() === subjId) return true;
       const pCode = p.code.toLowerCase();
       const pName = p.name.toLowerCase();
-      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjName))) return true;
+      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjCode))) return true;
+      if (subjName && pName.includes(subjName)) return true;
       return false;
     });
-  }, [allFetchedPapers, selectedSubject, allSubjects]);
+  }, [allFetchedPapers, selectedSubject, allSubjects, academicCascade]);
 
   const activePaper = useMemo(() =>
     filteredPapers.find(p => p.id === selectedPaperId) || null,
@@ -629,7 +642,17 @@ export default function FacultyMarksPage() {
     // 2. Fetch student list from database
     try {
       let url = `${API_BASE}/student-master?tenant=${slug}`;
-      if (selectedBatch?.id) url += `&batchId=${selectedBatch.id}`;
+      const batchId = academicCascade?.batch?.batch_cd || selectedBatch?.id;
+      if (batchId) url += `&batchId=${encodeURIComponent(String(batchId))}`;
+      if (academicCascade?.section && academicCascade.section !== 'all') {
+        url += `&section=${encodeURIComponent(academicCascade.section)}`;
+      }
+      if (academicCascade?.branch?.branch_cd) {
+        url += `&branchId=${encodeURIComponent(academicCascade.branch.branch_cd)}`;
+      }
+      if (academicCascade?.course?.course_cd) {
+        url += `&courseCd=${encodeURIComponent(academicCascade.course.course_cd)}`;
+      }
       const res = await fetch(url, { headers });
       if (res.ok) {
         const json = await res.json();
@@ -819,19 +842,26 @@ export default function FacultyMarksPage() {
             <div>
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-[11px] font-extrabold text-[#5B4BFF] uppercase tracking-widest">
-                  🏛️ {deptObj?.name || facultyDeptName}
+                  🏛️ {academicCascade?.course?.course_name || deptObj?.name || facultyDeptName}
                 </span>
-                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/20">
-                  Auto-Selected Department
-                </span>
-                {subjObj && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20">
-                    📖 {subjObj.name} ({subjObj.code})
+                {academicCascade?.branch && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/20">
+                    🌿 {academicCascade.branch.branch_name}
                   </span>
                 )}
-                {selectedBatch && (
+                {(academicCascade?.subject || subjObj) && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/20">
+                    📖 {academicCascade?.subject?.name || subjObj?.name}
+                  </span>
+                )}
+                {(academicCascade?.batch || selectedBatch) && (
                   <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/20">
-                    🎓 Batch: {selectedBatch.name || selectedBatch.code}
+                    🎓 Batch: {academicCascade?.batch?.batch_name || selectedBatch?.name || selectedBatch?.code}
+                  </span>
+                )}
+                {academicCascade?.section && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-[#F5F3FF] text-[#7C3AED] border border-[#7C3AED]/20">
+                    🏷️ Section: {academicCascade.section}
                   </span>
                 )}
               </div>
@@ -852,90 +882,15 @@ export default function FacultyMarksPage() {
             </button>
           </div>
 
-          {/* ── STEP 1: Cascading Filter Context Bar ── */}
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
-            <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-              <h3 className="text-xs font-black uppercase tracking-wider text-[#5B4BFF] flex items-center gap-2">
-                <span className="w-5 h-5 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center text-[10px] font-black">1</span>
-                STEP 1: SELECT DEPARTMENT → SUBJECT → BATCH → CBME YEAR → PROFESSIONAL PHASE
-              </h3>
-              <span className="text-[11px] font-mono font-extrabold text-[#7867FF]">
-                {tenantName || getTenantSlug()}
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5 pt-1 text-xs">
-              {/* 1. Department */}
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Department *</label>
-                <select
-                  value={selectedDept}
-                  onChange={e => { setSelectedDept(e.target.value); setSelectedSubject(''); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {departments.length === 0 ? <option value="">Loading Departments...</option> : (
-                    departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)
-                  )}
-                </select>
-              </div>
-
-              {/* 2. Subject */}
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Subject *</label>
-                <select
-                  value={selectedSubject}
-                  onChange={e => setSelectedSubject(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {subjectsForDept.length === 0 ? <option value="">Select Department First</option> : (
-                    subjectsForDept.map(s => <option key={s.id} value={s.id}>{s.name} ({s.code})</option>)
-                  )}
-                </select>
-              </div>
-
-              {/* 3. Batch */}
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Target Batch *</label>
-                <select
-                  value={selectedBatch?.id || ''}
-                  onChange={e => { const b = batches.find(b => b.id === e.target.value); setSelectedBatch(b || null); }}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {batches.length === 0 ? <option value="">Loading Batches...</option> : (
-                    batches.map(b => <option key={b.id} value={b.id}>{b.name || b.code}</option>)
-                  )}
-                </select>
-              </div>
-
-              {/* 4. CBME Year */}
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">CBME Year *</label>
-                <select
-                  value={selectedCbmeYearId}
-                  onChange={e => setSelectedCbmeYearId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {cbmeYears.length === 0 ? <option value="">Loading...</option> : (
-                    cbmeYears.map(y => <option key={y.id} value={y.id}>{y.label}</option>)
-                  )}
-                </select>
-              </div>
-
-              {/* 5. Professional Phase */}
-              <div>
-                <label className="block text-[11px] font-black text-[#1B1E28] dark:text-slate-200 uppercase mb-1.5">Professional Phase *</label>
-                <select
-                  value={selectedProfId}
-                  onChange={e => setSelectedProfId(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#5B4BFF] shadow-sm"
-                >
-                  {professionals.length === 0 ? <option value="">Loading...</option> : (
-                    professionals.map(p => <option key={p.id} value={p.id}>{p.name}</option>)
-                  )}
-                </select>
-              </div>
-            </div>
-          </div>
+          {/* ── STEP 1: Cascading Dynamic Course & Subject Linker (FacultyAcademicCascadingDropdown) ── */}
+          <FacultyAcademicCascadingDropdown
+            onSelectionChange={handleAcademicCascadeChange}
+            showSection={true}
+            showSubject={true}
+            onlyLinkedSubjects={true}
+            title="🏛️ Step 1: Faculty Academic Hierarchy Cascading"
+            subtitle="College → Course → Branch → Batch → Semester → Section → Linked Subject"
+          />
 
           {/* ── STEP 2: Designed & Approved Examination Paper Cards (Exact screenshot match) ── */}
           <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">

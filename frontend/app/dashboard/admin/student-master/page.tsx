@@ -1572,7 +1572,18 @@ export default function StudentMasterPage() {
           message: json.error || json.message || 'Error occurred while syncing students from SRMS portal.',
         });
       }
-    } c  // Download official Excel/CSV Sample Template for Student Bulk Import
+    } catch (err: any) {
+      setSyncResult({
+        success: false,
+        count: 0,
+        message: err.message || 'Network error while attempting to sync students.',
+      });
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  // Download official Excel/CSV Sample Template for Student Bulk Import
   const handleDownloadStudentSampleFormat = async () => {
     const slug = getActiveTenantSlug() || 'college';
     try {

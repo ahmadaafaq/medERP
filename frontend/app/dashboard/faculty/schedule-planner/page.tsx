@@ -2,13 +2,14 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
+import { getTenantSlug } from '@/hooks/useTenantAcademicData';
 
 const API_BASE = '/api/v1';
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 function getH() {
   if (typeof window === 'undefined') return { slug: '', headers: {} as any, facultyId: '', facultyEmpId: '', facultyName: '' };
-  const slug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').replace(/^tenant_/, '') || 'srms-cet-bareilly';
+  const slug = getTenantSlug();
   const token = localStorage.getItem('token') || '';
 
   let userObj: any = null;
