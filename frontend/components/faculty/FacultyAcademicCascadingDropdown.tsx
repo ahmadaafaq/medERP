@@ -107,7 +107,7 @@ export default function FacultyAcademicCascadingDropdown({
   const [loadingSemesters, setLoadingSemesters] = useState(false);
   const [loadingSubjects, setLoadingSubjects] = useState(false);
 
-  const tenantSlug = getTenantSlug() || 'srms-cet-bareilly';
+  const tenantSlug = getTenantSlug();
 
   // 0. Fetch Faculty's Linked Subjects on Mount (Course and Subject Linker concept)
   useEffect(() => {
@@ -169,9 +169,18 @@ export default function FacultyAcademicCascadingDropdown({
           initialColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '';
         }
         if (!initialColg && list.length > 0) {
-          initialColg = list[0].colg_cd;
+          let userColg = '';
+          try {
+            const rawUser = localStorage.getItem('user') || localStorage.getItem('auth_user');
+            if (rawUser) {
+              const u = JSON.parse(rawUser);
+              userColg = u.colg_cd || u.college_code || u.collegeId || '';
+            }
+          } catch {}
+          const match = userColg ? list.find((c) => c.colg_cd === String(userColg)) : null;
+          initialColg = match ? match.colg_cd : list[0].colg_cd;
         }
-        setColgCd(initialColg || '1');
+        setColgCd(initialColg || (tenantSlug && tenantSlug.toLowerCase().includes('srms') ? '1' : (list[0]?.colg_cd || '')));
       } catch (err) {
         console.warn('Failed to load colleges:', err);
       } finally {

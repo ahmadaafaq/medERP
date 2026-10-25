@@ -34,7 +34,7 @@ export function getTenantSlug(): string {
       const raw = localStorage.getItem('user') || localStorage.getItem('auth_user');
       if (raw) {
         const u = JSON.parse(raw);
-        slug = (u.tenantSlug || u.tenant || u.firmSlug || u.college_slug || '')
+        slug = (u.tenantSlug || u.tenant || u.firmSlug || u.college_slug || u.tenant_slug || u.slug || '')
           .replace(/^tenant_/, '').replace(/^tenant-/, '').trim();
       }
     } catch {}
@@ -58,7 +58,7 @@ export function isSrmsTenant(slug?: string): boolean {
 
 /** Get clean human-readable tenant or college name */
 export function getTenantName(): string {
-  if (typeof window === 'undefined') return 'SRMS College of Engineering & Technology';
+  if (typeof window === 'undefined') return 'University ERP';
   try {
     const raw = localStorage.getItem('user') || localStorage.getItem('auth_user');
     if (raw) {
@@ -71,7 +71,12 @@ export function getTenantName(): string {
     const name = localStorage.getItem('tenantName') || localStorage.getItem('collegeName');
     if (name) return name;
   } catch {}
-  return 'SRMS College of Engineering & Technology';
+  const slug = getTenantSlug();
+  if (slug) {
+    if (slug.toLowerCase().includes('srms')) return 'SRMS College of Engineering & Technology';
+    return slug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  }
+  return 'University ERP';
 }
 
 function getAuthToken(): string {

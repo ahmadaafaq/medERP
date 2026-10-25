@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { BarChart3, Users, AlertTriangle, CheckCircle2, ChevronDown, Download, Sparkles, BookOpen, TrendingUp, X, Search, Filter } from 'lucide-react';
+import { getTenantSlug, isSrmsTenant, fetchCourses, fetchBranches, fetchBatches } from '@/hooks/useTenantAcademicData';
 
 interface SubjectAttendance {
   id: string;
@@ -51,19 +52,19 @@ export default function FacultyBatchAttendanceAnalytics() {
   const [branchesList, setBranchesList] = useState<DropdownItem[]>([]);
   const [batchesList, setBatchesList] = useState<DropdownItem[]>([]);
 
-  const [selectedCollege, setSelectedCollege] = useState<string>('1');
-  const [selectedCourse, setSelectedCourse] = useState<string>('13'); // Default BCA
-  const [selectedBranch, setSelectedBranch] = useState<string>('1');
-  const [selectedBatch, setSelectedBatch] = useState<string>('2'); // Default 2025
-  const [selectedSem, setSelectedSem] = useState<string>('3'); // Default Sem 3
-  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>('srms-cet-bareilly');
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('');
+  const [selectedBranch, setSelectedBranch] = useState<string>('');
+  const [selectedBatch, setSelectedBatch] = useState<string>('');
+  const [selectedSem, setSelectedSem] = useState<string>('1');
+  const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>(getTenantSlug());
 
   const [studentRecords, setStudentRecords] = useState<StudentAttendanceRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'graph' | 'subjects'>('graph');
   const [activeBatch, setActiveBatch] = useState<BatchAnalyticsData>({
     batchName: 'Loading...',
     courseName: 'Academic Cohort',
-    semester: 'Semester 3',
+    semester: 'Semester 1',
     totalStudents: 0,
     classAverage: 0,
     goodAttendanceCount: 0,
@@ -86,31 +87,39 @@ export default function FacultyBatchAttendanceAnalytics() {
   }, []);
 
   const initAcademicHierarchy = async () => {
-    const slug = typeof window !== 'undefined'
-      ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly').replace(/^tenant_/, '').replace(/^tenant-/, '').trim()
-      : 'srms-cet-bareilly';
+    const slug = getTenantSlug();
+    const isSrms = isSrmsTenant(slug);
     const isMed = slug.includes('ims') || slug.includes('med');
     const userColg = typeof window !== 'undefined'
-      ? localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || (isMed ? '11' : '1')
-      : (isMed ? '11' : '1');
+      ? localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || (isSrms ? (isMed ? '11' : '1') : '')
+      : (isSrms ? (isMed ? '11' : '1') : '');
 
     setSelectedCollege(userColg);
     setSelectedTenantSlug(slug);
 
     try {
-      const crsRes = await fetch(`/api/srms/courses?colgcd=${userColg}&tenant=${slug}`).catch(() => null);
       let mappedCourses: DropdownItem[] = [];
-      if (crsRes && crsRes.ok) {
-        const j = await crsRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
-        mappedCourses = list.map((c: any) => ({
-          id: String(c.course_cd || c.code || '13'),
-          code: String(c.course_cd || c.code || '13'),
-          name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+      if (isSrms) {
+        const crsRes = await fetch(`/api/srms/courses?colgcd=${userColg}&tenant=${slug}`).catch(() => null);
+        if (crsRes && crsRes.ok) {
+          const j = await crsRes.json();
+          const list = Array.isArray(j) ? j : j.data || [];
+          mappedCourses = list.map((c: any) => ({
+            id: String(c.course_cd || c.code || '13'),
+            code: String(c.course_cd || c.code || '13'),
+            name: c.course_name || c.name || `Course ${c.course_cd || 13}`,
+          }));
+        }
+      } else {
+        const crsList = await fetchCourses(slug, userColg);
+        mappedCourses = crsList.map((c) => ({
+          id: String(c.course_cd),
+          code: String(c.course_cd),
+          name: c.course_name,
         }));
       }
 
-      if (mappedCourses.length === 0) {
+      if (mappedCourses.length === 0 && isSrms) {
         mappedCourses = isMed
           ? [{ id: '1', code: '1', name: 'MBBS' }]
           : [
@@ -123,10 +132,10 @@ export default function FacultyBatchAttendanceAnalytics() {
       }
 
       setCoursesList(mappedCourses);
-      const initialCourse = mappedCourses.find((c) => c.code === '13')?.code || mappedCourses[0].code;
+      const initialCourse = mappedCourses[0]?.code || '';
       setSelectedCourse(initialCourse);
 
-      await fetchBranchesAndBatches(userColg, initialCourse, mappedCourses, slug, '3');
+      await fetchBranchesAndBatches(userColg, initialCourse, mappedCourses, slug, '1');
     } catch (err) {
       console.warn('Error initializing academic hierarchy:', err);
     }
@@ -139,11 +148,12 @@ export default function FacultyBatchAttendanceAnalytics() {
     customSlug?: string,
     targetSem?: string
   ) => {
-    const effectiveColg = colg || selectedCollege || '1';
-    const effectiveCrs = crs || selectedCourse || '13';
-    const slug = customSlug || selectedTenantSlug || 'srms-cet-bareilly';
+    const slug = customSlug || selectedTenantSlug || getTenantSlug();
+    const isSrms = isSrmsTenant(slug);
+    const effectiveColg = colg || selectedCollege || (isSrms ? '1' : '');
+    const effectiveCrs = crs || selectedCourse || '';
     const activeCourses = customCourses || coursesList;
-    const semToUse = targetSem || selectedSem || '3';
+    const semToUse = targetSem || selectedSem || '1';
 
     try {
       const [brRes, btRes] = await Promise.all([
@@ -235,33 +245,34 @@ export default function FacultyBatchAttendanceAnalytics() {
     slugOverride?: string
   ) => {
     setLoading(true);
-    const slug = slugOverride || selectedTenantSlug || 'srms-cet-bareilly';
+    const slug = slugOverride || selectedTenantSlug || getTenantSlug();
     const effectiveCrsName = crsName || coursesList.find((c) => c.code === crs)?.name || 'Course';
     const effectiveBatchName = batchName || batchesList.find((b) => b.code === batch)?.name || 'Batch';
 
     try {
-      // 1. Fetch live attendance matrix from SRMS
-      const attPayload = {
-        colg_cd: Number(colg || 1),
-        course_cd: Number(crs || 13),
-        branch_cd: Number(branch || 1),
-        batch_cd: Number(batch || 2),
-        sem_cd: Number(sem || 3),
-        section_cd: 1,
-        fdt: '2026-07-02',
-        tdt: '2026-08-21',
-      };
-
-      const res = await fetch('/api/srms/student-attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(attPayload),
-      }).catch(() => null);
-
       let studs: StudentAttendanceRecord[] = [];
       let subjects: SubjectAttendance[] = [];
 
-      if (res && res.ok) {
+      // 1. Fetch live attendance matrix from SRMS ONLY if tenant is SRMS
+      if (isSrmsTenant(slug)) {
+        const attPayload = {
+          colg_cd: Number(colg || 1),
+          course_cd: Number(crs || 13),
+          branch_cd: Number(branch || 1),
+          batch_cd: Number(batch || 2),
+          sem_cd: Number(sem || 3),
+          section_cd: 1,
+          fdt: '2026-07-02',
+          tdt: '2026-08-21',
+        };
+
+        const res = await fetch('/api/srms/student-attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(attPayload),
+        }).catch(() => null);
+
+        if (res && res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           const subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
