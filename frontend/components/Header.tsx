@@ -357,15 +357,58 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
 
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
+      const currentSlug =
+        localStorage.getItem('tenantSlug') ||
+        localStorage.getItem('selectedTenant') ||
+        (user as any)?.tenantSlug ||
+        (user as any)?.tenant ||
+        '';
+
+      const currentColgCd =
+        localStorage.getItem('colg_cd') ||
+        (user as any)?.colg_cd ||
+        (user as any)?.collegeCode ||
+        '';
+
+      const currentCollegeName =
+        localStorage.getItem('collegeName') ||
+        (user as any)?.collegeName ||
+        (user as any)?.tenantName ||
+        '';
+
+      const currentLogo =
+        localStorage.getItem('college_logo') ||
+        localStorage.getItem('tenant_logo') ||
+        localStorage.getItem('logo_url') ||
+        (currentSlug === 'team-university' ? '/images/team-university-logo.png' : '');
+
+      // Remove sensitive authentication credentials only
       localStorage.removeItem('token');
       localStorage.removeItem('refreshToken');
       localStorage.removeItem('user');
       localStorage.removeItem('role');
       localStorage.removeItem('isOwner');
-      localStorage.removeItem('tenantSlug');
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       document.cookie = 'auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-      window.location.href = '/login';
+
+      // Preserve tenant branding context so the login page immediately reflects this institution
+      if (currentSlug) {
+        localStorage.setItem('tenantSlug', currentSlug);
+        localStorage.setItem('selectedTenant', currentSlug);
+      }
+      if (currentColgCd) {
+        localStorage.setItem('colg_cd', currentColgCd);
+      }
+      if (currentCollegeName) {
+        localStorage.setItem('collegeName', currentCollegeName);
+      }
+      if (currentLogo) {
+        localStorage.setItem('college_logo', currentLogo);
+        localStorage.setItem('tenant_logo', currentLogo);
+      }
+
+      const redirectUrl = currentSlug ? `/login?college=${encodeURIComponent(currentSlug)}` : '/login';
+      window.location.href = redirectUrl;
     }
   };
 

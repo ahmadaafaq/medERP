@@ -238,7 +238,9 @@ const DEFAULT_COLLEGES: College[] = [
     domain: 'team-university.mederp.app',
     plan: 'enterprise',
     primary_color: '#5B4BFF',
+    logo_url: '/images/team-university-logo.png',
     theme_config: {
+      logo_url: '/images/team-university-logo.png',
       primary_color: '#5B4BFF',
       secondary_color: '#7867FF',
       accent_color: '#F36C21',
@@ -260,6 +262,22 @@ export default function LoginPage() {
   const [selectedCollege, setSelectedCollege] = useState<College>(DEFAULT_COLLEGES[0]);
   const [isCollegePickerOpen, setIsCollegePickerOpen] = useState<boolean>(false);
   const [collegeSearchQuery, setCollegeSearchQuery] = useState<string>('');
+
+  const getCollegeLogoUrl = (colg?: College | null): string | null => {
+    if (!colg) return null;
+    if (colg.logo_url) return colg.logo_url;
+    if (colg.theme_config?.logo_url) return colg.theme_config.logo_url;
+    if (typeof window !== 'undefined') {
+      const savedSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
+      if (savedSlug && colg.slug && savedSlug.toLowerCase() === colg.slug.toLowerCase()) {
+        const stored = localStorage.getItem('college_logo') || localStorage.getItem('tenant_logo') || localStorage.getItem('logo_url');
+        if (stored) return stored;
+      }
+    }
+    if (colg.slug === 'team-university') return '/images/team-university-logo.png';
+    if (colg.slug && colg.slug.startsWith('srms')) return '/srms-logo.png';
+    return null;
+  };
 
   // ─── 2. Auth Credentials & Role State ──────────────────────────────────────
   const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'HOD' | 'DQAC' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
@@ -360,10 +378,26 @@ export default function LoginPage() {
       if (urlCollege) {
         const found = matchCollege(urlCollege);
         if (found) {
-          setSelectedCollege(found);
+          const resolvedLogo = getCollegeLogoUrl(found);
+          const enriched = {
+            ...found,
+            logo_url: resolvedLogo || found.logo_url,
+            theme_config: {
+              ...(found.theme_config || {}),
+              logo_url: resolvedLogo || found.theme_config?.logo_url,
+            },
+          };
+          setSelectedCollege(enriched);
           localStorage.setItem('colg_cd', String(found.colg_cd || found.code));
           localStorage.setItem('tenantSlug', found.slug);
           localStorage.setItem('selectedTenant', found.slug);
+          localStorage.setItem('institutionSlug', found.slug);
+          localStorage.setItem('collegeName', found.name);
+          localStorage.setItem('colg_name', found.name);
+          if (resolvedLogo) {
+            localStorage.setItem('college_logo', resolvedLogo);
+            localStorage.setItem('tenant_logo', resolvedLogo);
+          }
           return;
         }
       }
@@ -373,7 +407,20 @@ export default function LoginPage() {
       if (savedColgCd || savedSlug) {
         const found = matchCollege(savedSlug) || matchCollege(savedColgCd);
         if (found) {
-          setSelectedCollege(found);
+          const resolvedLogo = getCollegeLogoUrl(found);
+          const enriched = {
+            ...found,
+            logo_url: resolvedLogo || found.logo_url,
+            theme_config: {
+              ...(found.theme_config || {}),
+              logo_url: resolvedLogo || found.theme_config?.logo_url,
+            },
+          };
+          setSelectedCollege(enriched);
+          if (resolvedLogo) {
+            localStorage.setItem('college_logo', resolvedLogo);
+            localStorage.setItem('tenant_logo', resolvedLogo);
+          }
           return;
         } else if (savedSlug && savedSlug !== 'srms-cet-bareilly') {
           const storedName =
@@ -381,6 +428,11 @@ export default function LoginPage() {
             localStorage.getItem('college_name') ||
             localStorage.getItem('tenantName') ||
             savedSlug.replace(/[-_]+/g, ' ').toUpperCase();
+          const storedLogo =
+            localStorage.getItem('college_logo') ||
+            localStorage.getItem('tenant_logo') ||
+            localStorage.getItem('logo_url') ||
+            (savedSlug === 'team-university' ? '/images/team-university-logo.png' : undefined);
           const dynamicCol: College = {
             code: savedColgCd || savedSlug,
             colg_cd: savedColgCd || savedSlug,
@@ -388,7 +440,9 @@ export default function LoginPage() {
             slug: savedSlug,
             domain: `${savedSlug}.mederp.app`,
             primary_color: '#5B4BFF',
+            logo_url: storedLogo,
             theme_config: {
+              logo_url: storedLogo,
               primary_color: '#5B4BFF',
               secondary_color: '#7867FF',
               accent_color: '#F36C21',
@@ -431,7 +485,12 @@ export default function LoginPage() {
             if (item.is_active === false) return; // Skip deactivated
             const slug = item.slug || `srms-${item.code || item.colg_cd}`;
             const code = String(item.code || item.colg_cd || '1');
-            const logoUrl = item.logo_url || (slug.startsWith('srms') ? '/srms-logo.png' : undefined);
+            const existing = map.get(slug);
+            const logoUrl =
+              item.logo_url ||
+              item.theme_config?.logo_url ||
+              existing?.logo_url ||
+              (slug === 'team-university' ? '/images/team-university-logo.png' : (slug.startsWith('srms') ? '/srms-logo.png' : undefined));
             if (slug && item.name) {
               map.set(slug, {
                 id: item.id,
@@ -475,7 +534,12 @@ export default function LoginPage() {
             }
             if (f.slug && f.title) {
               const primaryColor = (f.theme_config && f.theme_config.primary_color) || f.theme_color || '#5B4BFF';
-              const logoUrl = f.logo_url || (f.theme_config && f.theme_config.logo_url) || (f.slug.startsWith('srms') ? '/srms-logo.png' : undefined);
+              const existing = map.get(f.slug);
+              const logoUrl =
+                f.logo_url ||
+                (f.theme_config && f.theme_config.logo_url) ||
+                existing?.logo_url ||
+                (f.slug === 'team-university' ? '/images/team-university-logo.png' : (f.slug.startsWith('srms') ? '/srms-logo.png' : undefined));
               map.set(f.slug, {
                 id: f.id,
                 code: f.slug,
@@ -521,6 +585,18 @@ export default function LoginPage() {
             }
             return first;
           }
+          const matched = map.get(prev.slug);
+          if (matched && (!prev.logo_url || !prev.theme_config?.logo_url)) {
+            const logo = matched.logo_url || matched.theme_config?.logo_url || getCollegeLogoUrl(matched);
+            if (logo) {
+              return {
+                ...prev,
+                ...matched,
+                logo_url: logo,
+                theme_config: { ...(prev.theme_config || {}), ...(matched.theme_config || {}), logo_url: logo },
+              };
+            }
+          }
           return prev;
         });
       }
@@ -557,6 +633,11 @@ export default function LoginPage() {
       localStorage.setItem('tenant', slug);
       localStorage.setItem('collegeName', college.name);
       localStorage.setItem('colg_name', college.name);
+      const logo = getCollegeLogoUrl(college);
+      if (logo) {
+        localStorage.setItem('college_logo', logo);
+        localStorage.setItem('tenant_logo', logo);
+      }
       document.cookie = `auth_tenant=${slug}; path=/; max-age=604800; SameSite=Lax`;
     }
   };
@@ -887,21 +968,17 @@ export default function LoginPage() {
           {/* College Logo & Institution Name */}
           <div className="text-center space-y-1">
             <div className="flex justify-center">
-              {selectedCollege.logo_url || selectedCollege.theme_config?.logo_url ? (
+              {getCollegeLogoUrl(selectedCollege) ? (
                 <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
                   <img
-                    src={selectedCollege.logo_url || selectedCollege.theme_config?.logo_url}
+                    src={getCollegeLogoUrl(selectedCollege)!}
                     alt={selectedCollege.name}
                     className="w-full h-full object-contain"
                   />
                 </div>
-              ) : selectedCollege.slug && selectedCollege.slug.startsWith('srms') ? (
-                <div className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl bg-white p-1 shadow-[0_4px_20px_rgba(243,108,33,0.15)] border-2 border-[#F36C21]/20 flex items-center justify-center overflow-hidden">
-                  <img src="/srms-logo.png" alt={selectedCollege.name} className="w-full h-full object-contain" />
-                </div>
               ) : (
                 <div
-                  className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl text-white font-black text-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex items-center justify-center"
+                  className="w-13 h-13 sm:w-14 sm:h-14 rounded-2xl text-white font-black text-xl shadow-[0_4px_20px_rgba(0,0,0,0.12)] flex items-center justify-center uppercase"
                   style={{ backgroundColor: currentTheme.primary || '#F36C21' }}
                 >
                   {selectedCollege.name ? selectedCollege.name.charAt(0).toUpperCase() : 'U'}
@@ -927,20 +1004,18 @@ export default function LoginPage() {
               className="p-2.5 rounded-xl bg-[#FFF8F4] hover:bg-[#FFF2EA] border border-[#FBE0D0] hover:border-[#F36C21]/60 cursor-pointer transition-all flex items-center justify-between gap-2 text-xs group shadow-2xs"
             >
               <div className="flex items-center gap-2 min-w-0">
-                {selectedCollege.logo_url || selectedCollege.theme_config?.logo_url ? (
+                {getCollegeLogoUrl(selectedCollege) ? (
                   <div className="w-6 h-6 rounded-md bg-white p-0.5 shrink-0 flex items-center justify-center overflow-hidden shadow-xs border border-[#E2E8F0]">
-                    <img src={selectedCollege.logo_url || selectedCollege.theme_config?.logo_url} alt={selectedCollege.name} className="w-full h-full object-contain" />
-                  </div>
-                ) : selectedCollege.slug && selectedCollege.slug.startsWith('srms') ? (
-                  <div className="w-6 h-6 rounded-md bg-white p-0.5 shrink-0 flex items-center justify-center overflow-hidden shadow-xs border border-[#E2E8F0]">
-                    <img src="/srms-logo.png" alt={selectedCollege.name} className="w-full h-full object-contain" />
+                    <img src={getCollegeLogoUrl(selectedCollege)!} alt={selectedCollege.name} className="w-full h-full object-contain" />
                   </div>
                 ) : (
                   <span
-                    className="w-6 h-6 rounded-md text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
+                    className="w-6 h-6 rounded-md text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs overflow-hidden uppercase"
                     style={{ backgroundColor: currentTheme.primary || '#F36C21' }}
                   >
-                    {selectedCollege.code || '1'}
+                    {selectedCollege.code && selectedCollege.code.length <= 3
+                      ? selectedCollege.code
+                      : (selectedCollege.name?.charAt(0).toUpperCase() || 'U')}
                   </span>
                 )}
                 <div className="min-w-0">
@@ -965,7 +1040,7 @@ export default function LoginPage() {
                 />
                 <div className="overflow-y-auto space-y-1 pr-1 flex-1 divide-y divide-[#F8FAFC]">
                   {filteredColleges.map((colg) => {
-                    const colgLogo = colg.logo_url || colg.theme_config?.logo_url || (colg.slug.startsWith('srms') ? '/srms-logo.png' : null);
+                    const colgLogo = getCollegeLogoUrl(colg);
                     return (
                       <div
                         key={colg.slug || colg.code}
@@ -982,10 +1057,10 @@ export default function LoginPage() {
                             </div>
                           ) : (
                             <span
-                              className="w-5 h-5 rounded flex items-center justify-center font-bold text-[8px] text-white shrink-0"
+                              className="w-5 h-5 rounded flex items-center justify-center font-bold text-[8px] text-white shrink-0 overflow-hidden uppercase"
                               style={{ backgroundColor: colg.primary_color || '#5B4BFF' }}
                             >
-                              {colg.code || '1'}
+                              {colg.code && colg.code.length <= 3 ? colg.code : (colg.name?.charAt(0).toUpperCase() || 'U')}
                             </span>
                           )}
                           <div className="min-w-0">

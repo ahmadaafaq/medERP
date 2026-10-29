@@ -40,7 +40,8 @@ export default function DashboardRootLayout({
         if (pathname?.startsWith('/dashboard/owner') || pathname?.startsWith('/dashboard/superadmin')) {
           router.replace('/access/superadmin');
         } else {
-          router.replace('/login');
+          const tenant = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
+          router.replace(tenant ? `/login?college=${encodeURIComponent(tenant)}` : '/login');
         }
         return;
       }
