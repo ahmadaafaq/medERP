@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
 import {
   getTenantSlug,
   isSrmsTenant,
@@ -27,6 +30,7 @@ interface MatrixStudent {
   rollno: string;
   registration_no: string;
   name: string;
+  photo_url?: string | null;
   course: string;
   batch: string;
   semester: string;
@@ -126,7 +130,13 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   // User Auth & Tenant Context State
   const [userRole, setUserRole] = useState<string>(role || 'STUDENT');
   const [userColgCd, setUserColgCd] = useState<string>('1');
-  const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
+  const [userTenantSlug, setUserTenantSlug] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const slug = getTenantSlug();
+      if (slug) return slug;
+    }
+    return 'team-university';
+  });
 
   const [selectedCollege, setSelectedCollege] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -178,7 +188,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
     return '3';
   });
-  const [selectedSection, setSelectedSection] = useState('all'); // 'all' = All Sections, 1 = Section A, 2 = Section B
+  const [selectedSection, setSelectedSection] = useState('1'); // Default auto-selected Section 1 (Section A)
 
   // Date Range States: default from start of semester through current month end
   const [fromDate, setFromDate] = useState('2026-07-01');
@@ -205,6 +215,31 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
   const [matrixStudents, setMatrixStudents] = useState<MatrixStudent[]>([]);
   const [matrixSearchQuery, setMatrixSearchQuery] = useState('');
   const [loadingMatrix, setLoadingMatrix] = useState(false);
+
+  // Cascading Academic Linker & Role Scoping States
+  const [cascadeState, setCascadeState] = useState<AcademicCascadingState | null>(null);
+  const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
+  const [hodFacultyId, setHodFacultyId] = useState<string>('ALL');
+  const [departmentFacultyList, setDepartmentFacultyList] = useState<{ id: string; name: string; emp_id?: string }[]>([]);
+
+  // Dynamic Role Scoping (Faculty vs HOD vs Admin)
+  const storedRole = typeof window !== 'undefined' ? (localStorage.getItem('role') || '').toUpperCase() : '';
+  const effectiveRole = (role || storedRole || 'STUDENT').toUpperCase();
+  const isHodUser =
+    effectiveRole === 'HOD' ||
+    effectiveRole.includes('HOD') ||
+    (typeof window !== 'undefined' && (
+      (localStorage.getItem('designation') || '').toUpperCase().includes('HOD') ||
+      (localStorage.getItem('assigned_roles') || '').toUpperCase().includes('HOD')
+    ));
+  const isAdminUser =
+    effectiveRole === 'ADMIN' ||
+    effectiveRole === 'SUPER_ADMIN' ||
+    effectiveRole === 'TENANT_ADMIN' ||
+    role === 'ADMIN' ||
+    role === 'SUPER_ADMIN';
+  const isFacultyUser = !isAdminUser && !isStudentRole && (effectiveRole === 'FACULTY' || !isHodUser);
+  const isSrms = isSrmsTenant(userTenantSlug);
 
   // Pagination & Quick Filter States
   const [currentPage, setCurrentPage] = useState(1);
@@ -411,13 +446,17 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
   };
 
-  const handleCourseChange = (courseCode: string) => {
+  const handleCourseChange = async (courseCode: string) => {
     setSelectedCourse(courseCode);
-    const instantBranches = CET_COURSE_BRANCHES[courseCode];
-    if (instantBranches && instantBranches.length > 0) {
-      setBranchesList(instantBranches);
-      setSelectedBranch(instantBranches[0].code);
+    const slug = userTenantSlug || getTenantSlug();
+    if (isSrmsTenant(slug)) {
+      const instantBranches = CET_COURSE_BRANCHES[courseCode];
+      if (instantBranches && instantBranches.length > 0) {
+        setBranchesList(instantBranches);
+        setSelectedBranch(instantBranches[0].code);
+      }
     }
+    await fetchBranchesAndBatches(selectedCollege, courseCode, coursesList, slug);
   };
 
   const fetchAcademicMetadata = async () => {
@@ -590,7 +629,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       } else {
         const [brList, btList] = await Promise.all([
           fetchBranches(slug, effectiveCrs, effectiveColg),
-          fetchBatches(slug, effectiveCrs, effectiveColg),
+          fetchBatches(slug, effectiveCrs),
         ]);
         const mappedBranches = brList.map((b) => ({ id: b.branch_cd, code: b.branch_cd, name: b.branch_name }));
         const mappedBatches = btList.map((b) => ({ id: String(b.batch_cd), code: String(b.batch_cd), name: b.batch_name }));
@@ -604,71 +643,58 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     }
   };
 
-  // Fetch Live Attendance Matrix (SRMS for SRMS tenants, PostgreSQL for non-SRMS)
-  const fetchLiveAttendanceMatrix = async () => {
+  // Fetch Live Attendance Matrix (Unified for SRMS and non-SRMS tenants via /api/srms/student-attendance)
+  const fetchLiveAttendanceMatrix = async (customParams?: {
+    college?: string;
+    course?: string;
+    branch?: string;
+    batch?: string;
+    sem?: string;
+    section?: string;
+    subject?: string;
+    fdt?: string;
+    tdt?: string;
+  }) => {
     const slug = userTenantSlug || getTenantSlug();
     try {
       setLoadingMatrix(true);
-      if (isSrmsTenant(slug)) {
-        const payload = {
-          colg_cd: Number(selectedCollege || 1),
-          course_cd: Number(selectedCourse || 4),
-          branch_cd: Number(selectedBranch || 1),
-          batch_cd: Number(selectedBatch || 16),
-          sem_cd: Number(selectedSem || 3),
-          section_cd: selectedSection === 'all' ? null : Number(selectedSection || 1),
-          fdt: fromDate,
-          tdt: toDate,
-          tenantSlug: slug,
-        };
+      const effectiveColg = customParams?.college || selectedCollege || 1;
+      const effectiveCourse = customParams?.course || selectedCourse || 1;
+      const effectiveBranch = customParams?.branch || selectedBranch || 1;
+      const effectiveBatch = customParams?.batch || selectedBatch || 1;
+      const effectiveSem = customParams?.sem || selectedSem || 1;
+      const effectiveSec = customParams?.section !== undefined ? customParams.section : selectedSection;
+      const effectiveSub = customParams?.subject !== undefined ? customParams.subject : selectedSubjectFilter;
+      const effectiveFdt = customParams?.fdt || fromDate;
+      const effectiveTdt = customParams?.tdt || toDate;
 
-        const res = await fetch('/api/srms/student-attendance', {
-          method: 'POST',
-          cache: 'no-store',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-tenant-slug': slug,
-          },
-          body: JSON.stringify(payload),
-        });
+      const payload = {
+        colg_cd: effectiveColg,
+        course_cd: effectiveCourse,
+        branch_cd: effectiveBranch,
+        batch_cd: effectiveBatch,
+        sem_cd: effectiveSem,
+        section_cd: effectiveSec === 'all' ? null : effectiveSec,
+        subject_cd: effectiveSub === 'all' || !effectiveSub ? null : effectiveSub,
+        fdt: effectiveFdt,
+        tdt: effectiveTdt,
+        tenantSlug: slug,
+      };
 
-        if (res.ok) {
-          const json = await res.json();
-          if (json.success && Array.isArray(json.data)) {
-            let subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
+      const res = await fetch('/api/srms/student-attendance', {
+        method: 'POST',
+        cache: 'no-store',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': slug,
+        },
+        body: JSON.stringify(payload),
+      });
 
-          if (role === 'FACULTY' && typeof window !== 'undefined') {
-            try {
-              let fid = '';
-              const raw = localStorage.getItem('user');
-              if (raw) {
-                const u = JSON.parse(raw);
-                fid = u.emp_id || u.faculty_id || u.id || u.sub || '';
-              }
-              if (!fid) fid = localStorage.getItem('empid') || localStorage.getItem('emp_id') || localStorage.getItem('facultyId') || '';
-              if (fid) {
-                const token = localStorage.getItem('token') || '';
-                const facRes = await fetch(
-                  `/api/v1/admin-master/faculty-subjects?tenant=${encodeURIComponent(userTenantSlug || 'srms-cet-bareilly')}&facultyId=${encodeURIComponent(fid)}`,
-                  { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) } }
-                ).catch(() => null);
-                if (facRes && facRes.ok) {
-                  const fj = await facRes.json();
-                  const fItems = Array.isArray(fj.data) ? fj.data : Array.isArray(fj) ? fj : [];
-                  if (fItems.length > 0) {
-                    const linkedCodes = new Set(fItems.map((f: any) => String(f.subject_code || f.subject_id || '').trim().toLowerCase()));
-                    const filtered = subList.filter((s) =>
-                      linkedCodes.has(String(s.sub_cd || '').trim().toLowerCase()) ||
-                      linkedCodes.has(String(s.sub_name || '').trim().toLowerCase())
-                    );
-                    if (filtered.length > 0) subList = filtered;
-                  }
-                }
-              }
-            } catch (err) {
-              console.warn('[AttendancePortal] Faculty subject filtering note:', err);
-            }
-          }
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && Array.isArray(json.data)) {
+          const subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
 
           setMatrixSubjects(subList);
 
@@ -702,10 +728,18 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               rollno: stud.stud_roll_no || stud.stud_reg_no,
               registration_no: stud.stud_reg_no,
               name: stud.stud_name,
-              course: stud.course_name || (String(selectedCourse) === '4' ? 'MBA' : 'BCA'),
-              batch: stud.batch_name ? `${stud.batch_name} Batch` : '2025 Batch',
+              photo_url: stud.photo_url || null,
+              course: stud.course_name || (coursesList.find((c) => c.code === selectedCourse)?.name) || 'Course',
+              batch: stud.batch_name ? (stud.batch_name.startsWith('Batch') ? stud.batch_name : `Batch ${stud.batch_name}`) : 'Batch',
               semester: String(selectedSem),
-              section: stud.sec_cd ? (Number(stud.sec_cd) === 2 ? 'B (2)' : 'A (1)') : (Number(stud.section_cd) === 2 ? 'B (2)' : 'A (1)'),
+              section: (() => {
+                const code = Number(stud.sec_cd || stud.section_cd);
+                if (code === 1) return 'A (1)';
+                if (code === 2) return 'B (2)';
+                if (code === 3) return 'C (3)';
+                if (code === 4) return 'D (4)';
+                return stud.sec_cd ? `Sec ${stud.sec_cd}` : 'A (1)';
+              })(),
               TotalPresentPercentage: stud.TotalPresentPercentage || '0.00%',
               attendance: attRecord,
             };
@@ -727,47 +761,6 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               setSelectedStudentRoll(matched.rollno);
             }
           } else if (studentsList.length > 0 && !selectedStudentUid) {
-            setSelectedStudentUid(studentsList[0].registration_no);
-            setSelectedStudentName(studentsList[0].name);
-            setSelectedStudentRoll(studentsList[0].rollno);
-          }
-          return studentsList;
-        }
-      }
-    } else {
-        // Non-SRMS Tenant: Query PostgreSQL students directly
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-        const studRes = await fetch(
-          `/api/v1/users/students?tenant=${slug}&courseCd=${selectedCourse}&batchCd=${selectedBatch}&semCd=${selectedSem}`,
-          { headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'x-tenant-slug': slug } }
-        ).catch(() => null);
-
-        if (studRes && studRes.ok) {
-          const studJson = await studRes.json();
-          const rawList = Array.isArray(studJson.data?.data)
-            ? studJson.data.data
-            : Array.isArray(studJson.data)
-            ? studJson.data
-            : Array.isArray(studJson)
-            ? studJson
-            : [];
-
-          const studentsList: MatrixStudent[] = rawList.map((stud: any, idx: number) => ({
-            s_no: idx + 1,
-            college: typeof window !== 'undefined' ? (localStorage.getItem('tenantName') || localStorage.getItem('collegeName') || 'Institution') : 'Institution',
-            rollno: stud.rollno || stud.rollNo || stud.registration_no || stud.regNo || `#${idx + 1}`,
-            registration_no: stud.registration_no || stud.regNo || stud.rollno || `#${idx + 1}`,
-            name: stud.name || 'Student',
-            course: coursesList.find((c) => c.code === selectedCourse)?.name || 'Course',
-            batch: batchesList.find((b) => b.code === selectedBatch)?.name || 'Batch',
-            semester: String(selectedSem),
-            section: stud.section || 'A (1)',
-            TotalPresentPercentage: `${parseFloat(stud.attendance_percentage || stud.attendancePct || 80).toFixed(2)}%`,
-            attendance: {},
-          }));
-
-          setMatrixStudents(studentsList);
-          if (studentsList.length > 0 && !selectedStudentUid) {
             setSelectedStudentUid(studentsList[0].registration_no);
             setSelectedStudentName(studentsList[0].name);
             setSelectedStudentRoll(studentsList[0].rollno);
@@ -877,9 +870,13 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       setLectureDetails([]);
       setLoadingLectures(true);
 
+      const slug = userTenantSlug || getTenantSlug();
       const res = await fetch('/api/srms/lecture-status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-tenant-slug': slug,
+        },
         body: JSON.stringify({
           ddl_sub: subCd,
           ddl_batch: selectedBatch || '16',
@@ -889,6 +886,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
           sem_cd: selectedSem || '3',
           section_cd: selectedSection || '1',
           uid: studReg || selectedStudentUid || '',
+          tenantSlug: slug,
         }),
       });
 
@@ -997,6 +995,141 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     return { total, present, absent, pct };
   }, [lectureDetails]);
 
+  // Load Department Faculty List for HOD oversight
+  useEffect(() => {
+    if (!isHodUser) return;
+    let active = true;
+    async function loadDeptFaculty() {
+      try {
+        const slug = userTenantSlug || getTenantSlug();
+        const res = await fetch(`/api/srms/timetable-subjects?slug=${slug}&course=all&colgcd=1&branch=1&batch=1&semester=1&section=1`).catch(() => null);
+        if (res && res.ok) {
+          const json = await res.json();
+          const list = Array.isArray(json) ? json : json.data || [];
+          const facultyMap = new Map<string, { id: string; name: string; emp_id?: string }>();
+          list.forEach((item: any) => {
+            const fid = item.faculty_id || item.empid;
+            const fname = item.faculty_name || item.EmpName;
+            if (fid && fname && !facultyMap.has(String(fid))) {
+              facultyMap.set(String(fid), { id: String(fid), name: String(fname), emp_id: String(item.empid || '') });
+            }
+          });
+          if (active && facultyMap.size > 0) {
+            setDepartmentFacultyList(Array.from(facultyMap.values()));
+          }
+        }
+      } catch (err) {
+        console.warn('Failed to load department faculty for HOD:', err);
+      }
+    }
+    loadDeptFaculty();
+    return () => { active = false; };
+  }, [isHodUser, userTenantSlug]);
+
+  // Dynamic Course and Subject Linker Cascade Handler (course_subject_link_Faculty.md)
+  const handleAcademicCascadeChange = (state: AcademicCascadingState) => {
+    setCascadeState(state);
+    const colg = state.college?.colg_cd ? String(state.college.colg_cd) : '';
+    const crs = state.course?.course_cd ? String(state.course.course_cd) : '';
+    const br = state.branch?.branch_cd ? String(state.branch.branch_cd) : '';
+    const bat = state.batch?.batch_cd ? String(state.batch.batch_cd) : '';
+    const sem = state.semester?.sem_cd ? String(state.semester.sem_cd) : '';
+    const sec = state.section !== undefined && state.section !== null ? String(state.section) : 'all';
+    const sub = state.subject?.code || state.subject?.sub_cd || '';
+
+    if (colg) setSelectedCollege(colg);
+    if (crs) setSelectedCourse(crs);
+    if (br) setSelectedBranch(br);
+    if (bat) setSelectedBatch(bat);
+    if (sem) setSelectedSem(sem);
+    setSelectedSection(sec);
+    if (sub) setSelectedSubjectFilter(sub);
+
+    // Live Downstream Synchronization: immediately refresh student attendance matrix
+    fetchLiveAttendanceMatrix({
+      college: colg || undefined,
+      course: crs || undefined,
+      branch: br || undefined,
+      batch: bat || undefined,
+      sem: sem || undefined,
+      section: sec,
+      subject: sub || undefined,
+    });
+  };
+
+  // Subject Filter Change (Subject Wise or All)
+  const handleSubjectFilterChange = (subVal: string) => {
+    setSelectedSubjectFilter(subVal);
+    fetchLiveAttendanceMatrix({
+      subject: subVal === 'all' ? undefined : subVal,
+    });
+  };
+
+  // Quick Date Preset Helper
+  const setQuickDatePreset = (preset: 'TODAY' | 'THIS_WEEK' | 'THIS_MONTH' | 'SEMESTER') => {
+    const now = new Date();
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const todayStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+
+    if (preset === 'TODAY') {
+      setFromDate(todayStr);
+      setToDate(todayStr);
+      fetchLiveAttendanceMatrix({ fdt: todayStr, tdt: todayStr });
+    } else if (preset === 'THIS_WEEK') {
+      const day = now.getDay();
+      const diffToMon = now.getDate() - day + (day === 0 ? -6 : 1);
+      const mon = new Date(now.setDate(diffToMon));
+      const sun = new Date(mon);
+      sun.setDate(mon.getDate() + 6);
+      const fdt = `${mon.getFullYear()}-${pad(mon.getMonth() + 1)}-${pad(mon.getDate())}`;
+      const tdt = `${sun.getFullYear()}-${pad(sun.getMonth() + 1)}-${pad(sun.getDate())}`;
+      setFromDate(fdt);
+      setToDate(tdt);
+      fetchLiveAttendanceMatrix({ fdt, tdt });
+    } else if (preset === 'THIS_MONTH') {
+      const firstDay = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-01`;
+      const lastDayNum = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const lastDay = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDayNum)}`;
+      setFromDate(firstDay);
+      setToDate(lastDay);
+      fetchLiveAttendanceMatrix({ fdt: firstDay, tdt: lastDay });
+    } else if (preset === 'SEMESTER') {
+      const firstDay = '2026-07-01';
+      const lastDayNum = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const lastDay = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(lastDayNum)}`;
+      setFromDate(firstDay);
+      setToDate(lastDay);
+      fetchLiveAttendanceMatrix({ fdt: firstDay, tdt: lastDay });
+    }
+  };
+
+  // Filtered Subject Columns: Subject Wise vs All
+  const displayedSubjects = useMemo(() => {
+    if (selectedSubjectFilter === 'all') return matrixSubjects;
+    const filtered = matrixSubjects.filter(
+      (s) =>
+        s.sub_cd === selectedSubjectFilter ||
+        s.sub_name.toLowerCase().trim() === selectedSubjectFilter.toLowerCase().trim() ||
+        s.sub_name.toLowerCase().includes(selectedSubjectFilter.toLowerCase())
+    );
+    return filtered.length > 0 ? filtered : matrixSubjects;
+  }, [matrixSubjects, selectedSubjectFilter]);
+
+  // Combined Unique Subject List for Dropdown
+  const allAvailableSubjects = useMemo(() => {
+    const map = new Map<string, { sub_cd: string; sub_name: string }>();
+    matrixSubjects.forEach((s) => map.set(s.sub_cd || s.sub_name, s));
+    if (cascadeState?.allSubjects) {
+      cascadeState.allSubjects.forEach((s) => {
+        const cd = s.code || s.sub_cd || s.id;
+        if (!map.has(cd)) {
+          map.set(cd, { sub_cd: cd, sub_name: s.name || s.sub_name || cd });
+        }
+      });
+    }
+    return Array.from(map.values());
+  }, [matrixSubjects, cascadeState]);
+
   return (
     <div className="space-y-5">
       {/* Alert Banner */}
@@ -1017,208 +1150,195 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
         </div>
       )}
 
-      {/* ─── 1. GLOBAL FILTER & DATE RANGE BAR ───────── */}
-      <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft space-y-4">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-          <div>
-            <h3 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
-              <span>🏛️</span>
-              <span>Attendance Filtering &amp; Date Range</span>
-            </h3>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-              Select academic criteria, date range, and sync student attendance dynamically from SRMS.
-            </p>
-          </div>
-
-          <button
-            type="button"
-            onClick={handleManualSync}
-            disabled={syncingLive}
-            className="px-3.5 py-1.5 bg-[#5B4BFF] hover:bg-[#4736E6] text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50 active:scale-95 shrink-0"
-          >
-            <span className={syncingLive ? 'animate-spin' : ''}>🔄</span>
-            <span>{syncingLive ? 'Syncing...' : 'Sync Live Attendance'}</span>
-          </button>
-        </div>
-
-        {/* Filters Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-2.5 text-xs">
-          {/* 1. College */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
-              <span>🏛️</span> 1. College
-            </label>
-            <div className="relative flex items-center">
-              <select
-                value={selectedCollege}
-                disabled={collegesList.length === 0}
-                onChange={(e) => handleCollegeChange(e.target.value)}
-                className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 pr-8 font-bold disabled:cursor-not-allowed appearance-none cursor-pointer truncate text-[11px]"
-              >
-                {collegesList.map((c) => (
-                  <option key={c.id} value={c.code}>
-                    [#{c.code}] {c.name}
-                  </option>
-                ))}
-              </select>
-              <div className="absolute right-2 pointer-events-none flex items-center gap-1">
-                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                </svg>
+      {/* ─── 1. DYNAMIC COURSE & SUBJECT LINKER CASCADE & DATE RANGE BAR ───────── */}
+      <div className="space-y-4">
+        {/* HOD Faculty Selector (when user is HOD, allows viewing any faculty of same department) */}
+        {isHodUser && (
+          <div className="bg-gradient-to-r from-indigo-900/10 via-purple-900/10 to-transparent dark:from-indigo-950/40 dark:via-purple-950/30 dark:to-slate-900 rounded-[22px] p-4 border border-indigo-200/60 dark:border-indigo-800/40 shadow-xs flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5">
+              <span className="text-xl">👨‍🏫</span>
+              <div>
+                <h4 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider">
+                  HOD Department Oversight
+                </h4>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Select any faculty in your department to inspect their scheduled subjects, or choose All Department.
+                </p>
               </div>
             </div>
-          </div>
 
-          {/* 2. Course */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
-              <span>🎓</span> 2. Course <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({coursesList.length})</span>
-            </label>
-            <select
-              value={selectedCourse}
-              onChange={(e) => handleCourseChange(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer truncate text-[11px]"
-            >
-              {coursesList.map((cr) => (
-                <option key={cr.id} value={cr.code}>
-                  [#{cr.code}] {cr.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 3. Branch */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
-              <span>🏢</span> 3. Branch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({branchesList.length})</span>
-            </label>
-            <select
-              value={selectedBranch}
-              onChange={(e) => setSelectedBranch(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer truncate text-[11px]"
-            >
-              {branchesList.map((br) => (
-                <option key={br.id} value={br.code}>
-                  [#{br.code}] {br.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 4. Batch */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
-              <span>👥</span> 4. Batch <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({batchesList.length})</span>
-            </label>
-            <select
-              value={selectedBatch}
-              onChange={(e) => setSelectedBatch(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer truncate text-[11px]"
-            >
-              {batchesList.map((bt) => (
-                <option key={bt.id} value={bt.code}>
-                  [#{bt.code}] {bt.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 5. Semester */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
-              <span>📖</span> 5. Semester
-            </label>
-            <select
-              value={selectedSem}
-              onChange={(e) => setSelectedSem(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold text-[#5B4BFF] cursor-pointer text-[11px]"
-            >
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
-                <option key={sem} value={String(sem)}>
-                  Semester {sem}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 6. Section */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1">
-              <span>🔤</span> 6. Section
-            </label>
-            <select
-              value={selectedSection}
-              onChange={(e) => setSelectedSection(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer text-[11px]"
-            >
-              <option value="all">All Sections (Batch)</option>
-              <option value="1">Section A (1)</option>
-              <option value="2">Section B (2)</option>
-              <option value="3">Section C (3)</option>
-              <option value="4">Section D (4)</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Date Range & Student Selection Row */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs pt-2 border-t border-[#E7EAF3] dark:border-slate-800">
-          {/* From Date */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">📅 From Date (fdt)</label>
-            <input
-              type="date"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold text-slate-900 dark:text-white cursor-pointer text-[11px]"
-            />
-          </div>
-
-          {/* To Date */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">📅 To Date (tdt)</label>
-            <input
-              type="date"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold text-slate-900 dark:text-white cursor-pointer text-[11px]"
-            />
-          </div>
-
-          {/* Student Selector */}
-          <div>
-            <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">👤 Select Student</label>
-            {isStudentRole ? (
-              <div className="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold text-slate-800 dark:text-white flex items-center justify-between text-[11px]">
-                <span className="truncate">
-                  {selectedStudentName || 'Myself'} ({selectedStudentUid})
-                </span>
-                <span className="text-[9px] bg-emerald-100 text-emerald-800 font-extrabold px-1.5 py-0.5 rounded ml-1 shrink-0">
-                  Self
-                </span>
-              </div>
-            ) : (
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                Faculty Member:
+              </label>
               <select
-                value={selectedStudentUid}
+                value={hodFacultyId}
                 onChange={(e) => {
-                  const uid = e.target.value;
-                  setSelectedStudentUid(uid);
-                  const matched = matrixStudents.find((s) => s.registration_no === uid);
-                  if (matched) {
-                    setSelectedStudentName(matched.name);
-                    setSelectedStudentRoll(matched.rollno);
-                  }
+                  setHodFacultyId(e.target.value);
                 }}
-                className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 font-bold cursor-pointer truncate text-[11px]"
+                className="bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-1.5 text-xs font-bold text-slate-800 dark:text-white cursor-pointer shadow-2xs"
               >
-                {matrixStudents.map((st) => (
-                  <option key={st.registration_no} value={st.registration_no}>
-                    {st.rollno} - {st.name} ({st.registration_no})
+                <option value="ALL">🏛️ All Department Faculty / Subjects</option>
+                {departmentFacultyList.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.name} {f.emp_id ? `(${f.emp_id})` : ''}
                   </option>
                 ))}
               </select>
-            )}
+            </div>
+          </div>
+        )}
+
+        {/* Dynamic Course & Subject Linker (FacultyAcademicCascadingDropdown) */}
+        <FacultyAcademicCascadingDropdown
+          onlyLinkedSubjects={isFacultyUser || (isHodUser && hodFacultyId !== 'ALL')}
+          showSection={true}
+          showSubject={true}
+          facultyId={isHodUser && hodFacultyId !== 'ALL' ? hodFacultyId : undefined}
+          onSelectionChange={handleAcademicCascadeChange}
+          selectedCollegeCd={selectedCollege}
+          selectedCourseCd={selectedCourse}
+          selectedBranchCd={selectedBranch}
+          selectedBatchCd={selectedBatch}
+          selectedSemCd={selectedSem}
+          selectedSecCd={selectedSection}
+          selectedSubjectCd={selectedSubjectFilter !== 'all' ? selectedSubjectFilter : undefined}
+          title={
+            isAdminUser
+              ? '🏛️ Academic Hierarchy & Subject Filter (Admin All-Access)'
+              : isHodUser
+              ? '🏛️ Department Academic Hierarchy & Faculty Scheduler Linker'
+              : '🏛️ Faculty Academic Hierarchy & Linked Subjects'
+          }
+          subtitle={
+            isAdminUser
+              ? 'College → Course → Branch → Batch → Semester → Section → Subject (All Permissions Enabled)'
+              : isHodUser
+              ? 'Department Scope: Inspect department courses, batches, sections, and linked faculty subjects'
+              : 'Course & Subject Linker: Strictly scoped to your assigned academic timetable allocations'
+          }
+        />
+
+        {/* Subject-Wise vs All Filter & Date Range Bar */}
+        <div className="bg-white dark:bg-slate-900 rounded-[22px] p-4 md:p-5 shadow-soft border border-[#E7EAF3] dark:border-slate-800 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            {/* Subject Selector: All Subjects vs Specific Subject */}
+            <div className="flex-1 min-w-[280px]">
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] flex items-center gap-1.5">
+                <span>📚</span>
+                <span>Subject View:</span>
+                <span className="text-[10px] font-normal text-slate-400">
+                  (Choose "All Subjects" or a specific subject)
+                </span>
+              </label>
+              <div className="flex items-center gap-2">
+                <select
+                  value={selectedSubjectFilter}
+                  onChange={(e) => handleSubjectFilterChange(e.target.value)}
+                  className="w-full bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2 text-xs font-bold text-slate-800 dark:text-white cursor-pointer"
+                >
+                  <option value="all">
+                    📚 All Subjects ({matrixSubjects.length || cascadeState?.allSubjects?.length || 0})
+                  </option>
+                  {allAvailableSubjects.map((sub) => (
+                    <option key={sub.sub_cd || sub.sub_name} value={sub.sub_cd || sub.sub_name}>
+                      {sub.sub_name} (#{sub.sub_cd})
+                    </option>
+                  ))}
+                </select>
+                {selectedSubjectFilter !== 'all' && (
+                  <button
+                    type="button"
+                    onClick={() => handleSubjectFilterChange('all')}
+                    className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-[#5B4BFF] dark:bg-slate-800 dark:text-indigo-300 rounded-xl text-xs font-bold whitespace-nowrap border border-indigo-200 dark:border-slate-700 cursor-pointer"
+                    title="Reset to All Subjects"
+                  >
+                    View All
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Date Range Inputs & Quick Presets */}
+            <div className="flex flex-wrap items-end gap-2.5">
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                  📅 From Date (fdt)
+                </label>
+                <input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e) => {
+                    setFromDate(e.target.value);
+                    fetchLiveAttendanceMatrix({ fdt: e.target.value });
+                  }}
+                  className="bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px]">
+                  📅 To Date (tdt)
+                </label>
+                <input
+                  type="date"
+                  value={toDate}
+                  onChange={(e) => {
+                    setToDate(e.target.value);
+                    fetchLiveAttendanceMatrix({ tdt: e.target.value });
+                  }}
+                  className="bg-[#F6F8FC] dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-1.5 text-xs font-bold text-slate-900 dark:text-white cursor-pointer"
+                />
+              </div>
+
+              {/* Quick Presets */}
+              <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-800 p-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                <button
+                  type="button"
+                  onClick={() => setQuickDatePreset('TODAY')}
+                  className="px-2 py-1 text-[11px] font-bold rounded-lg text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  Today
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickDatePreset('THIS_WEEK')}
+                  className="px-2 py-1 text-[11px] font-bold rounded-lg text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  This Week
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickDatePreset('THIS_MONTH')}
+                  className="px-2 py-1 text-[11px] font-bold rounded-lg text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  This Month
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setQuickDatePreset('SEMESTER')}
+                  className="px-2 py-1 text-[11px] font-bold rounded-lg text-slate-700 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 cursor-pointer"
+                >
+                  Full Sem
+                </button>
+              </div>
+
+              {/* Live Sync Button (Visible ONLY if tenant slug contains 'srms') */}
+              {isSrms && (
+                <button
+                  type="button"
+                  onClick={handleManualSync}
+                  disabled={syncingLive}
+                  className="px-3.5 py-1.5 bg-[#F36C21] hover:bg-[#e05e16] text-white text-xs font-black rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50 active:scale-95 shrink-0 h-[34px]"
+                >
+                  <span className={syncingLive ? 'animate-spin' : ''}>🔄</span>
+                  <span>{syncingLive ? 'Syncing...' : 'Sync Live'}</span>
+                </button>
+              )}
+            </div>
           </div>
         </div>
+      </div>
 
         {/* View Mode Toggle */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-2 border-t border-[#E7EAF3] dark:border-slate-800">
@@ -1266,7 +1386,6 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
             </div>
           )}
         </div>
-      </div>
 
       {/* ─── 2. SECTION ATTENDANCE MATRIX (High-Density Premium DataTable) ───────── */}
       {viewMode === 'MATRIX' && !isStudentRole && (
@@ -1408,7 +1527,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                       <th className="py-1.5 px-1.5 font-black uppercase bg-[#2D2575] text-white border-r border-indigo-900 text-center w-12 text-[10px] tracking-wider">
                         Sec
                       </th>
-                      {matrixSubjects.map((sub, idx) => (
+                      {displayedSubjects.map((sub, idx) => (
                         <th
                           key={sub.sub_cd}
                           className={`py-1.5 px-2 font-black uppercase text-center border-r border-slate-300 dark:border-slate-700 min-w-[110px] text-[10px] leading-tight ${
@@ -1440,18 +1559,42 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                           {st.rollno}
                         </td>
                         <td className="py-1 px-2.5 font-black text-slate-900 dark:text-white border-r border-slate-200 dark:border-slate-800">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedStudentUid(st.registration_no);
-                              setSelectedStudentName(st.name);
-                              setSelectedStudentRoll(st.rollno);
-                              setViewMode('STUDENT');
-                            }}
-                            className="hover:text-[#5B4BFF] hover:underline text-left cursor-pointer transition-colors truncate max-w-[160px] block"
-                          >
-                            {st.name}
-                          </button>
+                          <div className="flex items-center gap-2 min-w-[170px]">
+                            {st.photo_url ? (
+                              <img
+                                src={st.photo_url}
+                                alt={st.name}
+                                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0 shadow-2xs"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className={`w-7 h-7 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] dark:bg-indigo-900/40 dark:text-indigo-300 font-extrabold flex items-center justify-center text-[10px] shrink-0 border border-[#5B4BFF]/20 ${
+                                st.photo_url ? 'hidden' : ''
+                              }`}
+                            >
+                              {st.name?.slice(0, 2)?.toUpperCase() || 'ST'}
+                            </div>
+                            <div className="min-w-0">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setSelectedStudentUid(st.registration_no);
+                                  setSelectedStudentName(st.name);
+                                  setSelectedStudentRoll(st.rollno);
+                                  setViewMode('STUDENT');
+                                }}
+                                className="hover:text-[#5B4BFF] hover:underline text-left cursor-pointer transition-colors truncate max-w-[140px] font-bold block text-[11px]"
+                              >
+                                {st.name}
+                              </button>
+                              <div className="text-[9px] font-mono text-slate-400 dark:text-slate-500 truncate">
+                                {st.registration_no || st.rollno}
+                              </div>
+                            </div>
+                          </div>
                         </td>
                         <td className="py-1 px-1.5 text-center font-bold text-slate-600 dark:text-slate-400 border-r border-slate-200 dark:border-slate-800 text-[10.5px]">
                           {st.course}
@@ -1467,7 +1610,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                         </td>
 
                         {/* Subject Attendance Badges */}
-                        {matrixSubjects.map((sub) => {
+                        {displayedSubjects.map((sub) => {
                           const att = st.attendance[sub.sub_name];
                           if (!att) {
                             return (
@@ -1517,16 +1660,24 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                         <td className="py-0.5 px-1.5 text-center border-r border-slate-200 dark:border-slate-800">
                           <span
                             className={`inline-block px-2 py-0.5 rounded font-black text-[10.5px] shadow-2xs ${
-                              st.TotalPresentPercentage === '—' || matrixSubjects.length === 0
-                                ? 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
-                                : parseFloat(st.TotalPresentPercentage) >= 75
-                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                                : parseFloat(st.TotalPresentPercentage) >= 50
-                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
-                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                              selectedSubjectFilter !== 'all' && displayedSubjects.length === 1 && st.attendance[displayedSubjects[0].sub_name]
+                                ? (st.attendance[displayedSubjects[0].sub_name]!.percentage >= 75
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : st.attendance[displayedSubjects[0].sub_name]!.percentage >= 50
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : 'bg-rose-100 text-rose-800 border border-rose-300')
+                                : (st.TotalPresentPercentage === '—' || displayedSubjects.length === 0
+                                    ? 'bg-slate-100 text-slate-600 border border-slate-300 dark:bg-slate-800 dark:text-slate-400 dark:border-slate-700'
+                                    : parseFloat(st.TotalPresentPercentage) >= 75
+                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                    : parseFloat(st.TotalPresentPercentage) >= 50
+                                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                    : 'bg-rose-100 text-rose-800 border border-rose-300')
                             }`}
                           >
-                            {matrixSubjects.length === 0 ? '—' : st.TotalPresentPercentage}
+                            {selectedSubjectFilter !== 'all' && displayedSubjects.length === 1 && st.attendance[displayedSubjects[0].sub_name]
+                              ? `${st.attendance[displayedSubjects[0].sub_name]!.percentage.toFixed(1)}%`
+                              : displayedSubjects.length === 0 ? '—' : st.TotalPresentPercentage}
                           </span>
                         </td>
                       </tr>

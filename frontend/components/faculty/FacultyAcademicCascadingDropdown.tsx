@@ -24,6 +24,23 @@ export interface AcademicSection {
   sec_name: string;
 }
 
+export function formatSectionLabel(sec: string): string {
+  const s = String(sec).trim();
+  if (s === '1' || s.toLowerCase() === 'a' || s.toLowerCase() === 'sec 1' || s.toLowerCase() === 'sec a') {
+    return 'Section A (Sec 1)';
+  }
+  if (s === '2' || s.toLowerCase() === 'b' || s.toLowerCase() === 'sec 2' || s.toLowerCase() === 'sec b') {
+    return 'Section B (Sec 2)';
+  }
+  if (s === '3' || s.toLowerCase() === 'c' || s.toLowerCase() === 'sec 3' || s.toLowerCase() === 'sec c') {
+    return 'Section C (Sec 3)';
+  }
+  if (s === '4' || s.toLowerCase() === 'd' || s.toLowerCase() === 'sec 4' || s.toLowerCase() === 'sec d') {
+    return 'Section D (Sec 4)';
+  }
+  return `Section ${s}`;
+}
+
 export interface AcademicCascadingState {
   college: AcademicCollege | null;
   course: AcademicCourse | null;
@@ -96,7 +113,7 @@ export default function FacultyAcademicCascadingDropdown({
   const [branchCd, setBranchCd] = useState<string>(selectedBranchCd || '');
   const [batchCd, setBatchCd] = useState<string>(selectedBatchCd || '');
   const [semCd, setSemCd] = useState<string>(selectedSemCd ? String(selectedSemCd) : '');
-  const [secCd, setSecCd] = useState<string>(selectedSecCd || 'all');
+  const [secCd, setSecCd] = useState<string>(selectedSecCd || '1');
   const [subjectCd, setSubjectCd] = useState<string>(selectedSubjectCd || '');
 
   // Loading flags
@@ -463,26 +480,57 @@ export default function FacultyAcademicCascadingDropdown({
     return Array.from(map.values());
   }, [onlyLinked, linkedSubjects, subjects, courseCd, branchCd, batchCd, semCd]);
 
-  // 6. FILTERED SECTIONS: All sections linked to this faculty for the selected Course, Branch, Batch & Semester
+  // 6. FILTERED SECTIONS: Scoped to faculty linked sections if onlyLinked, or all standard cohort sections if Admin
   const visibleSections = useMemo<string[]>(() => {
-    if (!onlyLinked || linkedSubjects.length === 0) return [];
     const secSet = new Set<string>();
-
-    linkedSubjects
-      .filter((l) => {
-        if (courseCd && l.course_cd && String(l.course_cd) !== String(courseCd)) return false;
-        if (branchCd && l.branch_cd && String(l.branch_cd) !== String(branchCd)) return false;
-        if (batchCd && l.batch_cd && String(l.batch_cd) !== String(batchCd)) return false;
-        if (semCd && l.sem_cd && String(l.sem_cd) !== String(semCd)) return false;
-        return true;
-      })
-      .forEach((l) => {
+    if (onlyLinked && linkedSubjects.length > 0) {
+      // Faculty mode: strictly scope to sections linked to this faculty for current hierarchy
+      linkedSubjects
+        .filter((l) => {
+          if (courseCd && l.course_cd && String(l.course_cd) !== String(courseCd)) return false;
+          if (branchCd && l.branch_cd && String(l.branch_cd) !== String(branchCd)) return false;
+          if (batchCd && l.batch_cd && String(l.batch_cd) !== String(batchCd)) return false;
+          if (semCd && l.sem_cd && String(l.sem_cd) !== String(semCd)) return false;
+          return true;
+        })
+        .forEach((l) => {
+          const sec = String(l.section || '').trim();
+          if (sec) secSet.add(sec);
+        });
+    } else {
+      // Admin mode: open all standard cohort sections (Section A/1, B/2, C/3, D/4)
+      secSet.add('1');
+      secSet.add('2');
+      secSet.add('3');
+      secSet.add('4');
+      // Plus any section tags from linked subjects
+      linkedSubjects.forEach((l) => {
         const sec = String(l.section || '').trim();
         if (sec) secSet.add(sec);
       });
+    }
 
-    return Array.from(secSet);
+    if (secSet.size === 0) {
+      secSet.add('1');
+      secSet.add('2');
+    }
+
+    return Array.from(secSet).sort((a, b) => {
+      const numA = parseInt(a, 10);
+      const numB = parseInt(b, 10);
+      if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+      return a.localeCompare(b);
+    });
   }, [onlyLinked, linkedSubjects, courseCd, branchCd, batchCd, semCd]);
+
+  // Auto-sync Section: default to first available section only if currently empty or invalid
+  useEffect(() => {
+    if (visibleSections.length > 0) {
+      if (!secCd || (secCd !== 'all' && !visibleSections.includes(secCd))) {
+        setSecCd(visibleSections[0]);
+      }
+    }
+  }, [visibleSections]);
 
   // Handler for section dropdown change: auto-syncs to a subject belonging to this section
   const handleSectionChange = (newSec: string) => {
@@ -614,9 +662,9 @@ export default function FacultyAcademicCascadingDropdown({
               ✓ {activeSubjectObj.code || activeSubjectObj.name}
             </span>
           )}
-          {showSection && secCd && secCd !== 'all' && (
+          {showSection && (
             <span className="px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200">
-              Sec: {secCd}
+              {secCd && secCd !== 'all' ? formatSectionLabel(secCd) : 'All Sections'}
             </span>
           )}
         </div>
@@ -768,26 +816,24 @@ export default function FacultyAcademicCascadingDropdown({
           <div>
             <label className="block text-xs font-black uppercase text-amber-600 dark:text-amber-400 mb-1.5 flex items-center justify-between">
               <span>6. Section *</span>
-              {loadingLinked && <span className="text-[10px] font-normal text-amber-600 animate-pulse">Loading...</span>}
+              {onlyLinked && loadingLinked && (
+                <span className="text-[10px] font-normal text-amber-600 animate-pulse">Loading...</span>
+              )}
             </label>
             <select
               value={secCd}
               onChange={(e) => handleSectionChange(e.target.value)}
-              disabled={loadingLinked || visibleSections.length === 0}
+              disabled={onlyLinked && loadingLinked}
               className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-amber-300 dark:border-amber-800 text-[#1B1E28] dark:text-white text-xs font-bold focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 disabled:opacity-50 shadow-sm transition-all"
             >
-              {visibleSections.length > 1 && (
-                <option value="all">All Linked Sections ({visibleSections.length})</option>
-              )}
-              {visibleSections.length === 0 ? (
-                <option value="all">Default Section</option>
-              ) : (
-                visibleSections.map((sec) => (
-                  <option key={sec} value={sec}>
-                    Section: {sec}
-                  </option>
-                ))
-              )}
+              {visibleSections.map((sec) => (
+                <option key={sec} value={sec}>
+                  {formatSectionLabel(sec)}
+                </option>
+              ))}
+              <option value="all">
+                🏛️ All Sections ({visibleSections.length} Sections)
+              </option>
             </select>
           </div>
         )}

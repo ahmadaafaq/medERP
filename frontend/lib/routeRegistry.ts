@@ -479,6 +479,7 @@ export function normalizeRole(rawRole?: string): string {
   const r = rawRole.toUpperCase().trim();
   if (r === 'COLLEGE_ADMIN' || r === 'ADMINISTRATOR' || r === 'ADMIN') return 'ADMIN';
   if (r === 'HOD') return 'HOD';
+  if (r === 'DQAC') return 'DQAC';
   if (r === 'STAFF' || r === 'TEACHER' || r === 'FACULTY') return 'FACULTY';
   if (r === 'SUPERADMIN' || r === 'SUPER_ADMIN' || r === 'OWNER') return 'SUPERADMIN';
   if (r === 'STUDENT') return 'STUDENT';
@@ -560,9 +561,6 @@ export async function getRolePermissionsForTenant(
         'faculty_schedule',
         'faculty_attendance',
         'faculty_attendance_mark',
-        'faculty_attendance_biometric',
-        'faculty_biometric',
-        'faculty_marks',
         'faculty_assessment',
         'faculty_lessons',
         'faculty_library',
@@ -687,6 +685,7 @@ export function verifyRouteAccess({
     (roleUpper === 'ADMIN' && (normPath === '/dashboard/admin' || normPath === '/dashboard')) ||
     (roleUpper === 'FACULTY' && (normPath === '/dashboard/faculty' || normPath === '/dashboard')) ||
     (roleUpper === 'HOD' && (normPath === '/dashboard/hod' || normPath === '/dashboard')) ||
+    (roleUpper === 'DQAC' && (normPath === '/dashboard/dqac' || normPath === '/dashboard')) ||
     (roleUpper === 'STUDENT' && (normPath === '/dashboard/student' || normPath === '/dashboard')) ||
     (roleUpper === 'CLERK' && (normPath === '/dashboard/clerk' || normPath === '/dashboard')) ||
     (roleUpper === 'WARDEN' && (normPath === '/dashboard/warden' || normPath === '/dashboard'))
@@ -737,6 +736,11 @@ export function verifyRouteAccess({
 
   // HOD specific and shared faculty routes are always permitted for HOD
   if (roleUpper === 'HOD' && (normPath.startsWith('/dashboard/hod') || normPath.startsWith('/dashboard/faculty'))) {
+    return { allowed: true };
+  }
+
+  // DQAC specific and shared academic quality routes are always permitted for DQAC
+  if (roleUpper === 'DQAC' && (normPath.startsWith('/dashboard/dqac') || normPath.startsWith('/dashboard/faculty') || normPath === '/dashboard/hod/qp-approvals' || normPath === '/dashboard/hod/question-bank' || normPath === '/dashboard/hod/chat')) {
     return { allowed: true };
   }
 

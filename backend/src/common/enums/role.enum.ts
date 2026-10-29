@@ -13,6 +13,7 @@ export enum UserRole {
   COLLEGE_ADMIN = 'COLLEGE_ADMIN',  // College-level: full college management
   ADMIN         = 'COLLEGE_ADMIN',  // Alias for COLLEGE_ADMIN
   HOD           = 'HOD',            // Department head: dept management + approvals
+  DQAC          = 'DQAC',           // Departmental Quality Assurance Cell / Committee member
   FACULTY       = 'FACULTY',        // Teaching staff: attendance, logbook verify
   CLERK         = 'CLERK',          // Data entry: attendance import, marks entry
   STUDENT       = 'STUDENT',        // Self-service: own academic data
@@ -28,12 +29,14 @@ export const ADMIN_ROLES: UserRole[] = [
   UserRole.SUPER_ADMIN,
   UserRole.COLLEGE_ADMIN,
   UserRole.HOD,
+  UserRole.DQAC,
 ];
 
 export const ACADEMIC_STAFF_ROLES: UserRole[] = [
   UserRole.SUPER_ADMIN,
   UserRole.COLLEGE_ADMIN,
   UserRole.HOD,
+  UserRole.DQAC,
   UserRole.FACULTY,
 ];
 
@@ -41,6 +44,7 @@ export const DATA_ENTRY_ROLES: UserRole[] = [
   UserRole.SUPER_ADMIN,
   UserRole.COLLEGE_ADMIN,
   UserRole.HOD,
+  UserRole.DQAC,
   UserRole.FACULTY,
   UserRole.CLERK,
 ];
@@ -49,6 +53,7 @@ export const ALL_STAFF_ROLES: UserRole[] = [
   UserRole.SUPER_ADMIN,
   UserRole.COLLEGE_ADMIN,
   UserRole.HOD,
+  UserRole.DQAC,
   UserRole.FACULTY,
   UserRole.CLERK,
   UserRole.STAFF,

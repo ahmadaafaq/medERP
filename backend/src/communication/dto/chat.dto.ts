@@ -1,5 +1,5 @@
 import { IsString, IsOptional, IsArray, ValidateNested, IsUUID, IsNumber } from 'class-validator';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateChatAttachmentDto {
@@ -141,40 +141,80 @@ export class ChatGroupFilterDto {
 export class JoinBatchGroupDto {
   @ApiPropertyOptional({ description: 'Course Code or ID', example: '13' })
   @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
   course_cd?: string;
 
   @ApiPropertyOptional({ description: 'Course Name', example: 'B.Tech' })
   @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
   course_name?: string;
 
   @ApiPropertyOptional({ description: 'Department/Branch ID or Code' })
   @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
   department_id?: string;
 
-  @ApiProperty({ description: 'Department/Branch Name', example: 'Computer Science & Engineering' })
+  @ApiPropertyOptional({ description: 'Department/Branch Name', example: 'Computer Science & Engineering' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
-  department_name: string;
+  department_name?: string;
 
-  @ApiProperty({ description: 'Batch Year or Code', example: '2025' })
+  @ApiPropertyOptional({ description: 'Batch Year or Code', example: '2025' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
-  batch_year: string;
+  batch_year?: string;
 
   @ApiPropertyOptional({ description: 'Batch Code', example: '2025-CSE' })
   @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
   batch_code?: string;
 
+  @ApiPropertyOptional({ description: 'Batch Name' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
+  @IsString()
+  batch_name?: string;
+
   @ApiPropertyOptional({ description: 'Tenant identifier' })
   @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
   tenant?: string;
 
   @ApiPropertyOptional({ description: 'Tenant slug' })
   @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
   @IsString()
   tenantSlug?: string;
+
+  @ApiPropertyOptional({ description: 'Tenant slug underscore format' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
+  @IsString()
+  tenant_slug?: string;
+
+  @ApiPropertyOptional({ description: 'Semester' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional({ description: 'Section' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
+  @IsString()
+  section?: string;
+
+  @ApiPropertyOptional({ description: 'Sender Avatar URL or data URI' })
+  @IsOptional()
+  @Transform(({ value }) => (value != null ? String(value) : undefined))
+  @IsString()
+  sender_avatar?: string;
 }
 

@@ -1,4 +1,5 @@
 import { IsString, IsOptional, IsBoolean, IsNumber, IsEmail, IsArray } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateStudentDto {
@@ -189,6 +190,7 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: '1200000' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   annualIncome?: number;
 
@@ -235,6 +237,7 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: '94.5' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class10Pct?: number;
 
@@ -245,26 +248,31 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: 95 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Physics?: number;
 
   @ApiPropertyOptional({ example: 94 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Chemistry?: number;
 
   @ApiPropertyOptional({ example: 98 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Biology?: number;
 
   @ApiPropertyOptional({ example: 92 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12English?: number;
 
   @ApiPropertyOptional({ example: '94.75' })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   class12Pct?: number;
 
@@ -275,16 +283,19 @@ export class CreateStudentDto {
 
   @ApiPropertyOptional({ example: 685 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   neetScore?: number;
 
   @ApiPropertyOptional({ example: 99.85 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   neetPercentile?: number;
 
   @ApiPropertyOptional({ example: 1250 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   neetAirRank?: number;
 
@@ -353,11 +364,13 @@ export class CreateStudentDto {
   // Fees & Transport Details
   @ApiPropertyOptional({ example: 50000 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   paidFees?: number;
 
   @ApiPropertyOptional({ example: 150000 })
   @IsOptional()
+  @Type(() => Number)
   @IsNumber()
   totalFees?: number;
 
@@ -401,6 +414,54 @@ export class CreateStudentDto {
   @IsOptional()
   @IsString()
   photoUrl?: string;
+
+  // Optional profile / portfolio fields
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  bio?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  githubUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  githubFollowers?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  github_url?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  github_followers?: number;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkedinUrl?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkedin_url?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkedinConnections?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  linkedin_connections?: string;
 }
 
 export class UpdateStudentDto extends CreateStudentDto {}

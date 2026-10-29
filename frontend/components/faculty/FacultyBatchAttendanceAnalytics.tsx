@@ -57,6 +57,7 @@ export default function FacultyBatchAttendanceAnalytics() {
   const [selectedBranch, setSelectedBranch] = useState<string>('');
   const [selectedBatch, setSelectedBatch] = useState<string>('');
   const [selectedSem, setSelectedSem] = useState<string>('1');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedTenantSlug, setSelectedTenantSlug] = useState<string>(getTenantSlug());
 
   const [studentRecords, setStudentRecords] = useState<StudentAttendanceRecord[]>([]);
@@ -123,12 +124,12 @@ export default function FacultyBatchAttendanceAnalytics() {
         mappedCourses = isMed
           ? [{ id: '1', code: '1', name: 'MBBS' }]
           : [
-              { id: '13', code: '13', name: 'BCA' },
-              { id: '1', code: '1', name: 'B.TECH.' },
-              { id: '3', code: '3', name: 'MCA' },
-              { id: '4', code: '4', name: 'MBA' },
-              { id: '2', code: '2', name: 'B.PHARM.' },
-            ];
+            { id: '13', code: '13', name: 'BCA' },
+            { id: '1', code: '1', name: 'B.TECH.' },
+            { id: '3', code: '3', name: 'MCA' },
+            { id: '4', code: '4', name: 'MBA' },
+            { id: '2', code: '2', name: 'B.PHARM.' },
+          ];
       }
 
       setCoursesList(mappedCourses);
@@ -242,37 +243,44 @@ export default function FacultyBatchAttendanceAnalytics() {
     sem: string,
     crsName?: string,
     batchName?: string,
-    slugOverride?: string
+    slugOverride?: string,
+    sec?: string
   ) => {
     setLoading(true);
     const slug = slugOverride || selectedTenantSlug || getTenantSlug();
     const effectiveCrsName = crsName || coursesList.find((c) => c.code === crs)?.name || 'Course';
     const effectiveBatchName = batchName || batchesList.find((b) => b.code === batch)?.name || 'Batch';
+    const effectiveSec = sec !== undefined ? sec : selectedSection;
 
     try {
       let studs: StudentAttendanceRecord[] = [];
       let subjects: SubjectAttendance[] = [];
 
-      // 1. Fetch live attendance matrix from SRMS ONLY if tenant is SRMS
-      if (isSrmsTenant(slug)) {
-        const attPayload = {
-          colg_cd: Number(colg || 1),
-          course_cd: Number(crs || 13),
-          branch_cd: Number(branch || 1),
-          batch_cd: Number(batch || 2),
-          sem_cd: Number(sem || 3),
-          section_cd: 1,
-          fdt: '2026-07-02',
-          tdt: '2026-08-21',
-        };
+      // 1. Fetch live attendance matrix dynamically for selected scope
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const defaultFdt = `${currentYear}-01-01`;
+      const defaultTdt = `${currentYear}-12-31`;
 
-        const res = await fetch('/api/srms/student-attendance', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(attPayload),
-        }).catch(() => null);
+      const attPayload = {
+        colg_cd: colg || 1,
+        course_cd: crs || 1,
+        branch_cd: branch || 1,
+        batch_cd: batch || 1,
+        sem_cd: sem || 1,
+        section_cd: effectiveSec === 'all' || !effectiveSec ? null : effectiveSec,
+        fdt: defaultFdt,
+        tdt: defaultTdt,
+        tenantSlug: slug,
+      };
 
-        if (res && res.ok) {
+      const res = await fetch('/api/srms/student-attendance', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-tenant-slug': slug },
+        body: JSON.stringify(attPayload),
+      }).catch(() => null);
+
+      if (res && res.ok) {
         const json = await res.json();
         if (json.success && Array.isArray(json.data) && json.data.length > 0) {
           const subList: { sub_cd: string; sub_name: string }[] = json.subjectList || [];
@@ -324,7 +332,6 @@ export default function FacultyBatchAttendanceAnalytics() {
           }
         }
       }
-    }
 
       // If attendance was empty or non-SRMS tenant, fallback gracefully to database students
       if (studs.length === 0) {
@@ -344,10 +351,10 @@ export default function FacultyBatchAttendanceAnalytics() {
           const rawList = Array.isArray(studJson.data?.data)
             ? studJson.data.data
             : Array.isArray(studJson.data)
-            ? studJson.data
-            : Array.isArray(studJson)
-            ? studJson
-            : [];
+              ? studJson.data
+              : Array.isArray(studJson)
+                ? studJson
+                : [];
 
           if (rawList.length > 0) {
             studs = rawList.map((st: any) => {
@@ -367,15 +374,9 @@ export default function FacultyBatchAttendanceAnalytics() {
         }
       }
 
+      // Do not inject hardcoded SRMS/BCS subjects if none exist for this tenant/course
       if (subjects.length === 0) {
-        subjects = [
-          { id: '1', name: 'Operating Systems & Distributed Computing', code: 'BCS-301', lecturesConducted: 28, avgAttendance: 84.5, facultyName: 'Prof. Vinay Kumar', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-101', trend: 'up' },
-          { id: '2', name: 'Object Oriented Programming with Java', code: 'BCS-302', lecturesConducted: 26, avgAttendance: 81.2, facultyName: 'Dr. R. K. Sharma', facultyDesignation: 'Associate Professor', facultyEmpId: 'CET-FAC-102', trend: 'up' },
-          { id: '3', name: 'Theory of Automata & Formal Languages', code: 'BCS-303', lecturesConducted: 24, avgAttendance: 78.6, facultyName: 'Er. Neha Gupta', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-103', trend: 'stable' },
-          { id: '4', name: 'Computer Architecture & Microprocessors', code: 'BCS-304', lecturesConducted: 25, avgAttendance: 76.8, facultyName: 'Prof. Amit Singh', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-104', trend: 'stable' },
-          { id: '5', name: 'Data Engineering & Cloud Databases', code: 'BCS-305', lecturesConducted: 27, avgAttendance: 74.5, facultyName: 'Dr. Priya Verma', facultyDesignation: 'Professor', facultyEmpId: 'CET-FAC-105', trend: 'down' },
-          { id: '6', name: 'Universal Human Values & Professional Ethics', code: 'BCS-306', lecturesConducted: 22, avgAttendance: 79.0, facultyName: 'Er. Alok Mishra', facultyDesignation: 'Assistant Professor', facultyEmpId: 'CET-FAC-106', trend: 'stable' },
-        ];
+        subjects = [];
       }
 
       setStudentRecords(studs);
@@ -429,7 +430,9 @@ export default function FacultyBatchAttendanceAnalytics() {
       selectedBatch,
       selectedSem,
       crsObj?.name || 'BCA',
-      btObj?.name || 'Batch 2025'
+      btObj?.name || 'Batch 2025',
+      undefined,
+      selectedSection
     );
   };
 
@@ -444,7 +447,9 @@ export default function FacultyBatchAttendanceAnalytics() {
       batchCode,
       selectedSem,
       crsObj?.name || 'BCA',
-      btObj?.name || 'Batch 2025'
+      btObj?.name || 'Batch 2025',
+      undefined,
+      selectedSection
     );
   };
 
@@ -459,7 +464,26 @@ export default function FacultyBatchAttendanceAnalytics() {
       selectedBatch,
       semVal,
       crsObj?.name || 'BCA',
-      btObj?.name || 'Batch 2025'
+      btObj?.name || 'Batch 2025',
+      undefined,
+      selectedSection
+    );
+  };
+
+  const handleSectionChange = (secVal: string) => {
+    setSelectedSection(secVal);
+    const crsObj = coursesList.find((c) => c.code === selectedCourse);
+    const btObj = batchesList.find((b) => b.code === selectedBatch);
+    fetchAttendanceAnalyticsData(
+      selectedCollege,
+      selectedCourse,
+      selectedBranch,
+      selectedBatch,
+      selectedSem,
+      crsObj?.name || 'BCA',
+      btObj?.name || 'Batch 2025',
+      undefined,
+      secVal
     );
   };
 
@@ -600,28 +624,26 @@ export default function FacultyBatchAttendanceAnalytics() {
           <div className="flex items-center p-1 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shrink-0">
             <button
               onClick={() => setActiveTab('graph')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'graph'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'graph'
                   ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] shadow-xs'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-              }`}
+                }`}
             >
               <BarChart3 className="w-3.5 h-3.5 text-[#5B4BFF]" /> Cohort Curve ({studentsToDisplay.length})
             </button>
             <button
               onClick={() => setActiveTab('subjects')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
-                activeTab === 'subjects'
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${activeTab === 'subjects'
                   ? 'bg-white dark:bg-slate-700 text-[#5B4BFF] shadow-xs'
                   : 'text-slate-500 hover:text-slate-800 dark:hover:text-white'
-              }`}
+                }`}
             >
               <BookOpen className="w-3.5 h-3.5 text-indigo-500" /> Subjects ({subjectsToDisplay.length})
             </button>
           </div>
 
-          {/* Cascading Dependant Dropdowns: Course -> Branch -> Batch -> Semester */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 flex-1 min-w-[280px]">
+          {/* Cascading Dependant Dropdowns: Course -> Branch -> Batch -> Semester -> Section */}
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 flex-1 min-w-[340px]">
             {/* 1. Course */}
             <div className="relative">
               <select
@@ -686,6 +708,23 @@ export default function FacultyBatchAttendanceAnalytics() {
                     Sem {s}
                   </option>
                 ))}
+              </select>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+
+            {/* 5. Section */}
+            <div className="relative">
+              <select
+                value={selectedSection}
+                onChange={(e) => handleSectionChange(e.target.value)}
+                aria-label="Select Section"
+                className="w-full appearance-none bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-amber-600 dark:text-amber-400 font-extrabold text-[11px] py-1.5 pl-2.5 pr-6 rounded-xl cursor-pointer hover:border-[#F36C21] transition-all shadow-xs focus:outline-hidden focus:ring-2 focus:ring-[#F36C21]/20 truncate"
+              >
+                <option value="all">All Sections</option>
+                <option value="1">Section A (1)</option>
+                <option value="2">Section B (2)</option>
+                <option value="3">Section C (3)</option>
+                <option value="4">Section D (4)</option>
               </select>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
@@ -759,11 +798,10 @@ export default function FacultyBatchAttendanceAnalytics() {
 
           <button
             onClick={handleFilterToggle}
-            className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${
-              filterView === 'critical'
+            className={`px-2.5 py-1 rounded-xl text-xs font-black transition-all cursor-pointer shrink-0 ${filterView === 'critical'
                 ? 'bg-rose-500 text-white shadow-xs'
                 : 'bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100'
-            }`}
+              }`}
           >
             {filterView === 'critical' ? 'Show All Students' : 'Filter Below 75%'}
           </button>
@@ -817,13 +855,12 @@ export default function FacultyBatchAttendanceAnalytics() {
                     return (
                       <div
                         key={st.id}
-                        className={`p-3 rounded-2xl border transition-all space-y-1.5 shadow-xs group ${
-                          isCritical
+                        className={`p-3 rounded-2xl border transition-all space-y-1.5 shadow-xs group ${isCritical
                             ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
                             : isBelow
-                            ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
-                            : 'bg-white dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
-                        }`}
+                              ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
+                              : 'bg-white dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
+                          }`}
                       >
                         {/* Header Row: Rank, Student Info & Score Tag */}
                         <div className="flex items-center justify-between gap-2">
@@ -866,24 +903,22 @@ export default function FacultyBatchAttendanceAnalytics() {
                           {/* Right: Percentage & Status Tag */}
                           <div className="text-right shrink-0 flex items-center gap-2">
                             <span
-                              className={`text-xs font-black px-2 py-0.5 rounded-lg border ${
-                                isCritical
+                              className={`text-xs font-black px-2 py-0.5 rounded-lg border ${isCritical
                                   ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20'
                                   : isBelow
-                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
-                                  : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
-                              }`}
+                                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                                    : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                                }`}
                             >
                               {st.attendancePct}%
                             </span>
                             <span
-                              className={`text-[9px] font-extrabold uppercase hidden sm:inline-block px-1.5 py-0.5 rounded ${
-                                isCritical
+                              className={`text-[9px] font-extrabold uppercase hidden sm:inline-block px-1.5 py-0.5 rounded ${isCritical
                                   ? 'bg-rose-500 text-white'
                                   : isBelow
-                                  ? 'bg-amber-500 text-white'
-                                  : 'bg-emerald-600 text-white'
-                              }`}
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-emerald-600 text-white'
+                                }`}
                             >
                               {isCritical ? 'Critical' : isBelow ? 'Alert' : 'Regular'}
                             </span>
@@ -893,13 +928,12 @@ export default function FacultyBatchAttendanceAnalytics() {
                         {/* Interactive Progress Bar */}
                         <div className="relative w-full h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shadow-inner">
                           <div
-                            className={`h-full rounded-full transition-all duration-700 ${
-                              isCritical
+                            className={`h-full rounded-full transition-all duration-700 ${isCritical
                                 ? 'bg-gradient-to-r from-rose-500 to-amber-500'
                                 : isBelow
-                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                                : 'bg-gradient-to-r from-[#5B4BFF] via-indigo-500 to-[#00C48C]'
-                            }`}
+                                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                  : 'bg-gradient-to-r from-[#5B4BFF] via-indigo-500 to-[#00C48C]'
+                              }`}
                             style={{ width: `${Math.min(100, Math.max(8, st.attendancePct))}%` }}
                           />
                         </div>
@@ -971,13 +1005,12 @@ export default function FacultyBatchAttendanceAnalytics() {
 
                         <div className="text-right shrink-0">
                           <span
-                            className={`text-sm font-black ${
-                              isCritical
+                            className={`text-sm font-black ${isCritical
                                 ? 'text-[#F04438]'
                                 : isBelowThreshold
-                                ? 'text-[#FFB020]'
-                                : 'text-[#00C48C]'
-                            }`}
+                                  ? 'text-[#FFB020]'
+                                  : 'text-[#00C48C]'
+                              }`}
                           >
                             {sub.avgAttendance}%
                           </span>
@@ -990,13 +1023,12 @@ export default function FacultyBatchAttendanceAnalytics() {
                       {/* Progress Track */}
                       <div className="relative w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
                         <div
-                          className={`h-full rounded-full transition-all duration-700 ${
-                            isCritical
+                          className={`h-full rounded-full transition-all duration-700 ${isCritical
                               ? 'bg-gradient-to-r from-rose-500 to-amber-500'
                               : isBelowThreshold
-                              ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                              : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
-                          }`}
+                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
+                            }`}
                           style={{ width: `${Math.min(100, Math.max(10, sub.avgAttendance))}%` }}
                         />
                       </div>
@@ -1093,11 +1125,10 @@ export default function FacultyBatchAttendanceAnalytics() {
                   <button
                     type="button"
                     onClick={() => { setModalFilterView(v => v === 'critical' ? 'all' : 'critical'); setModalPage(1); }}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${
-                      modalFilterView === 'critical'
+                    className={`px-3 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer flex items-center gap-1.5 ${modalFilterView === 'critical'
                         ? 'bg-rose-500 text-white shadow-xs'
                         : 'bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100'
-                    }`}
+                      }`}
                   >
                     <Filter className="w-3.5 h-3.5" />
                     <span>{modalFilterView === 'critical' ? 'Showing Below 75%' : 'Filter Below 75%'}</span>
@@ -1125,13 +1156,12 @@ export default function FacultyBatchAttendanceAnalytics() {
                     return (
                       <div
                         key={st.id}
-                        className={`p-3.5 rounded-2xl border transition-all space-y-2 shadow-xs group ${
-                          isCritical
+                        className={`p-3.5 rounded-2xl border transition-all space-y-2 shadow-xs group ${isCritical
                             ? 'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200 dark:border-rose-900/40'
                             : isBelow
-                            ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
-                            : 'bg-white dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
-                        }`}
+                              ? 'bg-amber-50/40 dark:bg-amber-950/20 border-amber-200 dark:border-amber-900/40'
+                              : 'bg-white dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
+                          }`}
                       >
                         <div className="flex items-center justify-between gap-2">
                           <div className="flex items-center gap-3 min-w-0">
@@ -1166,24 +1196,22 @@ export default function FacultyBatchAttendanceAnalytics() {
 
                           <div className="text-right shrink-0 flex items-center gap-2">
                             <span
-                              className={`text-xs font-black px-2.5 py-1 rounded-xl border ${
-                                isCritical
+                              className={`text-xs font-black px-2.5 py-1 rounded-xl border ${isCritical
                                   ? 'bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/20'
                                   : isBelow
-                                  ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
-                                  : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
-                              }`}
+                                    ? 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20'
+                                    : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/20'
+                                }`}
                             >
                               {st.attendancePct}%
                             </span>
                             <span
-                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded ${
-                                isCritical
+                              className={`text-[9px] font-extrabold uppercase px-2 py-0.5 rounded ${isCritical
                                   ? 'bg-rose-500 text-white'
                                   : isBelow
-                                  ? 'bg-amber-500 text-white'
-                                  : 'bg-emerald-600 text-white'
-                              }`}
+                                    ? 'bg-amber-500 text-white'
+                                    : 'bg-emerald-600 text-white'
+                                }`}
                             >
                               {isCritical ? 'Critical' : isBelow ? 'Alert' : 'Compliant'}
                             </span>
@@ -1192,13 +1220,12 @@ export default function FacultyBatchAttendanceAnalytics() {
 
                         <div className="relative w-full h-2.5 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden shadow-inner">
                           <div
-                            className={`h-full rounded-full transition-all duration-700 ${
-                              isCritical
+                            className={`h-full rounded-full transition-all duration-700 ${isCritical
                                 ? 'bg-gradient-to-r from-rose-500 to-amber-500'
                                 : isBelow
-                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                                : 'bg-gradient-to-r from-[#5B4BFF] via-indigo-500 to-[#00C48C]'
-                            }`}
+                                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                  : 'bg-gradient-to-r from-[#5B4BFF] via-indigo-500 to-[#00C48C]'
+                              }`}
                             style={{ width: `${Math.min(100, Math.max(8, st.attendancePct))}%` }}
                           />
                         </div>
@@ -1238,9 +1265,8 @@ export default function FacultyBatchAttendanceAnalytics() {
 
                           <div className="text-right shrink-0">
                             <span
-                              className={`text-sm font-black ${
-                                isCritical ? 'text-[#F04438]' : isBelowThreshold ? 'text-[#FFB020]' : 'text-[#00C48C]'
-                              }`}
+                              className={`text-sm font-black ${isCritical ? 'text-[#F04438]' : isBelowThreshold ? 'text-[#FFB020]' : 'text-[#00C48C]'
+                                }`}
                             >
                               {sub.avgAttendance}%
                             </span>
@@ -1252,13 +1278,12 @@ export default function FacultyBatchAttendanceAnalytics() {
 
                         <div className="relative w-full h-2 rounded-full bg-slate-100 dark:bg-slate-700/60 overflow-hidden">
                           <div
-                            className={`h-full rounded-full transition-all duration-700 ${
-                              isCritical
+                            className={`h-full rounded-full transition-all duration-700 ${isCritical
                                 ? 'bg-gradient-to-r from-rose-500 to-amber-500'
                                 : isBelowThreshold
-                                ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
-                                : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
-                            }`}
+                                  ? 'bg-gradient-to-r from-amber-500 to-yellow-400'
+                                  : 'bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#00C48C]'
+                              }`}
                             style={{ width: `${Math.min(100, Math.max(10, sub.avgAttendance))}%` }}
                           />
                         </div>

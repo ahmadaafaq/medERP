@@ -85,6 +85,28 @@ export class ExaminationController {
     return this.examinationService.hodQPAction(tenantSlug, user, dto);
   }
 
+  /** DQAC: Get pending question papers awaiting quality audit */
+  @Public()
+  @Get('papers/pending-dqac-approval')
+  async getPendingQPForDqac(
+    @Tenant() tenantSlug: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('status') statusFilter?: string,
+  ) {
+    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter);
+  }
+
+  /** DQAC: Quality audit action on question paper */
+  @Public()
+  @Post('papers/dqac-action')
+  async dqacQPAction(
+    @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
+    @Body() dto: HodApproveQPDto,
+  ) {
+    return this.examinationService.hodQPAction(tenantSlug, user, dto);
+  }
+
   /** Admin: Add review remarks or approve a question paper */
   @Public()
   @Post('papers/admin-review')

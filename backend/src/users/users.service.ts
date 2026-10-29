@@ -734,6 +734,7 @@ export class UsersService {
     if (dto.role) {
       const r = String(dto.role).toUpperCase().trim();
       if (r === 'HOD') role = UserRole.HOD;
+      else if (r === 'DQAC') role = UserRole.DQAC;
       else if (r === 'CLERK') role = UserRole.CLERK;
       else if (r === 'WARDEN') role = UserRole.WARDEN;
       else if (r === 'ADMIN' || r === 'COLLEGE_ADMIN') role = UserRole.COLLEGE_ADMIN;
@@ -1481,7 +1482,7 @@ export class UsersService {
       .map((r) => String(r || '').trim().toUpperCase())
       .filter(Boolean);
 
-    const validRolesSet = new Set(['FACULTY', 'HOD', 'COLLEGE_ADMIN', 'ADMIN', 'CLERK', 'WARDEN']);
+    const validRolesSet = new Set(['FACULTY', 'HOD', 'DQAC', 'COLLEGE_ADMIN', 'ADMIN', 'CLERK', 'WARDEN']);
     const canonicalRoles: string[] = [];
     for (const r of rawRoles) {
       if (!validRolesSet.has(r)) continue;
@@ -1502,6 +1503,8 @@ export class UsersService {
       primaryRole = UserRole.COLLEGE_ADMIN;
     } else if (canonicalRoles.includes('HOD')) {
       primaryRole = UserRole.HOD;
+    } else if (canonicalRoles.includes('DQAC')) {
+      primaryRole = UserRole.DQAC;
     } else if (canonicalRoles.includes('FACULTY')) {
       primaryRole = UserRole.FACULTY;
     } else if (canonicalRoles.includes('CLERK')) {

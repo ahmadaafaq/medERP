@@ -304,25 +304,53 @@ async function persistSyncToDatabase(
 }
 
 // ─── SERVE B.TECH CSE BATCH 17 ATTENDANCE (PER-STUDENT ROW LH & LA ONLY) ───
+// ─── SERVE B.TECH CSE BATCH 17 ATTENDANCE (PER-STUDENT ROW LH & LA ONLY) ───
 async function serveBTechCseBatch17Attendance(
   schema: string,
   options: {
-    isJulySearch: boolean;
+    isJulySearch?: boolean;
+    isAugustSearch?: boolean;
     section_cd?: number | string | null;
     normFdt?: string | null;
     normTdt?: string | null;
+    cleanSubCd?: string | null;
   }
 ) {
-  const { isJulySearch, section_cd, normFdt, normTdt } = options;
+  const normFdt = options.normFdt || '2026-07-01';
+  const normTdt = options.normTdt || '2026-08-31';
+  const isJulySearch = options.isJulySearch ?? (normFdt >= '2026-07-01' && normTdt <= '2026-07-31');
+  const isAugustSearch = options.isAugustSearch ?? (normFdt >= '2026-08-01' && normTdt <= '2026-08-31');
+  const cleanSubCd = options.cleanSubCd || null;
+  const { section_cd } = options;
+
   const secFilter =
     section_cd && String(section_cd).toLowerCase() !== 'all' && Number(section_cd) > 0
       ? Number(section_cd)
       : null;
 
+  // Resolve authentic college name for colg_cd: 1
+  let colgName = 'SRMS CET,BAREILLY';
+  try {
+    const colRow = await queryDb(
+      `SELECT name FROM "${schema}".colleges WHERE colg_cd = '1' OR code = '1' LIMIT 1`
+    ).catch(() => []);
+    if (colRow?.[0]?.name) {
+      colgName = colRow[0].name;
+    }
+  } catch {}
+
+  const effectiveSubjectList = cleanSubCd
+    ? BTECH_CSE_SUBJECT_LIST.filter(
+        (s) => s.sub_cd === cleanSubCd || s.sub_name.toLowerCase() === cleanSubCd.toLowerCase()
+      )
+    : BTECH_CSE_SUBJECT_LIST;
+  const activeSubjectList = effectiveSubjectList.length > 0 ? effectiveSubjectList : BTECH_CSE_SUBJECT_LIST;
+  const activeSubjectColumns = activeSubjectList.map((s) => s.sub_name);
+
   // 1. Query PostgreSQL attendance records directly (COUNT(ar.id) guarantees per-student row LH, never cross-section sum)
   try {
-    const startDate = isJulySearch ? '2026-07-01' : (normFdt || '2026-07-01');
-    const endDate = isJulySearch ? '2026-07-31' : (normTdt || '2026-08-31');
+    const startDate = isJulySearch ? '2026-07-01' : (isAugustSearch ? '2026-08-01' : (normFdt || '2026-07-01'));
+    const endDate = isJulySearch ? '2026-07-31' : (isAugustSearch ? '2026-08-31' : (normTdt || '2026-08-31'));
 
     const dbQuery = `
       SELECT s.id, s.name AS stud_name, s.registration_no AS stud_reg_no, s.rollno AS stud_roll_no,
@@ -352,7 +380,7 @@ async function serveBTechCseBatch17Attendance(
         const key = String(r.stud_reg_no || r.stud_roll_no || r.id).trim();
         if (!studentMap.has(key)) {
           studentMap.set(key, {
-            colg_name: 'SRMS CET,BAREILLY',
+            colg_name: colgName,
             course_name: 'B.TECH.',
             branch_name: '(CSE)',
             batch_name: '2024',
@@ -360,7 +388,11 @@ async function serveBTechCseBatch17Attendance(
             stud_roll_no: r.stud_roll_no,
             stud_name: r.stud_name,
             sec_cd: r.section_cd ? Number(r.section_cd) : 1,
-            AttendanceType: isJulySearch ? 'DATABASE_JULY' : 'DATABASE_CUMULATIVE',
+            AttendanceType: isJulySearch
+              ? 'DATABASE_JULY'
+              : isAugustSearch
+              ? 'DATABASE_AUGUST'
+              : 'DATABASE_CUMULATIVE',
             subjectStats: new Map<string, { held: number; attended: number; sub_name: string }>(),
           });
         }
@@ -389,7 +421,7 @@ async function serveBTechCseBatch17Attendance(
           AttendanceType: sEntry.AttendanceType,
         };
 
-        BTECH_CSE_SUBJECT_LIST.forEach((subDef) => {
+        activeSubjectList.forEach((subDef) => {
           const sc = subDef.sub_cd;
           const stat = sEntry.subjectStats.get(sc) || { held: 0, attended: 0, sub_name: subDef.sub_name };
           totalHeld += stat.held;
@@ -424,10 +456,10 @@ async function serveBTechCseBatch17Attendance(
         success: true,
         data: students,
         subjectList: BTECH_CSE_SUBJECT_LIST,
-        subjectColumns: BTECH_CSE_SUBJECT_COLUMNS,
+        subjectColumns: activeSubjectColumns,
         count: students.length,
         source: 'POSTGRESQL_DATABASE',
-        mode: isJulySearch ? 'JULY_WISE' : 'CUMULATIVE_UP_TO_DATE',
+        mode: isJulySearch ? 'JULY_WISE' : isAugustSearch ? 'AUGUST_WISE' : 'CUMULATIVE_UP_TO_DATE',
       };
     }
   } catch (dbErr) {
@@ -445,14 +477,19 @@ async function serveBTechCseBatch17Attendance(
     const students = rawStudents.map((st: any, idx: number) => {
       const studentObj: Record<string, any> = {
         s_no: idx + 1,
-        colg_name: st.colg_name || 'SRMS CET,BAREILLY',
+        colg_name: colgName,
         course_name: 'B.TECH.',
         branch_name: '(CSE)',
         batch_name: '2024',
         stud_reg_no: st.stud_reg_no,
         stud_roll_no: st.stud_roll_no,
         stud_name: st.stud_name,
-        AttendanceType: isJulySearch ? 'FEED_JULY_2026' : 'FEED_CUMULATIVE_2026',
+        sec_cd: st.sec_cd || 1,
+        AttendanceType: isJulySearch
+          ? 'FEED_JULY_2026'
+          : isAugustSearch
+          ? 'FEED_AUGUST_2026'
+          : 'FEED_CUMULATIVE_2026',
       };
 
       const subjectsArr: any[] = [];
@@ -462,6 +499,10 @@ async function serveBTechCseBatch17Attendance(
       if (Array.isArray(st.subjects)) {
         st.subjects.forEach((sub: any) => {
           const sc = String(sub.sub_cd);
+          if (cleanSubCd && sc !== cleanSubCd && sub.sub_name?.toLowerCase() !== cleanSubCd.toLowerCase()) {
+            return;
+          }
+
           const fac = BTECH_CSE_FACULTY_MAP[sc] || {
             faculty_name: sub.faculty_name || sub.faculty || 'FACULTY',
             emp_id: sub.faculty_emp_id || '',
@@ -478,6 +519,10 @@ async function serveBTechCseBatch17Attendance(
             attStr = sub.july_2026.attendance || '0/0 (0.00%)';
             sAtt = sub.july_2026.lectures_attended || 0;
             sHeld = sub.july_2026.lectures_held || 0;
+          } else if (isAugustSearch && sub.august_2026) {
+            attStr = sub.august_2026.attendance || '0/0 (0.00%)';
+            sAtt = sub.august_2026.lectures_attended || 0;
+            sHeld = sub.august_2026.lectures_held || 0;
           } else if (!isJulySearch && sub.cumulative_jul_aug_2026) {
             attStr = sub.cumulative_jul_aug_2026.attendance || sub.attendance || '0/0 (0.00%)';
             sAtt = sub.cumulative_jul_aug_2026.lectures_attended || 0;
@@ -518,6 +563,14 @@ async function serveBTechCseBatch17Attendance(
         } else {
           totPct = totalHeld > 0 ? `${((totalAttended / totalHeld) * 100).toFixed(2)}%` : '0.00%';
         }
+      } else if (isAugustSearch) {
+        if (typeof st.TotalPresentPercentage === 'object' && st.TotalPresentPercentage?.august_2026) {
+          totPct = st.TotalPresentPercentage.august_2026;
+        } else if (st.august_2026_total_percentage) {
+          totPct = st.august_2026_total_percentage;
+        } else {
+          totPct = totalHeld > 0 ? `${((totalAttended / totalHeld) * 100).toFixed(2)}%` : '0.00%';
+        }
       } else {
         if (typeof st.TotalPresentPercentage === 'object' && st.TotalPresentPercentage?.cumulative_jul_aug_2026) {
           totPct = st.TotalPresentPercentage.cumulative_jul_aug_2026;
@@ -538,10 +591,10 @@ async function serveBTechCseBatch17Attendance(
       success: true,
       data: students,
       subjectList: BTECH_CSE_SUBJECT_LIST,
-      subjectColumns: BTECH_CSE_SUBJECT_COLUMNS,
+      subjectColumns: activeSubjectColumns,
       count: students.length,
       source: 'JSON_TEMPLATE_FEED',
-      mode: isJulySearch ? 'JULY_WISE' : 'CUMULATIVE_UP_TO_DATE',
+      mode: isJulySearch ? 'JULY_WISE' : isAugustSearch ? 'AUGUST_WISE' : 'CUMULATIVE_UP_TO_DATE',
     };
   }
 
@@ -550,7 +603,7 @@ async function serveBTechCseBatch17Attendance(
     message: 'No attendance data found for B.Tech CSE Batch 17',
     data: [],
     subjectList: BTECH_CSE_SUBJECT_LIST,
-    subjectColumns: BTECH_CSE_SUBJECT_COLUMNS,
+    subjectColumns: activeSubjectColumns,
     count: 0,
   };
 }
@@ -577,6 +630,8 @@ async function handleStudentAttendance(request: NextRequest) {
     const fdtRaw = body.fdt ?? searchParams.get('fdt') ?? '2026-07-01';
     const tdtRaw = body.tdt ?? searchParams.get('tdt') ?? '2026-07-31';
     const month = body.month ?? searchParams.get('month') ?? '';
+    const rawSubCd = body.subject_cd ?? body.sub_cd ?? searchParams.get('subject_cd') ?? searchParams.get('sub_cd') ?? null;
+    const cleanSubCd = rawSubCd && String(rawSubCd).toLowerCase() !== 'all' && String(rawSubCd).trim() !== '' ? String(rawSubCd).trim() : null;
     const tenantSlug =
       body.tenantSlug || body.tenant || request.headers.get('x-tenant-slug') || searchParams.get('tenant') || '';
 
@@ -592,52 +647,13 @@ async function handleStudentAttendance(request: NextRequest) {
 
     let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
     if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
-      targetSlug = srmsCollegeSlugMap[String(colg_cd || '1')] || 'srms-cet-bareilly';
+      targetSlug = srmsCollegeSlugMap[String(colg_cd || '1')] || (colg_cd && String(colg_cd).length > 2 ? String(colg_cd) : 'team-university');
     }
     const schema = `tenant_${targetSlug}`;
-    const isSrms =
-      targetSlug.startsWith('srms') ||
-      targetSlug.includes('srms') ||
-      colg_cd === 1 ||
-      colg_cd === '1' ||
-      colg_cd === 2 ||
-      colg_cd === '2' ||
-      colg_cd === 11 ||
-      colg_cd === '11';
+    // AGENTS.md Rule 5: isSrms is TRUE ONLY if the tenant identifier contains 'srms'
+    const isSrms = targetSlug.includes('srms');
 
-    // ── IDENTIFY B.TECH CSE BATCH 17 SEM 5 ──
-    const isBTechCseBatch17 =
-      (Number(course_cd) === 1 || String(course_cd).toUpperCase().includes('B.TECH')) &&
-      (Number(branch_cd) === 1 || String(branch_cd).toUpperCase().includes('CSE')) &&
-      (String(batch_cd) === '17' || String(batch_cd) === '2024' || String(batch_cd).includes('17')) &&
-      (Number(sem_cd) === 5 || String(sem_cd) === '5');
-
-    // ── CHECK IF JULY IS SEARCHED OR WHOLE UP-TO-DATE ──
-    const isJulySearch = Boolean(
-      (month && String(month).toLowerCase().includes('jul')) ||
-      (normFdt && normFdt >= '2026-07-01' && normTdt && normTdt <= '2026-07-31') ||
-      (normFdt && normFdt.startsWith('2026-07') && (!normTdt || normTdt <= '2026-07-31')) ||
-      searchParams.get('month')?.toLowerCase().includes('jul')
-    );
-
-    // ── CASE 0: B.TECH CSE BATCH 17 -> SKIP API SYNCING, TAKE ROW LH & LA ONLY ──
-    if (isBTechCseBatch17) {
-      const result = await serveBTechCseBatch17Attendance(schema, {
-        isJulySearch,
-        section_cd: section_cd ? Number(section_cd) : null,
-        normFdt,
-        normTdt,
-      });
-      return NextResponse.json(result, {
-        headers: {
-          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
-          Pragma: 'no-cache',
-          Expires: '0',
-        },
-      });
-    }
-
-    // ── CASE 1: OTHER COURSES/BATCHES -> FETCH FROM REMOTE SRMS CCTV & UPDATE DB FROM SYNC ──
+    // ── CASE 1: FETCH FROM REMOTE SRMS CCTV (SRMS TENANTS ONLY) & UPDATE DB FROM SYNC ──
     let attList: any[] = [];
     let totList: any[] = [];
 
@@ -880,27 +896,94 @@ async function handleStudentAttendance(request: NextRequest) {
       });
     }
 
-    // ── CASE 3: NO DATA FOUND IN SRMS -> POSTGRESQL FALLBACK (PER-STUDENT ROW LH & LA ONLY) ──
-    const secFilter = section_cd ? Number(section_cd) : null;
+    // ── CASE 2.5: B.TECH CSE BATCH 17 (JULY - AUGUST 2026 / SEM 5) ATTENDANCE ──
+    const isBTechCseBatch17 =
+      String(course_cd) === '1' &&
+      (String(branch_cd) === '1' || !branch_cd) &&
+      (String(batch_cd) === '17' || String(batch_cd) === '2024') &&
+      (String(sem_cd) === '5' || !sem_cd);
+
+    if (isBTechCseBatch17) {
+      const isJulySearch = normFdt >= '2026-07-01' && normTdt <= '2026-07-31';
+      const isAugustSearch = normFdt >= '2026-08-01' && normTdt <= '2026-08-31';
+      const btechResult = await serveBTechCseBatch17Attendance(schema, {
+        isJulySearch,
+        isAugustSearch,
+        section_cd,
+        normFdt,
+        normTdt,
+        cleanSubCd,
+      });
+
+      if (btechResult && btechResult.success && Array.isArray(btechResult.data) && btechResult.data.length > 0) {
+        return NextResponse.json(btechResult);
+      }
+    }
+
+    // ── CASE 3: NO DATA FOUND IN SRMS / NON-SRMS TENANT -> POSTGRESQL DYNAMIC ATTENDANCE MATRIX ──
+    const secFilter = section_cd && String(section_cd).toLowerCase() !== 'all' ? String(section_cd) : null;
+
+    // 1. Resolve Batch IDs & Codes from Batches Table
+    let batchMatches: any[] = [];
+    if (batch_cd) {
+      if (course_cd) {
+        batchMatches = await queryDb(
+          `SELECT id, code, batch_cd, name, year, course_cd FROM "${schema}".batches
+           WHERE (course_cd::text = $2::text OR course_cd IS NULL)
+             AND (
+               id::text = $1::text
+               OR code::text = $1::text
+               OR batch_cd::text = $1::text
+               OR year::text = $1::text
+               OR name::text ILIKE '%' || $1::text || '%'
+               OR (
+                 year::text IN (SELECT b2.year::text FROM "${schema}".batches b2 WHERE b2.id::text = $1::text OR b2.code::text = $1::text OR b2.batch_cd::text = $1::text)
+               )
+             )`,
+          [String(batch_cd), String(course_cd)]
+        ).catch(() => []);
+      }
+
+      if (!batchMatches || batchMatches.length === 0) {
+        batchMatches = await queryDb(
+          `SELECT id, code, batch_cd, name, year, course_cd FROM "${schema}".batches
+           WHERE id::text = $1::text OR code::text = $1::text OR batch_cd::text = $1::text OR year::text = $1::text`,
+          [String(batch_cd)]
+        ).catch(() => []);
+      }
+    }
+
+    if ((!batchMatches || batchMatches.length === 0) && course_cd) {
+      batchMatches = await queryDb(
+        `SELECT id, code, batch_cd, name, year, course_cd FROM "${schema}".batches
+         WHERE course_cd::text = $1::text`,
+        [String(course_cd)]
+      ).catch(() => []);
+    }
+
+    const matchedBatchIds = batchMatches.map((b: any) => String(b.id));
+    const matchedBatchCodes = batchMatches.flatMap((b: any) => [b.code, b.batch_cd, b.year].filter(Boolean).map(String));
+
+    // 2. Fetch Enrolled Students for Selected Scope
     let studentRows = await queryDb(
       `SELECT s.id, s.name AS stud_name, s.registration_no AS stud_reg_no, s.rollno AS stud_roll_no,
-              s.course_cd, s.batch_cd, s.batch_id
+              s.course_cd, s.batch_cd, s.batch_id, s.photo_url
        FROM "${schema}".students s
        WHERE (s.course_cd::text = $1::text OR $1 IS NULL)
          AND (
            $2::text IS NULL
-           OR s.batch_cd::text = $2::text
            OR s.batch_id::text = $2::text
-           OR (s.batch_cd::text = '2025' AND $2::text IN ('18', '2', '2025'))
+           OR s.batch_cd::text = $2::text
+           OR (array_length($3::text[], 1) > 0 AND (s.batch_id::text = ANY($3::text[]) OR s.batch_cd::text = ANY($4::text[])))
          )
        ORDER BY s.rollno ASC, s.name ASC`,
-      [course_cd ? String(course_cd) : null, batch_cd ? String(batch_cd) : null]
+      [course_cd ? String(course_cd) : null, batch_cd ? String(batch_cd) : null, matchedBatchIds, matchedBatchCodes]
     ).catch(() => []);
 
     if (!studentRows || studentRows.length === 0) {
       studentRows = await queryDb(
         `SELECT s.id, s.name AS stud_name, s.registration_no AS stud_reg_no, s.rollno AS stud_roll_no,
-                s.course_cd, s.batch_cd, s.batch_id
+                s.course_cd, s.batch_cd, s.batch_id, s.photo_url
          FROM "${schema}".students s
          WHERE (s.course_cd::text = $1::text OR $1 IS NULL)
          ORDER BY s.rollno ASC, s.name ASC
@@ -909,25 +992,127 @@ async function handleStudentAttendance(request: NextRequest) {
       ).catch(() => []);
     }
 
+    // 3. Find Attendance Sessions Conducted within Date Range
     const sessionRows = await queryDb(
-      `SELECT sess.id AS session_id, sess.subject_id, sess.session_date, sess.timetable_slot_id, sess.topic_covered, sess.section_cd,
-              COALESCE(sub.code, sub.sub_addinfo, ts.topic, sess.topic_covered, sess.subject_id::text, 'LEC') AS sub_cd,
-              COALESCE(sub.name, ts.topic, ts.description, sess.topic_covered, 'Scheduled Lecture') AS sub_name
+      `SELECT sess.id AS session_id, sess.subject_id, sess.session_date, sess.timetable_slot_id, sess.topic_covered,
+              sess.course_cd, sess.branch_cd, sess.batch_cd, sess.sem_cd, sess.section_cd,
+              COALESCE(sub.code, sub.sub_addinfo, ts.topic, ts.competency_codes, sess.topic_covered, 'LEC') AS sub_cd,
+              COALESCE(sub.name, ts.topic, ts.description, sess.topic_covered, 'Subject') AS sub_name,
+              COALESCE(sess.section_cd::text, ts.section, '1') AS resolved_section
        FROM "${schema}".attendance_sessions sess
+       LEFT JOIN "${schema}".subjects sub ON sub.id::text = sess.subject_id::text
        LEFT JOIN "${schema}".timetable_slots ts ON ts.id::text = sess.timetable_slot_id::text
-       LEFT JOIN "${schema}".subjects sub ON sub.id::text = sess.subject_id::text OR sub.id::text = ts.subject_id::text
+       LEFT JOIN "${schema}".batches b ON b.id::text = sess.batch_id::text
        WHERE sess.is_cancelled = false
          AND sess.session_date::date >= $1::date
-         AND sess.session_date <= $2::date
+         AND sess.session_date::date <= $2::date
          AND (
-           (ts.course_cd::text = $3::text)
-           OR (sub.course_cd::text = $3::text)
+           $3::text IS NULL
+           OR sess.course_cd::text = $3::text
+           OR sub.course_cd::text = $3::text
+           OR ts.course_cd::text = $3::text
+           OR b.course_cd::text = $3::text
          )
-         AND ($4::int IS NULL OR sess.section_cd::int = $4::int)`,
-      [normFdt, normTdt, course_cd ? String(course_cd) : null, secFilter]
+         AND (
+           $4::text IS NULL
+           OR sess.batch_cd::text = $4::text
+           OR sess.batch_id::text = $4::text
+           OR (array_length($5::text[], 1) > 0 AND (sess.batch_id::text = ANY($5::text[]) OR b.code::text = ANY($6::text[])))
+           OR b.batch_cd::text = $4::text
+           OR b.code::text = $4::text
+           OR ts.batch_cd::text = $4::text
+         )
+         AND (
+           $7::text IS NULL
+           OR sess.sem_cd::text = $7::text
+           OR ts.semester::text = $7::text
+         )
+         AND (
+           $8::text IS NULL
+           OR sess.section_cd::text = $8::text
+           OR ts.section = $8::text
+         )
+         AND (
+           $9::text IS NULL
+           OR sub.code::text = $9::text
+           OR sub.sub_addinfo::text = $9::text
+           OR sess.subject_id::text = $9::text
+           OR sub.name::text ILIKE '%' || $9::text || '%'
+           OR ts.topic::text ILIKE '%' || $9::text || '%'
+           OR sess.topic_covered::text ILIKE '%' || $9::text || '%'
+         )`,
+      [
+        normFdt,
+        normTdt,
+        course_cd ? String(course_cd) : null,
+        batch_cd ? String(batch_cd) : null,
+        matchedBatchIds,
+        matchedBatchCodes,
+        sem_cd ? String(sem_cd) : null,
+        secFilter,
+        cleanSubCd,
+      ]
     ).catch(() => []);
 
-    const subjectMap = new Map<string, { sub_cd: string; sub_name: string; id: string }>();
+    // 4. Find Timetable Scheduled Slots within Date Range (for classes scheduled without attendance)
+    const scheduledSlots = await queryDb(
+      `SELECT ts.id, ts.subject_id,
+              COALESCE(sub.code, sub.sub_addinfo, ts.topic, ts.competency_codes, 'LEC') AS sub_cd,
+              COALESCE(sub.name, ts.topic, ts.description, 'Subject') AS sub_name,
+              ts.section, ts.effective_from, ts.effective_until
+       FROM "${schema}".timetable_slots ts
+       LEFT JOIN "${schema}".subjects sub ON sub.id::text = ts.subject_id::text
+       LEFT JOIN "${schema}".batches b ON b.id::text = ts.batch_id::text
+       WHERE (
+           $1::text IS NULL
+           OR ts.course_cd::text = $1::text
+           OR sub.course_cd::text = $1::text
+           OR b.course_cd::text = $1::text
+         )
+         AND (
+           $2::text IS NULL
+           OR ts.batch_cd::text = $2::text
+           OR ts.batch_id::text = $2::text
+           OR (array_length($3::text[], 1) > 0 AND (ts.batch_id::text = ANY($3::text[]) OR b.code::text = ANY($4::text[])))
+           OR b.batch_cd::text = $2::text
+           OR b.code::text = $2::text
+         )
+         AND (
+           $5::text IS NULL
+           OR ts.semester::text = $5::text
+         )
+         AND (
+           $6::text IS NULL
+           OR ts.section = $6::text
+         )
+         AND (
+           ts.effective_from IS NOT NULL AND ts.effective_until IS NOT NULL
+           AND ts.effective_from::date <= $8::date
+           AND ts.effective_until::date >= $7::date
+         )
+         AND (
+           $9::text IS NULL
+           OR sub.code::text = $9::text
+           OR sub.sub_addinfo::text = $9::text
+           OR ts.subject_id::text = $9::text
+           OR sub.name::text ILIKE '%' || $9::text || '%'
+           OR ts.topic::text ILIKE '%' || $9::text || '%'
+         )`,
+      [
+        course_cd ? String(course_cd) : null,
+        batch_cd ? String(batch_cd) : null,
+        matchedBatchIds,
+        matchedBatchCodes,
+        sem_cd ? String(sem_cd) : null,
+        secFilter,
+        normFdt,
+        normTdt,
+        cleanSubCd,
+      ]
+    ).catch(() => []);
+
+    // 5. Generate Subject Map Dynamically from Sessions & Scheduled Classes
+    const subjectMap = new Map<string, { sub_cd: string; sub_name: string; id: string; hasSessions: boolean }>();
 
     sessionRows.forEach((row: any) => {
       const key = String(row.sub_cd || row.subject_id || row.sub_name);
@@ -936,27 +1121,19 @@ async function handleStudentAttendance(request: NextRequest) {
           sub_cd: String(row.sub_cd || 'LEC'),
           sub_name: String(row.sub_name),
           id: String(row.subject_id || key),
+          hasSessions: true,
         });
       }
     });
 
-    const slotSubjects = await queryDb(
-      `SELECT DISTINCT COALESCE(sub.code, sub.sub_addinfo, ts.topic, ts.description, ts.subject_id::text, 'LEC') AS sub_cd,
-                       COALESCE(sub.name, ts.topic, ts.description, 'Subject') AS sub_name,
-                       ts.subject_id
-       FROM "${schema}".timetable_slots ts
-       LEFT JOIN "${schema}".subjects sub ON sub.id::text = ts.subject_id::text
-       WHERE ts.course_cd::text = $1::text`,
-      [course_cd ? String(course_cd) : null]
-    ).catch(() => []);
-
-    slotSubjects.forEach((s: any) => {
-      const key = String(s.sub_cd || s.sub_name);
+    scheduledSlots.forEach((slot: any) => {
+      const key = String(slot.sub_cd || slot.subject_id || slot.sub_name);
       if (!subjectMap.has(key)) {
         subjectMap.set(key, {
-          sub_cd: String(s.sub_cd),
-          sub_name: String(s.sub_name),
-          id: String(s.subject_id || key),
+          sub_cd: String(slot.sub_cd || 'LEC'),
+          sub_name: String(slot.sub_name),
+          id: String(slot.subject_id || key),
+          hasSessions: false,
         });
       }
     });
@@ -964,10 +1141,11 @@ async function handleStudentAttendance(request: NextRequest) {
     const subjectList = Array.from(subjectMap.values()).map((s) => ({ sub_cd: s.sub_cd, sub_name: s.sub_name }));
     const subjectColumns = subjectList.map((s) => s.sub_name);
 
+    // 6. Fetch Student Attendance Records for Matched Sessions
     const studentIds = studentRows.map((s: any) => String(s.id));
+    const sessionIds = sessionRows.map((s: any) => String(s.session_id));
     let recordRows: any[] = [];
-    if (studentIds.length > 0 && sessionRows.length > 0) {
-      const sessionIds = sessionRows.map((s: any) => String(s.session_id));
+    if (studentIds.length > 0 && sessionIds.length > 0) {
       recordRows = await queryDb(
         `SELECT ar.student_id, ar.session_id, ar.status, sess.subject_id, sess.section_cd
          FROM "${schema}".attendance_records ar
@@ -978,129 +1156,97 @@ async function handleStudentAttendance(request: NextRequest) {
       ).catch(() => []);
     }
 
-    // Build per-student attendance stats directly from THAT student's own records (NEVER cross-section sum)
-    const attStats = new Map<string, Map<string, { total: number; present: number }>>();
-    studentRows.forEach((stud: any) => {
-      const studId = String(stud.id);
-      const subMap = new Map<string, { total: number; present: number }>();
-      subjectMap.forEach((sub, key) => {
-        subMap.set(key, {
-          total: 0,
-          present: 0,
-        });
-      });
-      attStats.set(studId, subMap);
-    });
-
-    recordRows.forEach((rec: any) => {
-      const studId = String(rec.student_id);
-      const sess = sessionRows.find((s: any) => String(s.session_id) === String(rec.session_id));
-      const key = sess ? String(sess.sub_cd || sess.subject_id || sess.sub_name) : String(rec.subject_id);
-      const isPres = rec.status === 'PRESENT' || rec.status === 'LATE';
-      if (attStats.has(studId)) {
-        const subMap = attStats.get(studId)!;
-        if (subMap.has(key)) {
-          const cur = subMap.get(key)!;
-          cur.total++; // increment strictly for THIS student's own session records
-          if (isPres) cur.present++;
-        }
+    // 7. Resolve Dynamic Institution, Course, and Batch Names
+    const institutionRow = await queryDb(
+      `SELECT name FROM "${schema}".colleges 
+       WHERE colg_cd::text = $1::text OR code::text = $1::text OR id::text = $1::text 
+       LIMIT 1`,
+      [String(colg_cd || '1')]
+    ).catch(() => []);
+    let dynamicColgName = institutionRow?.[0]?.name;
+    if (!dynamicColgName) {
+      if (isSrms && (String(colg_cd) === '1' || targetSlug.includes('srms-cet-bareilly'))) {
+        dynamicColgName = 'SRMS CET,BAREILLY';
+      } else {
+        dynamicColgName = targetSlug
+          .split('-')
+          .map((w: string) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
       }
-    });
-
-    // If a student had no individual records for a subject, derive held count strictly from sessions in THAT student's section
-    const studentSectionMap = new Map<string, number>();
-    recordRows.forEach((r: any) => {
-      if (r.section_cd) studentSectionMap.set(String(r.student_id), Number(r.section_cd));
-    });
-
-    const sessionsBySectionSubject = new Map<string, number>();
-    sessionRows.forEach((row: any) => {
-      const sec = Number(row.section_cd || 1);
-      const key = `${sec}_${String(row.sub_cd || row.subject_id || row.sub_name)}`;
-      sessionsBySectionSubject.set(key, (sessionsBySectionSubject.get(key) || 0) + 1);
-    });
-
-    studentRows.forEach((stud: any) => {
-      const studId = String(stud.id);
-      const studSec = studentSectionMap.get(studId) || secFilter || 1;
-      const subMap = attStats.get(studId);
-      if (subMap) {
-        subjectMap.forEach((sub, key) => {
-          const st = subMap.get(key);
-          if (st && st.total === 0) {
-            const secKey = `${studSec}_${key}`;
-            st.total = sessionsBySectionSubject.get(secKey) || 0;
-          }
-        });
-      }
-    });
-
-    const courseNameMap: Record<string, string> = {
-      '1': 'B.Tech',
-      '13': 'BCA',
-      '4': 'MBA',
-      '2': 'B.Pharma',
-      '3': 'MCA',
-      '12': 'BBA',
-      '5': 'M.Tech',
-      '6': 'M.Pharm',
-    };
-    const resolvedCourseName = courseNameMap[String(course_cd)] || `Course ${course_cd}`;
-
-    const branchNameMap: Record<string, Record<string, string>> = {
-      '4': { '1': 'MBA Department' },
-      '13': { '1': 'BCA Department' },
-      '1': { '1': 'CSE', '2': 'IT', '3': 'EC', '4': 'EN', '5': 'ME' },
-      '2': { '1': 'Pharmacy' },
-      '3': { '1': 'MCA Department' },
-      '12': { '1': 'BBA Department' },
-    };
-    const resolvedBranchName =
-      branchNameMap[String(course_cd)]?.[String(branch_cd)] ||
-      (String(course_cd) === '4' ? 'MBA Department' : String(branch_cd) === '1' ? 'CSE' : `Branch ${branch_cd}`);
-
-    const resolvedBatchName =
-      String(batch_cd) === '16'
-        ? '2025'
-        : String(batch_cd) === '18' || String(batch_cd) === '2'
-        ? '2025'
-        : `Batch ${batch_cd}`;
-
-    // Filter students by section if specified
-    let finalStudentRows = studentRows;
-    if (secFilter) {
-      finalStudentRows = studentRows.filter((stud: any) => {
-        const studSec = studentSectionMap.get(String(stud.id));
-        return !studSec || studSec === secFilter;
-      });
     }
 
-    const students = finalStudentRows.map((stud: any, idx: number) => {
-      const studId = String(stud.id);
-      const studSubMap = attStats.get(studId);
+    const courseRow = course_cd
+      ? await queryDb(
+          `SELECT name FROM "${schema}".courses WHERE code::text = $1::text OR id::text = $1::text LIMIT 1`,
+          [String(course_cd)]
+        ).catch(() => [])
+      : [];
+    const dynamicCourseName = courseRow?.[0]?.name || `Course ${course_cd || 1}`;
 
+    const batchRow = batch_cd
+      ? await queryDb(
+          `SELECT name, year FROM "${schema}".batches WHERE id::text = $1::text OR code::text = $1::text OR batch_cd::text = $1::text LIMIT 1`,
+          [String(batch_cd)]
+        ).catch(() => [])
+      : [];
+    const dynamicBatchName =
+      batchRow?.[0]?.name || (batchRow?.[0]?.year ? `Batch ${batchRow[0].year}` : `Batch ${batch_cd || 1}`);
+
+    // Pre-index sessions and records for O(1) fast lookup
+    const sessMap = new Map<string, any>();
+    sessionRows.forEach((sess: any) => {
+      sessMap.set(String(sess.session_id), sess);
+    });
+
+    const studentRecordMap = new Map<string, Map<string, { present: number; total: number }>>();
+    recordRows.forEach((r: any) => {
+      const sId = String(r.student_id);
+      const sess = sessMap.get(String(r.session_id));
+      if (!sess) return;
+      const subKey = String(sess.sub_cd || sess.subject_id || sess.sub_name);
+      if (!studentRecordMap.has(sId)) {
+        studentRecordMap.set(sId, new Map());
+      }
+      const sSubMap = studentRecordMap.get(sId)!;
+      if (!sSubMap.has(subKey)) {
+        sSubMap.set(subKey, { present: 0, total: 0 });
+      }
+      const stat = sSubMap.get(subKey)!;
+      stat.total += 1;
+      if (r.status === 'PRESENT' || r.status === 'LATE') {
+        stat.present += 1;
+      }
+    });
+
+    // 8. Build Student Attendance Matrix
+    const students = studentRows.map((stud: any, idx: number) => {
+      const studId = String(stud.id);
       let totalConducted = 0;
       let totalAttended = 0;
 
       const subjectsArr: any[] = [];
       const studentObj: Record<string, any> = {
         s_no: idx + 1,
-        colg_name: 'SRMS CET,BAREILLY',
-        course_name: resolvedCourseName,
-        branch_name: resolvedBranchName,
-        batch_name: resolvedBatchName,
+        colg_name: dynamicColgName,
+        course_name: dynamicCourseName,
+        branch_name: 'Department',
+        batch_name: dynamicBatchName,
         stud_reg_no: stud.stud_reg_no || stud.id,
         stud_roll_no: stud.stud_roll_no || stud.stud_reg_no || stud.id,
         stud_name: stud.stud_name || 'Student',
+        photo_url: stud.photo_url || null,
         AttendanceType: 'FACULTY_MANUAL',
       };
 
+      const studSubMap = studentRecordMap.get(studId);
+
       subjectMap.forEach((sub, key) => {
-        const st = studSubMap?.get(key) || { total: 0, present: 0 };
-        totalConducted += st.total;
-        totalAttended += st.present;
-        const pct = st.total > 0 ? ((st.present / st.total) * 100).toFixed(2) : '0.00';
-        const displayVal = `${st.present}/${st.total} (${pct}%)`;
+        const stat = studSubMap?.get(key) || { present: 0, total: 0 };
+        totalConducted += stat.total;
+        totalAttended += stat.present;
+
+        const pct = stat.total > 0 ? ((stat.present / stat.total) * 100).toFixed(2) : '0.00';
+        const displayVal = `${stat.present}/${stat.total} (${pct}%)`;
 
         studentObj[sub.sub_name] = displayVal;
         studentObj[`sub_cd_${sub.sub_name}`] = sub.sub_cd;

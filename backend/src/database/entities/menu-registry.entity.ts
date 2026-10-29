@@ -16,6 +16,7 @@ export enum MenuRole {
   WARDEN = 'WARDEN',
   STUDENT = 'STUDENT',
   HOD = 'HOD',
+  DQAC = 'DQAC',
 }
 
 export enum ApplicableFirmMode {

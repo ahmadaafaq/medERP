@@ -3,9 +3,10 @@
 import React, { useState, useRef } from 'react';
 import {
   Printer, CheckCircle2, XCircle, AlertCircle, RotateCcw,
-  Edit3, Trash2, X, ChevronDown, ChevronUp, FileText, Check
+  Edit3, Trash2, X, ChevronDown, ChevronUp, FileText, Check, Lock
 } from 'lucide-react';
 import { formatCourseName, formatSemester } from '../../lib/exam-formatters';
+import ImagePreviewModal from './ImagePreviewModal';
 
 export interface QuestionRemarkItem {
   action: 'ok' | 'replace' | 'remove' | 'adjust_marks';
@@ -18,7 +19,7 @@ export interface PaperReviewModalProps {
   isOpen: boolean;
   onClose: () => void;
   mode: 'review' | 'preview' | 'print' | 'clerk_view';
-  onApprove?: (paperId: string, remarks: string, version: number) => Promise<void>;
+  onApprove?: (paperId: string, remarks: string, version: number, options?: { paperSet?: string; targetSections?: string[] }) => Promise<void>;
   onRequestChanges?: (paperId: string, generalRemarks: string, questionRemarks: Record<string, QuestionRemarkItem>, version: number) => Promise<void>;
   userRole?: string;
 }
@@ -35,6 +36,17 @@ export default function QuestionPaperReviewModal({
   const printRef = useRef<HTMLDivElement>(null);
   const [submitting, setSubmitting] = useState(false);
   const [generalRemarks, setGeneralRemarks] = useState(paper?.hod_remarks || '');
+  const [previewImage, setPreviewImage] = useState<{ src: string; title?: string } | null>(null);
+
+  // Set & Section decision state
+  const [selectedSet, setSelectedSet] = useState<string>(paper?.paper_set || paper?.paperSet || 'Set A');
+  const [sectionMode, setSectionMode] = useState<'all' | 'specific'>('all');
+  const [selectedSections, setSelectedSections] = useState<string[]>(() => {
+    if (paper?.target_sections && Array.isArray(paper.target_sections) && !paper.target_sections.includes('All')) {
+      return paper.target_sections;
+    }
+    return ['Section A', 'Section B'];
+  });
 
   // Parse sections
   const sections: any[] = React.useMemo(() => {
@@ -112,7 +124,13 @@ export default function QuestionPaperReviewModal({
     });
   };
 
+  const isFaculty = userRole?.toUpperCase() === 'FACULTY' || userRole?.toUpperCase() === 'TEACHER';
+
   const handlePrint = () => {
+    if (isFaculty) {
+      alert('🔒 Printing locked: Question papers can only be printed by the Examination Department or Clerk after final approval.');
+      return;
+    }
     if (!printRef.current) return;
     const printContent = printRef.current.innerHTML;
     const w = window.open('', '_blank', 'width=900,height=750');
@@ -126,9 +144,14 @@ export default function QuestionPaperReviewModal({
             @page { margin: 15mm 20mm; size: A4 portrait; }
             body { font-family: 'Times New Roman', Times, serif; color: #000; font-size: 11pt; line-height: 1.4; margin: 0; padding: 10px; }
             .paper-header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 8px; margin-bottom: 12px; }
-            .inst-name { font-size: 15pt; font-weight: bold; text-transform: uppercase; margin-bottom: 2px; }
-            .paper-title { font-size: 13pt; font-weight: bold; margin-bottom: 4px; }
-            .paper-meta-grid { display: flex; justify-content: space-between; font-size: 10pt; font-weight: 600; border-bottom: 1px solid #000; padding: 6px 0; margin-bottom: 12px; }
+            .inst-name { font-size: 16pt; font-weight: bold; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 2px; }
+            .inst-dept { font-size: 11pt; font-weight: bold; text-transform: uppercase; letter-spacing: 0.5px; color: #222; margin-bottom: 6px; }
+            .header-divider { width: 80px; height: 1.5px; background: #000; margin: 4px auto 6px auto; }
+            .paper-title { font-size: 14pt; font-weight: bold; text-transform: uppercase; margin: 4px 0 2px 0; }
+            .paper-meta-container { width: 100%; border-bottom: 1.5px solid #000; padding-bottom: 6px; margin-bottom: 12px; font-size: 9.5pt; font-weight: 600; }
+            .meta-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px; }
+            .meta-left { text-align: left; }
+            .meta-right { text-align: right; white-space: nowrap; }
             .section-heading { font-size: 11pt; font-weight: bold; text-transform: uppercase; margin: 16px 0 6px 0; border-bottom: 1px dashed #666; padding-bottom: 4px; }
             .section-instructions { font-size: 9.5pt; font-style: italic; margin-bottom: 8px; color: #333; }
             .q-row { display: flex; justify-content: space-between; margin-bottom: 8px; page-break-inside: avoid; }
@@ -159,7 +182,11 @@ export default function QuestionPaperReviewModal({
     if (!onApprove) return;
     setSubmitting(true);
     try {
-      await onApprove(paper.id, generalRemarks, currentVersion);
+      const targetSecs = sectionMode === 'all' ? ['All', 'Section A', 'Section B'] : (selectedSections.length > 0 ? selectedSections : ['Section A']);
+      await onApprove(paper.id, generalRemarks, currentVersion, {
+        paperSet: selectedSet,
+        targetSections: targetSecs,
+      });
       onClose();
     } finally {
       setSubmitting(false);
@@ -246,17 +273,27 @@ export default function QuestionPaperReviewModal({
           </div>
 
           <div className="flex items-center gap-2">
-            <button
-              onClick={handlePrint}
-              className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5"
-              title="Print Examination Paper"
-            >
-              <Printer className="w-4 h-4 text-orange-500" />
-              <span className="hidden sm:inline">Print Paper</span>
-            </button>
+            {isFaculty ? (
+              <div
+                className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs font-bold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700 cursor-not-allowed select-none"
+                title="Printing locked for Faculty. Question papers can only be printed by Examination Department or Clerk."
+              >
+                <Lock className="w-3.5 h-3.5 text-slate-400" />
+                <span>Print Locked</span>
+              </div>
+            ) : (
+              <button
+                onClick={handlePrint}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                title="Print Examination Paper"
+              >
+                <Printer className="w-4 h-4 text-orange-500" />
+                <span className="hidden sm:inline">Print Paper</span>
+              </button>
+            )}
             <button
               onClick={onClose}
-              className="w-9 h-9 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 flex items-center justify-center transition-all"
+              className="w-9 h-9 rounded-xl hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-500 flex items-center justify-center transition-all cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
@@ -307,28 +344,113 @@ export default function QuestionPaperReviewModal({
             className="bg-white dark:bg-slate-900 text-black dark:text-slate-100 p-6 sm:p-8 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm font-serif"
           >
             {/* Examination Official Paper Header */}
-            <div className="text-center border-b-2 border-black dark:border-slate-300 pb-3 mb-4 paper-header">
-              <h1 className="text-lg sm:text-xl font-bold uppercase tracking-wider inst-name">
-                {paper.college_name || 'SRMS COLLEGE OF ENGINEERING & TECHNOLOGY, BAREILLY'}
-              </h1>
-              <p className="text-xs sm:text-sm font-bold uppercase text-slate-700 dark:text-slate-300">
-                Department of {paper.department_name || 'Computer Applications'}
-              </p>
-              <h2 className="text-base sm:text-lg font-bold mt-1 text-[#1B1E28] dark:text-white paper-title">
-                {paper.name}
-              </h2>
-            </div>
+            {(() => {
+              const institutionTitle = typeof window !== 'undefined' ? (() => {
+                try {
+                  const u = JSON.parse(localStorage.getItem('user') || '{}');
+                  return (
+                    paper.college_name ||
+                    paper.collegeName ||
+                    u.collegeName ||
+                    u.tenantName ||
+                    u.firm_title ||
+                    localStorage.getItem('collegeName') ||
+                    localStorage.getItem('tenantName') ||
+                    'EXAMINATION CONTROLLER DIVISION'
+                  );
+                } catch {
+                  return 'EXAMINATION CONTROLLER DIVISION';
+                }
+              })() : 'EXAMINATION CONTROLLER DIVISION';
 
-            {/* Paper Metadata Table / Row */}
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs sm:text-sm font-semibold border-b border-black dark:border-slate-400 pb-2 mb-6 paper-meta-grid">
-              <span><b>Course/Branch:</b> {formatCourseName(paper.course_cd, paper.course_name) || 'BCA'} {paper.branch_cd ? `· Branch ${paper.branch_cd}` : ''}</span>
-              <span><b>Semester:</b> {formatSemester(paper.semester, paper.section) || 'Semester 3'}</span>
-              <span><b>Paper Code:</b> {paper.code}</span>
-              <span><b>Set:</b> <b className="font-bold underline">{paper.paper_set || paper.paperSet || 'Set A'}</b></span>
-              <span><b>Target Section:</b> {Array.isArray(paper.target_sections) ? (paper.target_sections.includes('All') ? 'Common (All Sections)' : paper.target_sections.join(', ')) : (paper.target_sections || 'Common')}</span>
-              <span><b>Duration:</b> {paper.duration_minutes || 60} mins</span>
-              <span><b>Max Marks:</b> {paper.max_marks || 100}</span>
-              <span><b>Pass Marks:</b> {paper.passing_marks || 40}</span>
+              // 100% Dynamic Department Resolution: derived directly from database records
+              const rawDept = (paper.department_name || '').trim();
+              let cleanDeptName = '';
+              if (rawDept) {
+                cleanDeptName = rawDept.toUpperCase().startsWith('DEPARTMENT OF')
+                  ? rawDept.toUpperCase()
+                  : `DEPARTMENT OF ${rawDept.toUpperCase()}`;
+              } else if (paper.course_name) {
+                cleanDeptName = `DEPARTMENT OF ${paper.course_name.toUpperCase()}`;
+              }
+
+              return (
+                <div className="text-center pb-3 mb-4 paper-header">
+                  {/* Institution Name */}
+                  <h1 className="text-xl sm:text-2xl font-black uppercase tracking-widest inst-name text-[#1B1E28] dark:text-white">
+                    {paper.college_name || paper.collegeName || institutionTitle}
+                  </h1>
+
+                  {/* Department Subtitle */}
+                  {cleanDeptName && (
+                    <p className="text-xs sm:text-sm font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 mt-1 inst-dept">
+                      {cleanDeptName}
+                    </p>
+                  )}
+
+                  {/* Elegant Separator Divider between Dept and Exam Title */}
+                  <div className="w-20 h-[2px] bg-black dark:bg-slate-300 mx-auto my-2.5 header-divider" />
+
+                  {/* Examination Paper Title */}
+                  <h2 className="text-base sm:text-lg font-black uppercase tracking-wide text-[#1B1E28] dark:text-white paper-title">
+                    {paper.name}
+                  </h2>
+                </div>
+              );
+            })()}
+
+            {/* Paper Metadata Table / Rows — Timing (Duration) explicitly aligned to the RIGHT */}
+            <div className="border-b-2 border-black dark:border-slate-400 pb-3 mb-5 space-y-2 text-xs sm:text-sm font-semibold paper-meta-container">
+              {/* Row 1: Course / Branch (Left) | Timing / Duration (RIGHT) */}
+              <div className="flex justify-between items-center gap-4 meta-row">
+                <div className="text-left meta-left">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">Course/Branch: </span>
+                  <span className="font-bold text-black dark:text-white">
+                    {formatCourseName(paper.course_cd, paper.course_name) || paper.course_name || paper.course_cd || 'General Course'} {paper.branch_cd ? `· Branch ${paper.branch_cd}` : ''}
+                  </span>
+                </div>
+                <div className="text-right meta-right shrink-0">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">Duration / Time: </span>
+                  <span className="font-bold text-black dark:text-white underline">{paper.duration_minutes || 60} mins</span>
+                </div>
+              </div>
+
+              {/* Row 2: Paper Code, Set, Target Section (Left) | Max Marks & Pass Marks (RIGHT) */}
+              <div className="flex justify-between items-center gap-4 meta-row">
+                <div className="text-left meta-left flex flex-wrap items-center gap-x-4 gap-y-1">
+                  <span>
+                    <span className="text-slate-600 dark:text-slate-400 font-bold">Paper Code: </span>
+                    <span className="font-mono font-bold text-black dark:text-white">{paper.code}</span>
+                  </span>
+                  <span>
+                    <span className="text-slate-600 dark:text-slate-400 font-bold">Set: </span>
+                    <span className="font-bold underline text-black dark:text-white">{paper.paper_set || paper.paperSet || 'Set A'}</span>
+                  </span>
+                  <span>
+                    <span className="text-slate-600 dark:text-slate-400 font-bold">Target Section: </span>
+                    <span className="font-bold text-black dark:text-white">
+                      {Array.isArray(paper.target_sections) ? (paper.target_sections.includes('All') ? 'Common (All Sections)' : paper.target_sections.join(', ')) : (paper.target_sections || 'Common')}
+                    </span>
+                  </span>
+                </div>
+                <div className="text-right meta-right shrink-0">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">Max Marks: </span>
+                  <span className="font-bold text-black dark:text-white">{paper.max_marks || 100}</span>
+                  <span className="text-slate-500 text-[11px] ml-1.5">(Pass: {paper.passing_marks || 40})</span>
+                </div>
+              </div>
+
+              {/* Row 3: Semester (Left) | Subject (RIGHT) */}
+              <div className="flex justify-between items-center gap-4 meta-row">
+                <div className="text-left meta-left">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">Semester: </span>
+                  <span className="font-bold text-black dark:text-white">{formatSemester(paper.semester, paper.section) || (paper.semester ? `Semester ${paper.semester}` : '—')}</span>
+                </div>
+                <div className="text-right meta-right shrink-0">
+                  <span className="text-slate-600 dark:text-slate-400 font-bold">Subject: </span>
+                  <span className="font-bold text-black dark:text-white">{paper.subject_name || paper.subject_code || (paper.code ? paper.code.split('-')[0] : '—')}</span>
+                </div>
+              </div>
             </div>
 
             {/* General Instructions */}
@@ -403,27 +525,57 @@ export default function QuestionPaperReviewModal({
                                   </div>
 
                                   {/* Attached Diagram / Image */}
-                                  {(q.image_url || q.imageUrl) && (
-                                    <div className="mt-2.5 mb-2 ml-5">
-                                      <img
-                                        src={q.image_url || q.imageUrl}
-                                        alt={`Diagram for Q${qIdx + 1}`}
-                                        className="q-img max-h-56 max-w-full object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-white p-1 shadow-sm"
-                                      />
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    const imgUri = q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url;
+                                    if (!imgUri) return null;
+                                    return (
+                                      <div className="mt-2.5 mb-2 ml-5">
+                                        <img
+                                          src={imgUri}
+                                          alt={`Diagram for Q${qIdx + 1}`}
+                                          className="q-img max-h-64 max-w-full object-contain rounded-lg border border-slate-300 dark:border-slate-700 bg-white p-1.5 shadow-sm cursor-pointer hover:opacity-95 transition-opacity"
+                                          onClick={() => setPreviewImage({
+                                            src: imgUri,
+                                            title: `Q${qIdx + 1}: ${q.questionText || q.question_text || 'Examination Diagram'}`
+                                          })}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => setPreviewImage({
+                                            src: imgUri,
+                                            title: `Q${qIdx + 1}: ${q.questionText || q.question_text || 'Examination Diagram'}`
+                                          })}
+                                          className="text-[10px] text-slate-500 hover:text-[#5B4BFF] font-sans italic flex items-center gap-1 mt-0.5 no-print cursor-pointer"
+                                        >
+                                          <span>📷</span>
+                                          <span>Click diagram to enlarge</span>
+                                        </button>
+                                      </div>
+                                    );
+                                  })()}
 
                                   {/* Sub-questions if any */}
-                                  {q.sub_questions && Array.isArray(q.sub_questions) && q.sub_questions.length > 0 && (
-                                    <div className="ml-5 mt-2 space-y-1 sub-questions font-sans text-xs">
-                                      {q.sub_questions.map((sq: any, sqIdx: number) => (
-                                        <div key={sq.id || sqIdx} className="flex items-baseline justify-between gap-2 sub-q-row">
-                                          <span><b>{sq.label || `${String.fromCharCode(97 + sqIdx)})`}</b> {sq.questionText}</span>
-                                          <span className="text-slate-500 font-mono font-bold shrink-0">[{sq.marks}M]</span>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
+                                  {(() => {
+                                    const subQs = (q.sub_questions && Array.isArray(q.sub_questions) && q.sub_questions.length > 0)
+                                      ? q.sub_questions
+                                      : (q.subQuestions && Array.isArray(q.subQuestions) && q.subQuestions.length > 0)
+                                      ? q.subQuestions
+                                      : [];
+                                    if (subQs.length === 0) return null;
+                                    return (
+                                      <div className="ml-5 mt-2 space-y-1 sub-questions font-sans text-xs">
+                                        {subQs.map((sq: any, sqIdx: number) => {
+                                          const sqMark = sq.customMarks ?? sq.marks ?? sq.defaultMarks ?? sq.max_marks ?? sq.maxMarks ?? 1;
+                                          return (
+                                            <div key={sq.id || sqIdx} className="flex items-baseline justify-between gap-2 sub-q-row">
+                                              <span><b>{sq.label || `${String.fromCharCode(97 + sqIdx)})`}</b> {sq.questionText || sq.question_text}</span>
+                                              <span className="text-slate-500 font-mono font-bold shrink-0">[{sqMark} M]</span>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    );
+                                  })()}
 
                                   {/* Options for MCQ */}
                                   {(q.mode === 'MCQ' || section.type === 'MCQ') && (
@@ -447,7 +599,7 @@ export default function QuestionPaperReviewModal({
 
                                 <div className="text-right shrink-0 q-marks">
                                   <span className="font-mono font-bold text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                                    [{q.marks || 1} M]
+                                    [{q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 1} M]
                                   </span>
                                 </div>
                               </div>
@@ -529,7 +681,7 @@ export default function QuestionPaperReviewModal({
                                           <span className="text-xs text-slate-500 whitespace-nowrap">Suggested Marks:</span>
                                           <input
                                             type="number"
-                                            value={rem.suggestedMarks || q.marks || 1}
+                                            value={rem.suggestedMarks !== undefined ? rem.suggestedMarks : (q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 1)}
                                             onChange={(e) => handleSetQuestionSuggestedMarks(qId, Number(e.target.value))}
                                             className="w-16 px-2 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-bold text-center"
                                           />
@@ -597,17 +749,108 @@ export default function QuestionPaperReviewModal({
           })()}
           </div>
 
-          {/* HOD General Feedback Box (in Review Mode) */}
+          {/* Decision: Course Sections & Set Allocation */}
+          {mode === 'review' && (
+            <div className="p-4 rounded-xl bg-indigo-50/70 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <label className="text-xs font-black uppercase tracking-wider text-indigo-950 dark:text-indigo-200 flex items-center gap-1.5">
+                  <span>🎯</span>
+                  <span>Exam Section &amp; Set Assignment Decision</span>
+                </label>
+                <span className="text-[11px] font-bold text-indigo-600 dark:text-indigo-400">
+                  Decide which set is given for course sections
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Set Selection */}
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/60">
+                  <span className="text-[11px] font-bold text-slate-500 block mb-1.5">Paper Set Variant:</span>
+                  <div className="flex items-center gap-2">
+                    {['Set A', 'Set B', 'Set C', 'Common Set'].map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setSelectedSet(s)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                          selectedSet === s
+                            ? 'bg-[#5B4BFF] text-white shadow-xs'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Section Allocation */}
+                <div className="p-3 rounded-lg bg-white dark:bg-slate-900 border border-indigo-100 dark:border-indigo-900/60">
+                  <span className="text-[11px] font-bold text-slate-500 block mb-1.5">Section Distribution Strategy:</span>
+                  <div className="space-y-1.5">
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="secMode"
+                        checked={sectionMode === 'all'}
+                        onChange={() => {
+                          setSectionMode('all');
+                          setSelectedSections(['Section A', 'Section B']);
+                        }}
+                        className="text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                      />
+                      <span>Common Set (Same in both Section A &amp; Section B)</span>
+                    </label>
+
+                    <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="secMode"
+                        checked={sectionMode === 'specific'}
+                        onChange={() => setSectionMode('specific')}
+                        className="text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                      />
+                      <span>Decide specific section for this set:</span>
+                    </label>
+
+                    {sectionMode === 'specific' && (
+                      <div className="flex items-center gap-3 pl-5 pt-1">
+                        {['Section A', 'Section B', 'Section C'].map((sec) => (
+                          <label key={sec} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selectedSections.includes(sec)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSections(prev => [...prev, sec]);
+                                } else {
+                                  setSelectedSections(prev => prev.filter(s => s !== sec));
+                                }
+                              }}
+                              className="rounded text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                            />
+                            <span>{sec}</span>
+                          </label>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Feedback Box (in Review Mode) */}
           {mode === 'review' && (
             <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 space-y-2">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                General HOD Feedback / Directives to Clerk:
+                {userRole === 'DQAC' ? 'DQAC Quality Audit Remarks / Directives:' : 'General HOD Feedback / Directives:'}
               </label>
               <textarea
                 rows={3}
                 value={generalRemarks}
                 onChange={(e) => setGeneralRemarks(e.target.value)}
-                placeholder="Enter general remarks for the clerk regarding this question paper..."
+                placeholder={userRole === 'DQAC' ? 'Enter DQAC quality audit notes...' : 'Enter remarks for the question paper creator...'}
                 className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-xs text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF] resize-none"
               />
             </div>
@@ -618,7 +861,7 @@ export default function QuestionPaperReviewModal({
         <div className="p-4 sm:p-5 border-t border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex flex-wrap items-center justify-between gap-3">
           <div className="text-xs text-slate-500">
             {mode === 'review' ? (
-              <span>Paper Version: <b>v{currentVersion}</b> · Total flagged questions: <b>{flaggedCount}</b></span>
+              <span>Paper Version: <b>v{currentVersion}</b> · Total flagged questions: <b>{flaggedCount}</b> · Set: <b className="text-indigo-600 dark:text-indigo-400">{selectedSet}</b></span>
             ) : (
               <span>Status: <b>{paper.status}</b></span>
             )}
@@ -642,7 +885,7 @@ export default function QuestionPaperReviewModal({
                   className="px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition-all disabled:opacity-50 flex items-center gap-1.5 shadow-sm shadow-rose-500/20"
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Submit Back to Clerk (Request Changes)</span>
+                  <span>Request Changes / Revisions</span>
                 </button>
 
                 <button
@@ -654,10 +897,10 @@ export default function QuestionPaperReviewModal({
                       ? 'bg-slate-400 cursor-not-allowed opacity-60'
                       : 'bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/30'
                   }`}
-                  title={flaggedCount > 0 ? 'Resolve flagged questions or submit changes to clerk' : 'Approve paper for live examination print'}
+                  title={flaggedCount > 0 ? 'Resolve flagged questions or submit changes' : 'Approve paper'}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>Approve & Authorize Live Print</span>
+                  <span>{userRole === 'DQAC' ? '✅ Approve as DQAC (Quality Verified)' : '✅ Approve & Authorize Live Print'}</span>
                 </button>
               </>
             )}
@@ -665,6 +908,15 @@ export default function QuestionPaperReviewModal({
         </div>
 
       </div>
+
+        {previewImage && (
+          <ImagePreviewModal
+            src={previewImage.src}
+            title={previewImage.title}
+            isOpen={!!previewImage}
+            onClose={() => setPreviewImage(null)}
+          />
+        )}
     </div>
   );
 }

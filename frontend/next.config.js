@@ -2,7 +2,7 @@
 const publicApi = (process.env.NEXT_PUBLIC_API_URL || '').trim();
 const hasPublicIp = publicApi && !publicApi.includes('localhost') && !publicApi.includes('127.0.0.1');
 
-const backendHost = process.env.BACKEND_HOST || '100.63.22.73';
+const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
 const backendPort = process.env.BACKEND_PORT || process.env.PORT || '8081';
 const defaultBase = `http://${backendHost}:${backendPort}`;
 

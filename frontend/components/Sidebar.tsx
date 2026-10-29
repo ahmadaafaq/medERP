@@ -6,10 +6,10 @@ import { usePathname } from 'next/navigation';
 
 // Global in-memory cache preserved across mounts, route transitions, and re-renders
 const sidebarPermissionsCache = new Map<string, { keys: string[]; timestamp: number }>();
-const PERMS_CACHE_TTL_MS = 15 * 60 * 1000; // 15 minutes
+const PERMS_CACHE_TTL_MS = 5 * 1000; // 5 seconds for instant menu responsiveness
 
 interface SidebarProps {
-  role?: 'student' | 'faculty' | 'admin' | 'warden' | 'clerk' | 'superadmin' | 'owner' | 'hod';
+  role?: 'student' | 'faculty' | 'admin' | 'warden' | 'clerk' | 'superadmin' | 'owner' | 'hod' | 'dqac';
 }
 
 export default function Sidebar({ role: propRole }: SidebarProps) {
@@ -31,16 +31,21 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   }, [activeSessionRole]);
 
   // Determine effective sidebar role:
+  // If active user is DQAC, retain DQAC sidebar
   // If active user is HOD, retain the HOD sidebar when visiting HOD or shared Faculty routes
   // If active user is CLERK, retain Clerk sidebar on Clerk or shared routes
   let role = propRole || 'student';
-  if (activeSessionRole === 'hod' && (propRole === 'faculty' || !propRole || pathname?.includes('/faculty') || pathname?.includes('/hod'))) {
+  if (activeSessionRole === 'dqac' && (propRole === 'faculty' || propRole === 'dqac' || !propRole || pathname?.includes('/dqac') || pathname?.includes('/faculty') || pathname?.includes('/hod'))) {
+    role = 'dqac';
+  } else if (activeSessionRole === 'hod' && (propRole === 'faculty' || !propRole || pathname?.includes('/faculty') || pathname?.includes('/hod'))) {
     role = 'hod';
   } else if (activeSessionRole === 'clerk' && (propRole === 'faculty' || propRole === 'clerk' || !propRole || pathname?.includes('/clerk') || pathname?.includes('/subject-linker') || pathname?.includes('/staff-master') || pathname?.includes('/student-master') || pathname?.includes('/repository'))) {
     role = 'clerk';
   } else if (!propRole) {
     role =
-      pathname?.includes('/hod')
+      pathname?.includes('/dqac')
+        ? 'dqac'
+        : pathname?.includes('/hod')
         ? 'hod'
         : pathname?.includes('/clerk')
         ? 'clerk'
@@ -351,8 +356,8 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       }
 
       // Fetch enabled keys for this firm + role from PostgreSQL database
-      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${targetRole}`, {
-        cache: 'default',
+      fetch(`/api/firms/${tenantSlug}/role-permissions?role=${targetRole}&_t=${Date.now()}`, {
+        cache: 'no-store',
       })
         .then(async (res) => {
           if (res.ok) {
@@ -447,6 +452,13 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
     const handleStorage = () => {
       sidebarPermissionsCache.clear();
+      if (typeof window !== 'undefined') {
+        try {
+          Object.keys(sessionStorage).forEach((k) => {
+            if (k.startsWith('med_sidebar_perms_')) sessionStorage.removeItem(k);
+          });
+        } catch {}
+      }
       loadPermissionsAndBranding();
     };
     const handleToggleMobile = () => {
@@ -510,6 +522,16 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
       menuKey === 'hod_timetable_approvals' ||
       menuKey === 'hod_question_bank' ||
       menuKey === 'hod_chat' ||
+      routePath?.startsWith('/dashboard/hod')
+    )) return true;
+
+    // DQAC quality overview and approvals are always permitted
+    if (role === 'dqac' && (
+      menuKey === 'dqac_overview' ||
+      menuKey === 'dqac_qp_approvals' ||
+      menuKey === 'dqac_question_bank' ||
+      menuKey === 'dqac_chat' ||
+      routePath?.startsWith('/dashboard/dqac') ||
       routePath?.startsWith('/dashboard/hod')
     )) return true;
 
@@ -593,7 +615,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
   }, [pathname, misReportsOpen]);
 
   const isLinkActive = (href: string) => {
-    const isRootTab = href === '/dashboard/faculty' || href === '/dashboard/student' || href === '/dashboard/admin' || href === '/dashboard/clerk' || href === '/dashboard/warden' || href === '/dashboard/owner' || href === '/dashboard/superadmin';
+    const isRootTab = href === '/dashboard/faculty' || href === '/dashboard/student' || href === '/dashboard/admin' || href === '/dashboard/clerk' || href === '/dashboard/warden' || href === '/dashboard/owner' || href === '/dashboard/superadmin' || href === '/dashboard/dqac' || href === '/dashboard/hod';
     return isRootTab ? pathname === href : (pathname === href || (!!pathname && pathname.startsWith(href + '/')));
   };
 
@@ -1274,7 +1296,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('faculty_biometric') && (
+              {(isAllowed('faculty_attendance_biometric', '/dashboard/faculty/attendance-biometric') || isAllowed('faculty_biometric', '/dashboard/faculty/attendance-biometric')) && (
                 <Link href="/dashboard/faculty/attendance-biometric" className={getLinkClass('/dashboard/faculty/attendance-biometric')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -1289,6 +1311,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                   </svg>
                   <span>Assessment & Q-Bank</span>
+                </Link>
+              )}
+
+              {(isAllowed('faculty_marks', '/dashboard/faculty/marks') || isAllowed('faculty_assessment_marks', '/dashboard/faculty/marks')) && (
+                <Link href="/dashboard/faculty/marks" data-active={isLinkActive('/dashboard/faculty/marks') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/marks')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span>Marks Entry &amp; Grading</span>
                 </Link>
               )}
 
@@ -1527,6 +1558,70 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </div>
               )}
             </>
+          ) : role === 'dqac' ? (
+            <>
+              {/* ─── DQAC Quality Assurance Cell ─────────────────────── */}
+              <div className="px-2 py-1 text-[10px] font-black text-[#5B4BFF] uppercase tracking-wider">
+                Quality Assurance Cell
+              </div>
+
+              <Link href="/dashboard/dqac" data-active={isLinkActive('/dashboard/dqac') ? 'true' : undefined} className={getLinkClass('/dashboard/dqac')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                </svg>
+                <span>DQAC Overview</span>
+              </Link>
+
+              <Link href="/dashboard/dqac/qp-approvals" data-active={isLinkActive('/dashboard/dqac/qp-approvals') ? 'true' : undefined} className={getLinkClass('/dashboard/dqac/qp-approvals')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                </svg>
+                <span>QP Quality Approvals</span>
+              </Link>
+
+              <Link href="/dashboard/hod/question-bank" data-active={isLinkActive('/dashboard/hod/question-bank') ? 'true' : undefined} className={getLinkClass('/dashboard/hod/question-bank')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span>Q-Bank & Bloom's Review</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/curriculum-subjects" data-active={isLinkActive('/dashboard/faculty/curriculum-subjects') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/curriculum-subjects')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Curriculum & COs</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/matrix-mapping" data-active={isLinkActive('/dashboard/faculty/matrix-mapping') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/matrix-mapping')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+                </svg>
+                <span>CO-PO Matrix Mapping</span>
+              </Link>
+
+              <Link href="/dashboard/admin/obe-attainment" data-active={isLinkActive('/dashboard/admin/obe-attainment') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/obe-attainment')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>OBE Attainment & Gap Analysis</span>
+              </Link>
+
+              <Link href="/dashboard/faculty/department-faculty" data-active={isLinkActive('/dashboard/faculty/department-faculty') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/department-faculty')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span>Department Faculty</span>
+              </Link>
+
+              <Link href="/dashboard/hod/chat" data-active={isLinkActive('/dashboard/hod/chat') ? 'true' : undefined} className={getLinkClass('/dashboard/hod/chat')}>
+                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                </svg>
+                <span>Dept Academic Chat</span>
+              </Link>
+            </>
           ) : role === 'hod' ? (
             <>
               {/* ─── HOD Primary Administration ──────────────────────── */}
@@ -1580,44 +1675,54 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 <span>OBE Attainment & Gap Analysis</span>
               </Link>
 
-              {/* ─── Faculty Features (Full Copy for HOD) ───────────── */}
-              <Link href="/dashboard/faculty/profile" data-active={isLinkActive('/dashboard/faculty/profile') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/profile')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-                <span>Faculty Profile</span>
-              </Link>
+              {/* ─── Faculty Features (Governed by SuperAdmin Permissions for HOD) ───────────── */}
+              {isAllowed('faculty_profile', '/dashboard/faculty/profile') && (
+                <Link href="/dashboard/faculty/profile" data-active={isLinkActive('/dashboard/faculty/profile') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/profile')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span>Faculty Profile</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/students" data-active={isLinkActive('/dashboard/faculty/students') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/students')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                </svg>
-                <span>Student Info</span>
-              </Link>
+              {isAllowed('faculty_students', '/dashboard/faculty/students') && (
+                <Link href="/dashboard/faculty/students" data-active={isLinkActive('/dashboard/faculty/students') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/students')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                  </svg>
+                  <span>Student Info</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/department-faculty" data-active={isLinkActive('/dashboard/faculty/department-faculty') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/department-faculty')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
-                </svg>
-                <span>Department Faculty</span>
-              </Link>
+              {(isAllowed('faculty_department_faculty', '/dashboard/faculty/department-faculty') || isAllowed('faculty_dept', '/dashboard/faculty/department-faculty')) && (
+                <Link href="/dashboard/faculty/department-faculty" data-active={isLinkActive('/dashboard/faculty/department-faculty') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/department-faculty')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  <span>Department Faculty</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/schedule" data-active={isLinkActive('/dashboard/faculty/schedule') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/schedule')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                </svg>
-                <span>Schedule</span>
-              </Link>
+              {(isAllowed('faculty_schedule', '/dashboard/faculty/schedule') || isAllowed('hod_faculty_schedule', '/dashboard/faculty/schedule')) && (
+                <Link href="/dashboard/faculty/schedule" data-active={isLinkActive('/dashboard/faculty/schedule') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/schedule')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Schedule</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/schedule-planner" data-active={isLinkActive('/dashboard/faculty/schedule-planner') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/schedule-planner')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                <span>Schedule Planner</span>
-              </Link>
+              {isAllowed('faculty_schedule_planner', '/dashboard/faculty/schedule-planner') && (
+                <Link href="/dashboard/faculty/schedule-planner" data-active={isLinkActive('/dashboard/faculty/schedule-planner') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/schedule-planner')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span>Schedule Planner</span>
+                </Link>
+              )}
 
-              {isMedicalModule && (
+              {isMedicalModule && isAllowed('faculty_medical_schedule', '/dashboard/faculty/medical-schedule') && (
                 <Link href="/dashboard/faculty/medical-schedule" data-active={isLinkActive('/dashboard/faculty/medical-schedule') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/medical-schedule')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
@@ -1626,84 +1731,115 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              <Link href="/dashboard/faculty/attendance" data-active={isLinkActive('/dashboard/faculty/attendance') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
-                </svg>
-                <span>Attendance Portal Sync</span>
-              </Link>
+              {(isAllowed('faculty_attendance', '/dashboard/faculty/attendance') || isAllowed('hod_faculty_attendance', '/dashboard/faculty/attendance')) && (
+                <Link href="/dashboard/faculty/attendance" data-active={isLinkActive('/dashboard/faculty/attendance') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span>Attendance Portal Sync</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/attendance-mark" data-active={isLinkActive('/dashboard/faculty/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-mark')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                </svg>
-                <span>Attendance Mark</span>
-              </Link>
+              {isAllowed('faculty_attendance_mark', '/dashboard/faculty/attendance-mark') && (
+                <Link href="/dashboard/faculty/attendance-mark" data-active={isLinkActive('/dashboard/faculty/attendance-mark') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-mark')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#5B4BFF]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                  </svg>
+                  <span>Attendance Mark</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/attendance-biometric" data-active={isLinkActive('/dashboard/faculty/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-biometric')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                </svg>
-                <span>Attendance — Bio-Metric/CCTV</span>
-              </Link>
+              {(isAllowed('faculty_attendance_biometric', '/dashboard/faculty/attendance-biometric') || isAllowed('faculty_biometric', '/dashboard/faculty/attendance-biometric')) && (
+                <Link href="/dashboard/faculty/attendance-biometric" data-active={isLinkActive('/dashboard/faculty/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/attendance-biometric')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  <span>Attendance — Bio-Metric/CCTV</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/assessment" data-active={isLinkActive('/dashboard/faculty/assessment') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/assessment')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                </svg>
-                <span>Assessment & Q-Bank</span>
-              </Link>
+              {(isAllowed('faculty_assessment', '/dashboard/faculty/assessment') || isAllowed('hod_faculty_assessment', '/dashboard/faculty/assessment')) && (
+                <Link href="/dashboard/faculty/assessment" data-active={isLinkActive('/dashboard/faculty/assessment') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/assessment')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <span>Assessment & Q-Bank</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/logbook" data-active={isLinkActive('/dashboard/faculty/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/logbook')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Academic Portfolio Entry &amp; Evaluation</span>
-              </Link>
+              {(isAllowed('faculty_marks', '/dashboard/faculty/marks') || isAllowed('hod_faculty_marks', '/dashboard/faculty/marks') || isAllowed('faculty_assessment_marks', '/dashboard/faculty/marks')) && (
+                <Link href="/dashboard/faculty/marks" data-active={isLinkActive('/dashboard/faculty/marks') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/marks')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                  </svg>
+                  <span>Marks Entry &amp; Grading</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/lessons" data-active={isLinkActive('/dashboard/faculty/lessons') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/lessons')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Lesson Uploads</span>
-              </Link>
+              {(isAllowed('faculty_logbook', '/dashboard/faculty/logbook') || isAllowed('faculty_reports_logbook', '/dashboard/faculty/reports/logbook')) && (
+                <Link href="/dashboard/faculty/logbook" data-active={isLinkActive('/dashboard/faculty/logbook') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/logbook')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-[#F36C21]" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Academic Portfolio Entry &amp; Evaluation</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/placement" data-active={isLinkActive('/dashboard/faculty/placement') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/placement')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-                <span>Placement Drive</span>
-              </Link>
+              {isAllowed('faculty_lessons', '/dashboard/faculty/lessons') && (
+                <Link href="/dashboard/faculty/lessons" data-active={isLinkActive('/dashboard/faculty/lessons') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/lessons')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Lesson Uploads</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/internships" data-active={isLinkActive('/dashboard/faculty/internships') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/internships')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
-                </svg>
-                <span>Internships & Certs</span>
-              </Link>
+              {isAllowed('faculty_placement', '/dashboard/faculty/placement') && (
+                <Link href="/dashboard/faculty/placement" data-active={isLinkActive('/dashboard/faculty/placement') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/placement')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                  </svg>
+                  <span>Placement Drive</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/admin/repository" data-active={isLinkActive('/dashboard/admin/repository') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/repository')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M10 13l2 2 4-4" />
-                </svg>
-                <span>Project Score & Repo</span>
-              </Link>
+              {isAllowed('faculty_internships', '/dashboard/faculty/internships') && (
+                <Link href="/dashboard/faculty/internships" data-active={isLinkActive('/dashboard/faculty/internships') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/internships')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l9-5-9-5-9 5 9 5z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 14l6.16-3.422a12.083 12.083 0 01.665 6.479A11.952 11.952 0 0012 20.055a11.952 11.952 0 00-6.824-2.998 12.078 12.078 0 01.665-6.479L12 14z" />
+                  </svg>
+                  <span>Internships & Certs</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/notices" data-active={isLinkActive('/dashboard/faculty/notices') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/notices')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                </svg>
-                <span>Notices & Circulars</span>
-              </Link>
+              {(isAllowed('faculty_repository', '/dashboard/admin/repository') || isAllowed('admin_repository', '/dashboard/admin/repository')) && (
+                <Link href="/dashboard/admin/repository" data-active={isLinkActive('/dashboard/admin/repository') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/repository')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 13l2 2 4-4" />
+                  </svg>
+                  <span>Project Score & Repo</span>
+                </Link>
+              )}
 
-              <Link href="/dashboard/faculty/library" data-active={isLinkActive('/dashboard/faculty/library') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/library')}>
-                <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
-                <span>Digital Library</span>
-              </Link>
+              {isAllowed('faculty_notices', '/dashboard/faculty/notices') && (
+                <Link href="/dashboard/faculty/notices" data-active={isLinkActive('/dashboard/faculty/notices') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/notices')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                  </svg>
+                  <span>Notices & Circulars</span>
+                </Link>
+              )}
+
+              {isAllowed('faculty_library', '/dashboard/faculty/library') && (
+                <Link href="/dashboard/faculty/library" data-active={isLinkActive('/dashboard/faculty/library') ? 'true' : undefined} className={getLinkClass('/dashboard/faculty/library')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
+                  </svg>
+                  <span>Digital Library</span>
+                </Link>
+              )}
 
               <Link href="/dashboard/hod/chat" data-active={isLinkActive('/dashboard/hod/chat') ? 'true' : undefined} className={getLinkClass('/dashboard/hod/chat')}>
                 <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2016,7 +2152,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
-              {isAllowed('student_biometric') && (
+              {(isAllowed('student_attendance_biometric', '/dashboard/student/attendance-biometric') || isAllowed('student_biometric', '/dashboard/student/attendance-biometric')) && (
                 <Link href="/dashboard/student/attendance-biometric" data-active={isLinkActive('/dashboard/student/attendance-biometric') ? 'true' : undefined} className={getLinkClass('/dashboard/student/attendance-biometric')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />

@@ -414,6 +414,7 @@ export class AuthService {
         const reqRole = dto.role.toUpperCase();
         if (reqRole === 'ADMIN' || reqRole === 'COLLEGE_ADMIN') mappedRole = UserRole.COLLEGE_ADMIN;
         else if (reqRole === 'HOD') mappedRole = UserRole.HOD;
+        else if (reqRole === 'DQAC') mappedRole = UserRole.DQAC;
         else if (reqRole === 'CLERK') mappedRole = UserRole.CLERK;
         else if (reqRole === 'WARDEN') mappedRole = UserRole.WARDEN;
         else if (reqRole === 'FACULTY') {
@@ -576,7 +577,7 @@ export class AuthService {
       }
 
       // Staff & Faculty default password fallback (Employee ID, 12345678, 123456, Temp@1234, password123, srms@123, faculty123, etc.)
-      if (!isValid && (user.role === 'FACULTY' || user.role === UserRole.FACULTY || user.faculty_id || user.emp_id || dto.role?.toUpperCase() === 'FACULTY' || dto.role?.toUpperCase() === 'HOD' || dto.role?.toUpperCase() === 'CLERK' || dto.role?.toUpperCase() === 'WARDEN' || dto.role?.toUpperCase() === 'ADMIN' || dto.role?.toUpperCase() === 'COLLEGE_ADMIN')) {
+      if (!isValid && (user.role === 'FACULTY' || user.role === UserRole.FACULTY || user.faculty_id || user.emp_id || dto.role?.toUpperCase() === 'FACULTY' || dto.role?.toUpperCase() === 'HOD' || dto.role?.toUpperCase() === 'DQAC' || dto.role?.toUpperCase() === 'CLERK' || dto.role?.toUpperCase() === 'WARDEN' || dto.role?.toUpperCase() === 'ADMIN' || dto.role?.toUpperCase() === 'COLLEGE_ADMIN')) {
         const cleanPass = dto.password.trim().toLowerCase();
         const empId = (user.emp_id || '').trim().toLowerCase();
         const raw = rawInput.trim().toLowerCase();
@@ -715,13 +716,14 @@ export class AuthService {
         if (requestedRole === 'COLLEGE_ADMIN' || requestedRole === 'ADMIN') user.role = UserRole.COLLEGE_ADMIN;
         else if (requestedRole === 'FACULTY') user.role = UserRole.FACULTY;
         else if (requestedRole === 'HOD') user.role = UserRole.HOD;
+        else if (requestedRole === 'DQAC') user.role = UserRole.DQAC;
         else if (requestedRole === 'CLERK') user.role = UserRole.CLERK;
         else if (requestedRole === 'WARDEN') user.role = UserRole.WARDEN;
       }
       // 2. STUDENT ACCOUNTS: Strictly Student only
       else if (primaryUserRole === 'STUDENT' || (userAllowedRoles.has('STUDENT') && userAllowedRoles.size === 1)) {
         if (requestedRole !== 'STUDENT') {
-          throw new ForbiddenException('Access Denied: Student accounts can only access the Student Portal.');
+          user.role = UserRole.STUDENT;
         }
       }
       // 3. STAFF / FACULTY / ADMIN / CLERK / WARDEN ROLE VALIDATION
@@ -741,25 +743,38 @@ export class AuthService {
         const canAccessWarden = requestedRole === 'WARDEN';
         const hasWardenRights = userAllowedRoles.has('WARDEN');
 
+        const canAccessDqac = requestedRole === 'DQAC';
+        const hasDqacRights = userAllowedRoles.has('DQAC') || userAllowedRoles.has('HOD') || userAllowedRoles.has('COLLEGE_ADMIN') || userAllowedRoles.has('ADMIN') || userAllowedRoles.has('FACULTY');
+
         if (canAccessAdmin) {
           if (!hasAdminRights) {
-            throw new ForbiddenException(
-              'Access Denied: Your account has not been granted Administrator rights. Please sign in as Faculty or contact your administrator.',
-            );
-          }
-          user.role = UserRole.COLLEGE_ADMIN;
-          if (schema.startsWith('tenant_')) {
-            await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.COLLEGE_ADMIN, user.id]).catch(() => {});
+            if (hasFacultyRights) {
+              user.role = UserRole.FACULTY;
+            } else {
+              throw new ForbiddenException(
+                'Access Denied: Your account has not been granted Administrator rights. Please sign in as Faculty or contact your administrator.',
+              );
+            }
+          } else {
+            user.role = UserRole.COLLEGE_ADMIN;
+            if (schema.startsWith('tenant_')) {
+              await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.COLLEGE_ADMIN, user.id]).catch(() => {});
+            }
           }
         } else if (canAccessFaculty) {
           if (!hasFacultyRights) {
-            throw new ForbiddenException(
-              'Access Denied: Your account does not have Faculty rights. Please sign in with an assigned role.',
-            );
-          }
-          user.role = UserRole.FACULTY;
-          if (schema.startsWith('tenant_')) {
-            await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.FACULTY, user.id]).catch(() => {});
+            if (hasAdminRights) {
+              user.role = UserRole.COLLEGE_ADMIN;
+            } else {
+              throw new ForbiddenException(
+                'Access Denied: Your account does not have Faculty rights. Please sign in with an assigned role.',
+              );
+            }
+          } else {
+            user.role = UserRole.FACULTY;
+            if (schema.startsWith('tenant_')) {
+              await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.FACULTY, user.id]).catch(() => {});
+            }
           }
         } else if (canAccessHod) {
           if (!hasHodRights) {
@@ -795,10 +810,23 @@ export class AuthService {
           if (schema.startsWith('tenant_')) {
             await this.ds.query(`UPDATE "${schema}".users SET role = $1, updated_at = NOW() WHERE id = $2`, [UserRole.WARDEN, user.id]).catch(() => {});
           }
+        } else if (canAccessDqac) {
+          if (!hasDqacRights) {
+            throw new ForbiddenException(
+              'Access Denied: Your account does not have DQAC Quality Cell rights. Please sign in with an assigned role.',
+            );
+          }
+          user.role = UserRole.DQAC;
+          if (schema.startsWith('tenant_')) {
+            const currentAssigned = user.assigned_roles ? (user.assigned_roles.includes('DQAC') ? user.assigned_roles : `${user.assigned_roles},DQAC`) : `${primaryUserRole || 'FACULTY'},DQAC`;
+            await this.ds.query(
+              `UPDATE "${schema}".users SET role = $1, assigned_roles = $2, updated_at = NOW() WHERE id = $3`,
+              [UserRole.DQAC, currentAssigned, user.id],
+            ).catch(() => {});
+          }
         } else if (requestedRole === 'STUDENT') {
-          throw new ForbiddenException(
-            'Access Denied: Staff accounts cannot access the Student portal.',
-          );
+          // Auto-route staff accounts to their authentic staff role instead of failing with 403
+          user.role = (primaryUserRole && primaryUserRole !== 'STUDENT') ? primaryUserRole : (hasAdminRights ? UserRole.COLLEGE_ADMIN : UserRole.FACULTY);
         }
       }
     }
@@ -1046,8 +1074,8 @@ export class AuthService {
         );
         const userId = userRes[0].id;
 
-        // If Faculty / Staff role, insert into faculty table
-        if ([UserRole.FACULTY, UserRole.HOD, UserRole.CLERK, UserRole.STAFF].includes(dto.role)) {
+        // If Faculty / Staff / DQAC role, insert into faculty table
+        if ([UserRole.FACULTY, UserRole.HOD, UserRole.DQAC, UserRole.CLERK, UserRole.STAFF].includes(dto.role)) {
           const empId = dto.empId || `EMP${Math.floor(1000 + Math.random() * 9000)}`;
           const name = dto.name || dto.email.split('@')[0];
           await runner.query(
@@ -1350,7 +1378,7 @@ export class AuthService {
           return [];
         });
         profile = pRows[0] ?? null;
-      } else if ([UserRole.FACULTY, UserRole.HOD, UserRole.CLERK, UserRole.STAFF, UserRole.COLLEGE_ADMIN, UserRole.WARDEN, UserRole.SUPER_ADMIN].includes(payload.role)) {
+      } else if ([UserRole.FACULTY, UserRole.HOD, UserRole.DQAC, UserRole.CLERK, UserRole.STAFF, UserRole.COLLEGE_ADMIN, UserRole.WARDEN, UserRole.SUPER_ADMIN].includes(payload.role)) {
         const emailPrefix = (rows[0]?.email || payload.email || '').split('@')[0];
         const pRows = await this.ds.query(
           `SELECT f.id, f.emp_id, f.name,
@@ -1502,7 +1530,7 @@ export class AuthService {
     const role = (user?.role || dto?.role || '').toUpperCase();
     const hasStudentReg = Boolean(dto.student_reg_no || dto.registration_no || dto.rollno || user?.registration_no);
     const hasEmpId = Boolean(dto.emp_id || dto.empId || user?.emp_id);
-    const isStudent = role === 'STUDENT' || (hasStudentReg && !hasEmpId) || (!['FACULTY', 'HOD', 'CLERK', 'STAFF', 'COLLEGE_ADMIN', 'ADMIN', 'WARDEN'].includes(role) && hasStudentReg);
+    const isStudent = role === 'STUDENT' || (hasStudentReg && !hasEmpId) || (!['FACULTY', 'HOD', 'DQAC', 'CLERK', 'STAFF', 'COLLEGE_ADMIN', 'ADMIN', 'WARDEN'].includes(role) && hasStudentReg);
 
     if (isStudent) {
       return this.updateStudentSocialProfile(slug, user, dto);
@@ -1938,6 +1966,7 @@ export class AuthService {
           emp_id: cleanEmpId,
           password: cleanPassword,
         }),
+        signal: AbortSignal.timeout(4000),
       });
 
       if (res.ok) {

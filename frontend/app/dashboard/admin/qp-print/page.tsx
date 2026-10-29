@@ -177,7 +177,7 @@ export default function AdminQPPrintPage() {
                             ) : (
                               qList.map((q: any, qi: number) => (
                                 <div key={qi} className="pl-4 space-y-1">
-                                  <p className="text-sm font-semibold text-[#1B1E28] dark:text-white">Q{qi + 1}. {q.questionText || q.text} {q.marks ? `[${q.marks}M]` : ''}</p>
+                                  <p className="text-sm font-semibold text-[#1B1E28] dark:text-white">Q{qi + 1}. {q.questionText || q.text} {(q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks) ? `[${q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks}M]` : ''}</p>
                                   {(q.options || [q.optionA, q.optionB, q.optionC, q.optionD].filter(Boolean)).length > 0 && (
                                     <ul className="pl-4 space-y-0.5">
                                       {(q.options || [q.optionA, q.optionB, q.optionC, q.optionD].filter(Boolean)).map((opt: string, oi: number) => (

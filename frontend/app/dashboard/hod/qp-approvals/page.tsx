@@ -29,14 +29,17 @@ function getH() {
 
 const STATUS_BADGE: Record<string, { cls: string; label: string }> = {
   DRAFT: { cls: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300', label: 'Draft' },
+  PENDING_DQAC_APPROVAL: { cls: 'bg-purple-100 text-purple-800 dark:bg-purple-950/40 dark:text-purple-300', label: '🔍 Pending DQAC Audit' },
+  DQAC_APPROVED: { cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300', label: '⭐ DQAC Approved' },
   PENDING_HOD_APPROVAL: { cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300', label: '⏳ Pending HOD Approval' },
   CHANGES_REQUESTED: { cls: 'bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300', label: '⚠️ Changes Requested' },
-  RESUBMITTED: { cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300', label: '🚀 Clerk Resubmitted' },
+  RESUBMITTED: { cls: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300', label: '🚀 Resubmitted' },
   HOD_APPROVED: { cls: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300', label: '✅ HOD Approved' },
 };
 
 export default function HODQPApprovalsPage() {
   const [papers, setPapers] = useState<any[]>([]);
+  const [tenantCourses, setTenantCourses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<string>('PENDING_HOD_APPROVAL');
   const [courseFilter, setCourseFilter] = useState<string>('ALL');
@@ -80,6 +83,16 @@ export default function HODQPApprovalsPage() {
         list = Array.isArray(d2) ? d2 : (d2.data || []);
       }
 
+      // Load tenant-specific courses from college-master
+      try {
+        const cRes = await fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers, cache: 'no-store' });
+        if (cRes.ok) {
+          const cJson = await cRes.json();
+          const cList = Array.isArray(cJson) ? cJson : (cJson.data || []);
+          setTenantCourses(cList);
+        }
+      } catch {}
+
       // Latest paper ALWAYS on TOP
       list.sort((a: any, b: any) => {
         const tB = b.updated_at || b.created_at ? new Date(b.updated_at || b.created_at).getTime() : 0;
@@ -99,19 +112,60 @@ export default function HODQPApprovalsPage() {
     loadPapers();
   }, [filterTab]);
 
-  // Filtered papers by course (e.g. BCA / Course 13, MCA, MBA, B.Tech)
+  // Dynamically compute valid course options strictly scoped to active college tenant
+  const courseOptions = useMemo(() => {
+    const { slug } = getH();
+    const map = new Map<string, string>();
+
+    // 1. Map registered courses for active tenant
+    (tenantCourses || []).forEach((c: any) => {
+      const code = String(c.course_cd || c.code || c.id || '').trim();
+      const rawName = String(c.name || c.course_name || '').trim();
+      const shortName = rawName.includes('-') ? rawName.split('-')[0].trim() : rawName;
+      if (code) {
+        map.set(code, shortName || `Course ${code}`);
+      }
+    });
+
+    // 2. Also register any courses that already have papers in active queue
+    (papers || []).forEach((p: any) => {
+      const cCd = String(p.course_cd || '').trim();
+      if (cCd && !map.has(cCd)) {
+        const pName = p.course_name
+          ? (p.course_name.includes('-') ? p.course_name.split('-')[0].trim() : p.course_name)
+          : formatCourseName(cCd, p.course_name, slug);
+        map.set(cCd, pName || `Course ${cCd}`);
+      }
+    });
+
+    const entries = Array.from(map.entries()).map(([key, label]) => ({
+      key,
+      label,
+    }));
+
+    // Prioritize courses with active papers, then sort alphabetically
+    entries.sort((a, b) => {
+      const countA = papers.filter(p => String(p.course_cd) === a.key).length;
+      const countB = papers.filter(p => String(p.course_cd) === b.key).length;
+      if (countB !== countA) return countB - countA;
+      return a.label.localeCompare(b.label);
+    });
+
+    return [{ key: 'ALL', label: 'All Courses' }, ...entries];
+  }, [tenantCourses, papers]);
+
+  // Filtered papers by dynamic course selection
   const displayedPapers = useMemo(() => {
     return papers.filter((paper: any) => {
       if (courseFilter === 'ALL') return true;
       if (String(paper.course_cd) === String(courseFilter)) return true;
-      const formatted = formatCourseName(paper.course_cd, paper.course_name).toLowerCase();
-      if (courseFilter === '13' && (formatted === 'bca' || String(paper.course_cd) === '13')) return true;
-      if (courseFilter === '3' && (formatted === 'mca' || String(paper.course_cd) === '3')) return true;
-      if (courseFilter === '4' && (formatted === 'mba' || String(paper.course_cd) === '4')) return true;
-      if (courseFilter === '1' && (formatted.includes('b.tech') || formatted.includes('btech') || String(paper.course_cd) === '1')) return true;
-      return formatted === courseFilter.toLowerCase();
+      const matchedOpt = courseOptions.find(o => o.key === courseFilter);
+      if (matchedOpt && paper.course_name) {
+        return paper.course_name.toLowerCase().includes(matchedOpt.label.toLowerCase());
+      }
+      return false;
     });
-  }, [papers, courseFilter]);
+  }, [papers, courseFilter, courseOptions]);
 
   // Open Paper in Review Modal
   const handleOpenReview = (paper: any, mode: 'review' | 'preview' | 'print' = 'review') => {
@@ -168,13 +222,15 @@ export default function HODQPApprovalsPage() {
   };
 
   // Modal Approve Handler
-  const handleModalApprove = async (paperId: string, remarks: string, version: number) => {
+  const handleModalApprove = async (paperId: string, remarks: string, version: number, options?: { paperSet?: string; targetSections?: string[] }) => {
     try {
       const data = await executeHodAction({
         paperId,
         action: 'approve',
         remarks: remarks || 'HOD Approved',
         version,
+        paperSet: options?.paperSet,
+        targetSections: options?.targetSections,
       });
       if (data && data.success !== false) {
         await loadPapers();
@@ -242,7 +298,8 @@ export default function HODQPApprovalsPage() {
             {/* Status Tabs */}
             <div className="flex gap-2 flex-wrap items-center">
               {[
-                { key: 'PENDING_HOD_APPROVAL', label: '⏳ Pending Approval' },
+                { key: 'PENDING_HOD_APPROVAL', label: '⏳ Pending HOD Approval' },
+                { key: 'DQAC_APPROVED', label: '⭐ DQAC Approved' },
                 { key: 'HOD_APPROVED', label: '✅ HOD Approved' },
                 { key: 'CHANGES_REQUESTED', label: '⚠️ Changes Requested' },
                 { key: 'DRAFT', label: '📝 Drafts' },
@@ -267,22 +324,12 @@ export default function HODQPApprovalsPage() {
               <span className="text-slate-400 font-bold uppercase tracking-wider text-[11px] mr-1">
                 Course:
               </span>
-              {[
-                { key: 'ALL', label: 'All Courses' },
-                { key: '13', label: 'BCA (Course 13)' },
-                { key: '3', label: 'MCA (Course 3)' },
-                { key: '4', label: 'MBA (Course 4)' },
-                { key: '1', label: 'B.Tech (Course 1)' },
-              ].map(c => {
+              {courseOptions.map(c => {
                 const count = c.key === 'ALL'
                   ? papers.length
                   : papers.filter(p => {
                       if (String(p.course_cd) === c.key) return true;
-                      const formatted = formatCourseName(p.course_cd, p.course_name).toLowerCase();
-                      if (c.key === '13' && (formatted === 'bca' || String(p.course_cd) === '13')) return true;
-                      if (c.key === '3' && (formatted === 'mca' || String(p.course_cd) === '3')) return true;
-                      if (c.key === '4' && (formatted === 'mba' || String(p.course_cd) === '4')) return true;
-                      if (c.key === '1' && (formatted.includes('b.tech') || formatted.includes('btech') || String(p.course_cd) === '1')) return true;
+                      if (c.label && p.course_name && p.course_name.toLowerCase().includes(c.label.toLowerCase())) return true;
                       return false;
                     }).length;
                 return (

@@ -2097,9 +2097,32 @@ function OwnerDashboardContent() {
                   <button
                     type="button"
                     onClick={() => {
+                      const aliasMap: Record<string, string[]> = {
+                        faculty_attendance_biometric: ['faculty_biometric'],
+                        faculty_biometric: ['faculty_attendance_biometric'],
+                        admin_attendance_biometric: ['admin_biometric'],
+                        admin_biometric: ['admin_attendance_biometric'],
+                        clerk_attendance_biometric: ['clerk_biometric'],
+                        clerk_biometric: ['clerk_attendance_biometric'],
+                        student_attendance_biometric: ['student_biometric'],
+                        student_biometric: ['student_attendance_biometric'],
+                        faculty_marks: ['faculty_assessment_marks'],
+                        faculty_assessment_marks: ['faculty_marks'],
+                        admin_marks: ['admin_assessment_marks'],
+                        admin_assessment_marks: ['admin_marks'],
+                        faculty_dept: ['faculty_department_faculty'],
+                        faculty_department_faculty: ['faculty_dept'],
+                        admin_notices: ['admin_notices_sent'],
+                        admin_notices_sent: ['admin_notices'],
+                      };
                       const allKeys = currentRoleMenus.flatMap((m) => {
                         const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
-                        return [m.menu_key, ...subTabs.map((t) => t.key)];
+                        const rClean = (m.route_path || '').toLowerCase().trim();
+                        const sameRoute = menuRegistry
+                          .filter((rm) => rm.role === selectedRole && rm.route_path && rm.route_path.toLowerCase().trim() === rClean)
+                          .map((rm) => rm.menu_key);
+                        const aliases = aliasMap[m.menu_key] || [];
+                        return [m.menu_key, ...sameRoute, ...aliases, ...subTabs.map((t) => t.key)];
                       });
                       const combined = Array.from(new Set([...enabledKeys, ...allKeys]));
                       setEnabledKeys(combined);
@@ -2113,13 +2136,36 @@ function OwnerDashboardContent() {
                   <button
                     type="button"
                     onClick={() => {
+                      const aliasMap: Record<string, string[]> = {
+                        faculty_attendance_biometric: ['faculty_biometric'],
+                        faculty_biometric: ['faculty_attendance_biometric'],
+                        admin_attendance_biometric: ['admin_biometric'],
+                        admin_biometric: ['admin_attendance_biometric'],
+                        clerk_attendance_biometric: ['clerk_biometric'],
+                        clerk_biometric: ['clerk_attendance_biometric'],
+                        student_attendance_biometric: ['student_biometric'],
+                        student_biometric: ['student_attendance_biometric'],
+                        faculty_marks: ['faculty_assessment_marks'],
+                        faculty_assessment_marks: ['faculty_marks'],
+                        admin_marks: ['admin_assessment_marks'],
+                        admin_assessment_marks: ['admin_marks'],
+                        faculty_dept: ['faculty_department_faculty'],
+                        faculty_department_faculty: ['faculty_dept'],
+                        admin_notices: ['admin_notices_sent'],
+                        admin_notices_sent: ['admin_notices'],
+                      };
                       const visibleKeys = new Set(
                         currentRoleMenus.flatMap((m) => {
                           const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
-                          return [m.menu_key, ...subTabs.map((t) => t.key)];
+                          const rClean = (m.route_path || '').toLowerCase().trim();
+                          const sameRoute = menuRegistry
+                            .filter((rm) => rm.role === selectedRole && rm.route_path && rm.route_path.toLowerCase().trim() === rClean)
+                            .map((rm) => rm.menu_key);
+                          const aliases = aliasMap[m.menu_key] || [];
+                          return [m.menu_key, m.menu_key.replace(/[\/\-\.]+/g, '_'), ...sameRoute, ...sameRoute.map(k => k.replace(/[\/\-\.]+/g, '_')), ...aliases, ...aliases.map(k => k.replace(/[\/\-\.]+/g, '_')), ...subTabs.map((t) => t.key)];
                         })
                       );
-                      const remaining = enabledKeys.filter((k) => !visibleKeys.has(k));
+                      const remaining = enabledKeys.filter((k) => !visibleKeys.has(k) && !visibleKeys.has(k.replace(/[\/\-\.]+/g, '_')));
                       setEnabledKeys(remaining);
                       triggerAutoSavePermissions(remaining);
                     }}
@@ -2185,15 +2231,46 @@ function OwnerDashboardContent() {
                               checked={isChecked}
                               onChange={(e) => {
                                 const checked = e.target.checked;
+                                const aliasMap: Record<string, string[]> = {
+                                  faculty_attendance_biometric: ['faculty_biometric'],
+                                  faculty_biometric: ['faculty_attendance_biometric'],
+                                  admin_attendance_biometric: ['admin_biometric'],
+                                  admin_biometric: ['admin_attendance_biometric'],
+                                  clerk_attendance_biometric: ['clerk_biometric'],
+                                  clerk_biometric: ['clerk_attendance_biometric'],
+                                  student_attendance_biometric: ['student_biometric'],
+                                  student_biometric: ['student_attendance_biometric'],
+                                  faculty_marks: ['faculty_assessment_marks'],
+                                  faculty_assessment_marks: ['faculty_marks'],
+                                  admin_marks: ['admin_assessment_marks'],
+                                  admin_assessment_marks: ['admin_marks'],
+                                  faculty_dept: ['faculty_department_faculty'],
+                                  faculty_department_faculty: ['faculty_dept'],
+                                  admin_notices: ['admin_notices_sent'],
+                                  admin_notices_sent: ['admin_notices'],
+                                };
+                                const routeClean = (item.route_path || '').toLowerCase().trim();
+                                const sameRouteKeys = menuRegistry
+                                  .filter(m => m.role === selectedRole && m.route_path && (m.route_path.toLowerCase().trim() === routeClean))
+                                  .map(m => m.menu_key);
+                                const relatedAliases = aliasMap[item.menu_key] || [];
+                                const allKeysForThisCard = Array.from(new Set([
+                                  item.menu_key,
+                                  norm,
+                                  ...sameRouteKeys,
+                                  ...sameRouteKeys.map(k => k.replace(/[\/\-\.]+/g, '_')),
+                                  ...relatedAliases,
+                                  ...relatedAliases.map(k => k.replace(/[\/\-\.]+/g, '_')),
+                                  ...subTabKeys,
+                                ]));
+
                                 let nextKeys: string[];
                                 if (checked) {
-                                  nextKeys = Array.from(new Set(enabledKeys.concat([item.menu_key, norm, ...subTabKeys])));
+                                  nextKeys = Array.from(new Set([...enabledKeys, ...allKeysForThisCard]));
                                 } else {
+                                  const removeSet = new Set(allKeysForThisCard);
                                   nextKeys = enabledKeys.filter(
-                                    (k) =>
-                                      k !== item.menu_key &&
-                                      k.replace(/[\/\-\.]+/g, '_') !== norm &&
-                                      !subTabKeys.includes(k)
+                                    (k) => !removeSet.has(k) && !removeSet.has(k.replace(/[\/\-\.]+/g, '_'))
                                   );
                                 }
                                 setEnabledKeys(nextKeys);

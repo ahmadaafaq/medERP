@@ -610,7 +610,7 @@ export default function ClerkQPDesignerPage() {
       const qList: any[] = sec.questions || [];
       totalQuestions += qList.length;
       qList.forEach((q: any) => {
-        grandTotalMarks += parseFloat(String(q.marks)) || 0;
+        grandTotalMarks += parseFloat(String(q.marks ?? q.customMarks ?? q.defaultMarks ?? q.max_marks ?? 0)) || 0;
       });
       if (sec.type === 'PRACTICAL') {
         const pList: any[] = sec.practicalComponents || [];
@@ -1037,7 +1037,7 @@ export default function ClerkQPDesignerPage() {
                   updatedSubs = updatedSubs.map((sp: any) => ({ ...sp, marks: equalShare }));
                 }
               }
-              return { ...q, marks: newMarks, sub_questions: updatedSubs };
+              return { ...q, marks: newMarks, customMarks: newMarks, sub_questions: updatedSubs, subQuestions: updatedSubs };
             }
             return q;
           }),
@@ -2144,7 +2144,7 @@ export default function ClerkQPDesignerPage() {
 
                 {sections.map((sec: any, secIdx: number) => {
                   const qList: any[] = sec.questions || [];
-                  const secMarks = Math.round(qList.reduce((acc, q) => acc + (parseFloat(String(q.marks)) || 0), 0) * 100) / 100;
+                  const secMarks = Math.round(qList.reduce((acc, q) => acc + (parseFloat(String(q.marks ?? q.customMarks ?? q.defaultMarks ?? q.max_marks ?? 0)) || 0), 0) * 100) / 100;
                   const isPractical = sec.type === 'PRACTICAL';
 
                   if (isPractical) {
@@ -2458,7 +2458,7 @@ export default function ClerkQPDesignerPage() {
                                         type="number"
                                         step="any"
                                         min={0.1}
-                                        value={q.marks || 1}
+                                        value={q.marks ?? q.customMarks ?? q.defaultMarks ?? q.max_marks ?? 1}
                                         onChange={(e) => handleUpdateMarks(sec.id, qId, parseFloat(e.target.value) || 0)}
                                         className="w-14 text-xs font-mono font-black text-right bg-transparent focus:outline-none"
                                       />

@@ -92,6 +92,8 @@ export class TimetableService implements OnModuleInit {
                       s.id::text = ts.topic
                       OR s.code = ts.topic
                       OR LOWER(s.name) = LOWER(ts.topic)
+                      OR (ts.description ILIKE '%' || s.name || '%')
+                      OR (s.name ILIKE '%' || ts.topic || '%')
                       OR (LOWER(ts.topic) = 'coa' AND (s.name ILIKE '%Computer Organization%' OR s.code ILIKE '%302%'))
                       OR (LOWER(ts.topic) LIKE '%tc%' AND s.name ILIKE '%Technical Communication%')
                       OR (LOWER(ts.topic) LIKE '%web technology lab%' AND s.name ILIKE '%Web Technology Lab%')
@@ -285,15 +287,35 @@ export class TimetableService implements OnModuleInit {
     }
 
     if (query.semester && query.semester !== 'all') {
-      params.push(String(query.semester));
-      const pIdx = params.length;
-      sql += ` AND (ts.semester = $${pIdx} OR ts.semester IS NULL)`;
+      const rawSem = String(query.semester).trim();
+      const semNumMatch = rawSem.match(/\d+/);
+      const semNum = semNumMatch ? semNumMatch[0] : rawSem;
+      params.push(rawSem);
+      const pIdx1 = params.length;
+      params.push(semNum);
+      const pIdx2 = params.length;
+      sql += ` AND (ts.semester = $${pIdx1} OR ts.semester = $${pIdx2} OR ts.semester IS NULL)`;
     }
 
     if (query.section && query.section !== 'all') {
-      params.push(String(query.section));
+      const rawSec = String(query.section).trim();
+      const secLetterMap: Record<string, string> = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E', '6': 'F' };
+      const secNumMap: Record<string, string> = { 'A': '1', 'B': '2', 'C': '3', 'D': '4', 'E': '5', 'F': '6' };
+
+      const stripped = rawSec.replace(/^(section|sec)[\s\-_]*/i, '').trim();
+      const upper = stripped.toUpperCase();
+      const numVal = secNumMap[upper] || (upper.match(/^\d+$/) ? upper : '');
+      const letterVal = secLetterMap[upper] || (upper.match(/^[A-Z]$/) ? upper : '');
+
+      const candidates = Array.from(new Set([rawSec, stripped, upper, numVal, letterVal].filter(Boolean)));
+      params.push(candidates);
       const pIdx = params.length;
-      sql += ` AND (ts.section = $${pIdx} OR ts.section IS NULL OR ts.section = 'All')`;
+
+      sql += ` AND (
+        ts.section::text = ANY($${pIdx}::text[]) 
+        OR LOWER(ts.section) = ANY(ARRAY['all', '']::text[])
+        OR ts.section IS NULL
+      )`;
     }
 
     if (query.dayOfWeek !== undefined && !isNaN(Number(query.dayOfWeek))) {

@@ -165,7 +165,7 @@ export class FirmsController {
    * GET /api/firms/:id/role-permissions?role=STUDENT
    */
   @Get(':id/role-permissions')
-  @Header('Cache-Control', 'private, max-age=300, stale-while-revalidate=600')
+  @Header('Cache-Control', 'no-store, no-cache, must-revalidate')
   @Public()
   async getFirmPermissions(
     @Param('id') id: string,

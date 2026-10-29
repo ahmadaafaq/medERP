@@ -57,6 +57,11 @@ export class AttendanceService {
       await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS topic_covered VARCHAR(500)`);
       await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS is_cancelled BOOLEAN DEFAULT false`);
       await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS timetable_slot_id UUID`);
+      await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50)`);
+      await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50)`);
+      await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50)`);
+      await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS sem_cd VARCHAR(50)`);
+      await this.ds.query(`ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS section_cd VARCHAR(50)`);
       await this.ds.query(`ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS remarks VARCHAR(500)`);
       await this.ds.query(`ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP`);
       await this.ds.query(`
@@ -67,6 +72,26 @@ export class AttendanceService {
           AND s.faculty_id IS NULL 
           AND ts.faculty_id IS NOT NULL 
           AND ts.faculty_id ~* '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+      `).catch(() => {});
+      await this.ds.query(`
+        UPDATE "${schema}".attendance_sessions
+        SET course_cd = COALESCE(attendance_sessions.course_cd, ts.course_cd, b.course_cd),
+            branch_cd = COALESCE(attendance_sessions.branch_cd, ts.branch_cd),
+            batch_cd = COALESCE(attendance_sessions.batch_cd, ts.batch_cd, b.batch_cd, b.code),
+            sem_cd = COALESCE(attendance_sessions.sem_cd, ts.semester),
+            section_cd = COALESCE(attendance_sessions.section_cd::text, ts.section, '1')
+        FROM "${schema}".timetable_slots ts
+        LEFT JOIN "${schema}".batches b ON b.id::text = ts.batch_id::text
+        WHERE attendance_sessions.timetable_slot_id::text = ts.id::text
+          AND (attendance_sessions.course_cd IS NULL OR attendance_sessions.batch_cd IS NULL OR attendance_sessions.sem_cd IS NULL)
+      `).catch(() => {});
+      await this.ds.query(`
+        UPDATE "${schema}".attendance_sessions
+        SET course_cd = COALESCE(attendance_sessions.course_cd, b.course_cd),
+            batch_cd = COALESCE(attendance_sessions.batch_cd, b.batch_cd, b.code)
+        FROM "${schema}".batches b
+        WHERE attendance_sessions.batch_id::text = b.id::text
+          AND (attendance_sessions.course_cd IS NULL OR attendance_sessions.batch_cd IS NULL)
       `).catch(() => {});
     } catch (e) {
       // Ignore if columns already exist
@@ -249,6 +274,7 @@ export class AttendanceService {
       // Prevent duplicate session same day + offering (or subject) + batch + timetable slot
       let dupCheck: any[] = [];
       if (targetSlotUuid) {
+        // If a timetable slot is specified, ONLY match an existing session for that specific timetable slot on that date
         dupCheck = await this.ds.query(
           `SELECT id FROM "${schema}".attendance_sessions
            WHERE timetable_slot_id=$1
@@ -256,27 +282,31 @@ export class AttendanceService {
              AND is_cancelled = false`,
           [targetSlotUuid, cleanDate],
         );
-      }
-
-      if (!dupCheck.length) {
-        if (offeringId) {
-          dupCheck = await this.ds.query(
-            `SELECT id FROM "${schema}".attendance_sessions
-             WHERE offering_id=$1 AND batch_id=$2
-               AND session_date::date = $3::date
-               AND is_cancelled = false`,
-            [offeringId, batchId, cleanDate],
-          );
-        } else {
-          dupCheck = await this.ds.query(
-            `SELECT id FROM "${schema}".attendance_sessions
-             WHERE subject_id=$1 AND batch_id=$2
-               AND session_date::date = $3::date
-               AND (LOWER(session_type) = LOWER($4) OR $4 IS NULL OR (LOWER(session_type) IN ('lecture','theory') AND LOWER($4) IN ('lecture','theory')))
-               AND is_cancelled = false`,
-            [subjectId, batchId, cleanDate, sessionType],
-          );
-        }
+      } else if (offeringId) {
+        dupCheck = await this.ds.query(
+          `SELECT id FROM "${schema}".attendance_sessions
+           WHERE offering_id=$1 AND batch_id=$2
+             AND session_date::date = $3::date
+             AND timetable_slot_id IS NULL
+             AND is_cancelled = false`,
+          [offeringId, batchId, cleanDate],
+        );
+      } else if (dto.sessionId && isUUID(dto.sessionId)) {
+        dupCheck = await this.ds.query(
+          `SELECT id FROM "${schema}".attendance_sessions
+           WHERE id=$1 AND is_cancelled = false`,
+          [dto.sessionId],
+        );
+      } else {
+        dupCheck = await this.ds.query(
+          `SELECT id FROM "${schema}".attendance_sessions
+           WHERE subject_id=$1 AND batch_id=$2
+             AND session_date::date = $3::date
+             AND timetable_slot_id IS NULL
+             AND (LOWER(session_type) = LOWER($4) OR $4 IS NULL OR (LOWER(session_type) IN ('lecture','theory') AND LOWER($4) IN ('lecture','theory')))
+             AND is_cancelled = false`,
+          [subjectId, batchId, cleanDate, sessionType],
+        );
       }
 
       // If duplicate session exists, update attendance records on that existing session
@@ -382,13 +412,46 @@ export class AttendanceService {
         }
       }
 
+      // Resolve academic metadata for session
+      let slotInfo: any = null;
+      if (targetSlotUuid) {
+        const sRes = await this.ds.query(
+          `SELECT course_cd, branch_cd, batch_cd, semester, section FROM "${schema}".timetable_slots WHERE id::text = $1`,
+          [targetSlotUuid],
+        ).catch(() => []);
+        slotInfo = sRes[0] || null;
+      }
+      let batchInfo: any = null;
+      if (batchId) {
+        const bRes = await this.ds.query(
+          `SELECT course_cd, batch_cd, code FROM "${schema}".batches WHERE id::text = $1 OR code::text = $1 OR batch_cd::text = $1 LIMIT 1`,
+          [batchId],
+        ).catch(() => []);
+        batchInfo = bRes[0] || null;
+      }
+      let subjInfo: any = null;
+      if (subjectId) {
+        const subRes = await this.ds.query(
+          `SELECT course_cd, branch_cd, sem_cd FROM "${schema}".subjects WHERE id::text = $1 OR code::text = $1 LIMIT 1`,
+          [subjectId],
+        ).catch(() => []);
+        subjInfo = subRes[0] || null;
+      }
+
+      const resCourseCd = (dto as any).courseCd || slotInfo?.course_cd || batchInfo?.course_cd || subjInfo?.course_cd || null;
+      const resBranchCd = (dto as any).branchCd || slotInfo?.branch_cd || subjInfo?.branch_cd || null;
+      const resBatchCd = (dto as any).batchCd || slotInfo?.batch_cd || batchInfo?.batch_cd || batchInfo?.code || null;
+      const resSemCd = (dto as any).semester || (dto as any).semCd || slotInfo?.semester || subjInfo?.sem_cd || null;
+      const resSectionCd = (dto as any).section || (dto as any).sectionCd || slotInfo?.section || '1';
+
       // Create the session
       const safeSubjectUuid = (subjectId && isUUID(subjectId)) ? subjectId : null;
       const sessionRows = await this.ds.query(
         `INSERT INTO "${schema}".attendance_sessions
            (subject_id, batch_id, faculty_id, session_date, session_type,
-            topic_covered, timetable_slot_id, created_by, offering_id)
-         VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9)
+            topic_covered, timetable_slot_id, created_by, offering_id,
+            course_cd, branch_cd, batch_cd, sem_cd, section_cd)
+         VALUES ($1,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          RETURNING id`,
         [
           safeSubjectUuid, batchId, safeFacultyUuid,
@@ -397,6 +460,11 @@ export class AttendanceService {
           isUUID(dto.timetableSlotId) ? dto.timetableSlotId : null,
           validUserUuid,
           offeringId,
+          resCourseCd ? String(resCourseCd) : null,
+          resBranchCd ? String(resBranchCd) : null,
+          resBatchCd ? String(resBatchCd) : null,
+          resSemCd ? String(resSemCd) : null,
+          resSectionCd ? String(resSectionCd) : null,
         ],
       );
       const sessionId = sessionRows[0].id;
@@ -534,8 +602,8 @@ export class AttendanceService {
       }
     }
 
-    // Secondary: lookup by subject_id + batch_id + date + sessionType
-    if (!sessionRows.length && subjectId && batchId) {
+    // Secondary: lookup by subject_id + batch_id + date + sessionType (ONLY when NO timetableSlotId was specified)
+    if (!timetableSlotId && !sessionRows.length && subjectId && batchId) {
       sessionRows = await this.ds.query(
         `SELECT s.*,
                 sub.code AS subject_cd, sub.name AS subject_name, sub.sub_addinfo AS subject_paper_code
@@ -556,8 +624,8 @@ export class AttendanceService {
       );
     }
 
-    // Tertiary: any session for subject + batch + date (ignore sessionType)
-    if (!sessionRows.length && subjectId && batchId) {
+    // Tertiary: any session for subject + batch + date (ignore sessionType, ONLY when NO timetableSlotId was specified)
+    if (!timetableSlotId && !sessionRows.length && subjectId && batchId) {
       sessionRows = await this.ds.query(
         `SELECT s.*,
                 sub.code AS subject_cd, sub.name AS subject_name, sub.sub_addinfo AS subject_paper_code
@@ -1350,23 +1418,24 @@ export class AttendanceService {
     const isUUID = (s?: string | null) =>
       s ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(s) : false;
 
-    // Step 1: if we have a timetableSlotId, resolve the batch_id from the slot
+    // Step 1: if we have a timetableSlotId, resolve metadata from the slot
     let resolvedBatchId = isUUID(batchId) ? batchId : null;
 
-    if (!resolvedBatchId && isUUID(timetableSlotId)) {
+    if (isUUID(timetableSlotId)) {
       try {
         const slotRows = await this.ds.query(
-          `SELECT batch_id, course_cd, branch_cd, semester, section FROM "${schema}".timetable_slots WHERE id = $1`,
+          `SELECT batch_id, batch_cd, course_cd, branch_cd, semester, section FROM "${schema}".timetable_slots WHERE id = $1`,
           [timetableSlotId],
         );
         if (slotRows.length) {
-          resolvedBatchId = slotRows[0].batch_id || null;
+          if (!resolvedBatchId && slotRows[0].batch_id) resolvedBatchId = slotRows[0].batch_id;
+          if (!batchId && slotRows[0].batch_cd) batchId = slotRows[0].batch_cd;
           if (!courseCd) courseCd = slotRows[0].course_cd;
           if (!branchCd) branchCd = slotRows[0].branch_cd;
           if (!semester) semester = slotRows[0].semester;
           if (!section) section = slotRows[0].section;
         }
-      } catch (e) {
+      } catch (e: any) {
         this.logger.warn(`Failed to resolve batch from slot ${timetableSlotId}: ${e.message}`);
       }
     }
@@ -1387,32 +1456,59 @@ export class AttendanceService {
     const params: any[] = [];
     let i = 1;
 
-    // Primary batch filter via student_admissions
+    // Primary batch filter via student_admissions and students
     if (resolvedBatchId) {
       conditions.push(`(
         sa.batch_id::text = $${i}::text
         OR s.batch_id::text = $${i}::text
-        OR sa.batch_code ILIKE (SELECT code FROM "${schema}".batches WHERE id::text = $${i}::text LIMIT 1)
+        OR sa.batch_code ILIKE '%' || (SELECT COALESCE(year::text, code, name) FROM "${schema}".batches WHERE id::text = $${i}::text LIMIT 1) || '%'
+        OR s.batch_cd::text = (SELECT COALESCE(batch_cd, code) FROM "${schema}".batches WHERE id::text = $${i}::text LIMIT 1)
       )`);
       params.push(resolvedBatchId);
+      i++;
+    } else if (batchId) {
+      conditions.push(`(
+        sa.batch_id::text = $${i}::text
+        OR s.batch_id::text = $${i}::text
+        OR sa.batch_code ILIKE '%' || $${i}::text || '%'
+        OR s.batch_cd::text = $${i}::text
+      )`);
+      params.push(batchId);
       i++;
     }
 
     // Fallback filters from timetable slot metadata
-    if (courseCd) {
-      conditions.push(`(sa.course_code ILIKE $${i}::text OR sa.course_cd::text = $${i}::text)`);
+    if (courseCd && courseCd !== 'all') {
+      conditions.push(`(sa.course_code = $${i}::text OR s.course_cd = $${i}::text)`);
       params.push(courseCd);
       i++;
     }
-    if (semester) {
-      conditions.push(`(sa.semester::text = $${i}::text OR sa.current_semester::text = $${i}::text)`);
+    if (semester && semester !== 'all') {
+      conditions.push(`(
+        sa.professional_phase ILIKE '%' || $${i}::text || '%'
+        OR sa.professional_phase ILIKE $${i}::text || 'st%'
+        OR sa.professional_phase ILIKE $${i}::text || 'nd%'
+        OR sa.professional_phase ILIKE $${i}::text || 'rd%'
+        OR sa.professional_phase ILIKE $${i}::text || 'th%'
+        OR sa.professional_phase IS NULL
+      )`);
       params.push(semester);
       i++;
     }
-    if (section) {
-      conditions.push(`(sa.section ILIKE $${i}::text OR s.section ILIKE $${i}::text)`);
-      params.push(section);
-      i++;
+    if (section && section !== 'all') {
+      const secLetterMap: Record<string, string> = { '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E', '6': 'F' };
+      const secNumMap: Record<string, string> = { 'A': '1', 'B': '2', 'C': '3', 'D': '4', 'E': '5', 'F': '6' };
+      const altSec = secNumMap[section.toUpperCase()] || secLetterMap[section] || section;
+      conditions.push(`(
+        sa.group_name ILIKE '%' || $${i}::text || '%'
+        OR sa.group_name ILIKE '%' || $${i + 1}::text || '%'
+        OR sa.group_code ILIKE '%' || $${i}::text || '%'
+        OR sa.group_code ILIKE '%' || $${i + 1}::text || '%'
+        OR sa.group_name IS NULL
+        OR sa.group_name = ''
+      )`);
+      params.push(section, altSec);
+      i += 2;
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -1421,16 +1517,17 @@ export class AttendanceService {
       const rows = await this.ds.query(
         `SELECT DISTINCT
             s.id,
-            COALESCE(s.name, 'Student') AS name,
-            COALESCE(s.rollno, s.registration_no, '') AS rollno,
-            COALESCE(s.registration_no, s.rollno, '') AS registration_no,
+            s.name,
+            s.rollno,
+            s.registration_no,
+            s.photo_url,
             COALESCE(sa.batch_id::text, s.batch_id::text) AS batch_id,
             COALESCE(sa.batch_code, '') AS batch_code,
-            COALESCE(sa.course_code, '') AS course_code,
-            COALESCE(sa.semester::text, '') AS semester,
-            COALESCE(sa.section, '') AS section
+            COALESCE(sa.course_code, s.course_cd, '') AS course_code,
+            COALESCE(sa.professional_phase, '') AS semester,
+            COALESCE(sa.group_name, '') AS section
          FROM "${schema}".students s
-         LEFT JOIN "${schema}".student_admissions sa ON sa.student_id = s.id
+         LEFT JOIN "${schema}".student_admissions sa ON sa.student_id::text = s.id::text
          ${whereClause}
          ORDER BY s.rollno ASC, s.name ASC
          LIMIT 300`,
@@ -1439,7 +1536,7 @@ export class AttendanceService {
 
       this.logger.log(`getStudentsForSlot: batchId=${resolvedBatchId}, count=${rows.length}`);
       return { students: rows, batchId: resolvedBatchId, count: rows.length };
-    } catch (e) {
+    } catch (e: any) {
       this.logger.error(`getStudentsForSlot error: ${e.message}`);
       return { students: [], batchId: resolvedBatchId, count: 0, error: e.message };
     }
@@ -2102,99 +2199,38 @@ export class AttendanceService {
   // ─── Section-Wise Attendance Matrix for Full Batch (Multi-Subject Grid) ───
   async getSectionAttendanceMatrix(tenantSlug: string, query: any) {
     const slug = this.getSchema(tenantSlug);
-    const { colgcd = '1', coursecd = '13', ddl_branch = '1', ddl_batch = '2', sem_cd = '3', section_cd = '1', fdt, tdt, month } = query;
+    const { colgcd, coursecd = '2', ddl_branch, ddl_batch = '2', sem_cd = '1', section_cd, fdt, tdt } = query;
 
-    const isBca = String(coursecd) === '13';
-    const isBTechCse17 = String(coursecd) === '1' && (String(ddl_branch) === '1' || !ddl_branch) && (String(ddl_batch) === '17' || String(ddl_batch) === '2024');
+    const normFdt = fdt || '2026-07-01';
+    const normTdt = tdt || '2026-10-31';
+    const secFilter = section_cd && String(section_cd).toLowerCase() !== 'all' ? String(section_cd) : null;
 
-    // 1. Dynamic subjects corresponding to course
-    let subjects: { sub_cd: string; sub_name: string }[] = [];
-    if (isBca) {
-      subjects = [
-        { sub_cd: '88533', sub_name: 'Business Communication' },
-        { sub_cd: '88535', sub_name: 'Computer Organization' },
-        { sub_cd: '88540', sub_name: 'Digital Marketing and SEO' },
-        { sub_cd: '88595', sub_name: 'Elementry Math' },
-        { sub_cd: '88541', sub_name: 'Front End Development using CSS,HTML & JS' },
-        { sub_cd: '88532', sub_name: 'Object Oriented Programming in C++' },
-        { sub_cd: '88538', sub_name: 'Object Oriented Programming in C++ LAB' },
-        { sub_cd: '88536', sub_name: 'Universal Human Values and Professional Ethics' },
-        { sub_cd: '88534', sub_name: 'Web Technology' },
-        { sub_cd: '88539', sub_name: 'Web Technology Lab' },
-      ];
-    } else if (isBTechCse17) {
-      subjects = [
-        { sub_cd: '88621', sub_name: 'COI' },
-        { sub_cd: '88622', sub_name: 'DA' },
-        { sub_cd: '88623', sub_name: 'MLT' },
-        { sub_cd: '88624', sub_name: 'DBMS' },
-        { sub_cd: '88625', sub_name: 'DAA' },
-        { sub_cd: '88626', sub_name: 'WT' },
-        { sub_cd: '88627', sub_name: 'DEC' },
-        { sub_cd: '88628', sub_name: 'WT LAB' },
-        { sub_cd: '88629', sub_name: 'DBMS LAB' },
-        { sub_cd: '88630', sub_name: 'DAA LAB' },
-        { sub_cd: '88631', sub_name: 'MINI PROJECT LAB' },
-      ];
-    } else {
-      const dbSubs = await this.ds.query(
-        `SELECT DISTINCT code AS sub_cd, name AS sub_name
-         FROM "${slug}".subjects
-         WHERE course_cd::text = $1 OR course_name ILIKE $2
-         ORDER BY name ASC`,
-        [String(coursecd), `%${coursecd}%`],
-      ).catch(() => []);
-
-      subjects = (dbSubs || []).map((s: any) => ({
-        sub_cd: s.sub_cd || s.sub_name,
-        sub_name: s.sub_name,
-      }));
-    }
-
-    // Verified metrics for Muskan
-    const muskanMetrics: Record<string, { present: number; total: number; percentage: number }> = {
-      '88533': { present: 7, total: 18, percentage: 38.89 },
-      '88535': { present: 5, total: 21, percentage: 23.81 },
-      '88540': { present: 2, total: 6, percentage: 33.33 },
-      '88595': { present: 2, total: 6, percentage: 33.33 },
-      '88541': { present: 3, total: 6, percentage: 50.00 },
-      '88532': { present: 9, total: 24, percentage: 37.50 },
-      '88538': { present: 2, total: 18, percentage: 11.11 },
-      '88536': { present: 5, total: 18, percentage: 27.78 },
-      '88534': { present: 10, total: 24, percentage: 41.67 },
-      '88539': { present: 3, total: 12, percentage: 25.00 },
-    };
+    // 1. Resolve matched batches
+    const batchRows = await this.ds.query(
+      `SELECT id, code, batch_cd, year, course_cd FROM "${slug}".batches 
+       WHERE id::text = $1 OR code::text = $1 OR batch_cd::text = $1 OR year::text = $1`,
+      [String(ddl_batch)],
+    ).catch(() => []);
+    const matchedBatchIds = batchRows.map((b: any) => String(b.id));
 
     // 2. Fetch distinct students from Database filtered strictly by selected Course & Batch
     const dbStudents = await this.ds.query(
       `SELECT DISTINCT ON (s.id)
-              s.id, s.name, s.rollno, s.registration_no, s.course_cd, s.batch_cd,
-              COALESCE(sa.college_name, 'SRMS CET, BAREILLY') AS college_name,
-              COALESCE(sa.course_code, s.course_cd, 'BCA') AS course_name,
-              COALESCE(sa.batch_code, s.batch_cd, '2025') AS batch_name
+              s.id, s.name, s.rollno, s.registration_no, s.course_cd, s.batch_cd, s.batch_id
        FROM "${slug}".students s
-       LEFT JOIN "${slug}".student_admissions sa ON sa.student_id = s.id
-       WHERE (
-         (s.course_cd = $1 OR sa.course_code = $1)
-         OR ($1 = '13' AND (sa.course_code ILIKE '%BCA%' OR s.course_cd = '13'))
-         OR ($1 = '1' AND (sa.course_code ILIKE '%B.Tech%' OR s.course_cd = '1'))
-         OR ($1 = '2' AND (sa.course_code ILIKE '%MCA%' OR s.course_cd = '2'))
-         OR ($1 = '4' AND (sa.course_code ILIKE '%MBA%' OR s.course_cd = '4'))
-       )
-       AND (
-         (s.batch_cd = $2 OR sa.batch_code = $2 OR sa.batch_id::text = $2)
-         OR ($2 = '2' AND (s.batch_cd = '2' OR sa.batch_code ILIKE '%2025%' OR sa.batch_code ILIKE '%B2025%' OR s.batch_cd = '2025'))
-         OR ($2 = '2025' AND (s.batch_cd = '2' OR sa.batch_code ILIKE '%2025%' OR sa.batch_code ILIKE '%B2025%' OR s.batch_cd = '2025'))
-         OR ($2 = '18' AND (s.batch_cd = '18' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%B2024%'))
-         OR ($2 = '2024' AND (s.batch_cd = '18' OR s.batch_cd = '17' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%B2024%'))
-         OR ($2 = '17' AND (s.batch_cd = '17' OR sa.batch_code ILIKE '%2024%' OR sa.batch_code ILIKE '%2023%' OR sa.batch_code ILIKE '%B2023%'))
-       )
+       WHERE (s.course_cd::text = $1 OR $1 IS NULL)
+         AND (
+           $2::text IS NULL
+           OR s.batch_cd::text = $2
+           OR s.batch_id::text = $2
+           OR s.batch_id::text = ANY($3::text[])
+           OR (s.batch_cd::text = '2026' AND $2 IN ('2', '2026', '1'))
+         )
        ORDER BY s.id, s.rollno ASC
        LIMIT 500`,
-      [String(coursecd), String(ddl_batch)],
+      [coursecd ? String(coursecd) : null, String(ddl_batch), matchedBatchIds],
     ).catch(() => []);
 
-    // If no students exist for this course and batch in the database, return empty array without fake records
     if (!dbStudents || dbStudents.length === 0) {
       return {
         success: true,
@@ -2203,98 +2239,163 @@ export class AttendanceService {
       };
     }
 
-    // Check if real PostgreSQL attendance records exist for this course/semester with optional date filtering
-    const isJulySearch = Boolean(
-      (month && String(month).toLowerCase().includes('jul')) ||
-      (fdt && String(fdt).includes('2026-07') && (!tdt || String(tdt) <= '2026-07-31' || !String(tdt).includes('2026-08')))
-    );
-
-    let dateClause = '';
-    const dateParams: any[] = [String(sem_cd)];
-    if (isJulySearch) {
-      dateParams.push('2026-07-01', '2026-07-31');
-      dateClause = ` AND s.session_date >= $2::date AND s.session_date <= $3::date`;
-    } else if (fdt && tdt) {
-      dateParams.push(fdt, tdt);
-      dateClause = ` AND s.session_date >= $2::date AND s.session_date <= $3::date`;
-    }
-
-    const pgAttendance = await this.ds.query(
-      `SELECT ar.student_id, s.subject_id, sub.code AS sub_cd,
-              COUNT(s.id)::int AS total_classes,
-              COUNT(CASE WHEN ar.status = 'PRESENT' THEN 1 END)::int AS present_count
-       FROM "${slug}".attendance_sessions s
-       JOIN "${slug}".attendance_records ar ON ar.session_id = s.id
-       LEFT JOIN "${slug}".subjects sub ON sub.id = s.subject_id
-       WHERE (s.sem_cd = $1 OR $1 = '')${dateClause}
-       GROUP BY ar.student_id, s.subject_id, sub.code`,
-      dateParams,
+    // 3. Find marked attendance sessions matching course, batch, sem, section within date range
+    const sessionRows = await this.ds.query(
+      `SELECT sess.id AS session_id, sess.subject_id, sess.batch_id, sess.session_date, sess.topic_covered,
+              COALESCE(sub.code, sub.sub_addinfo, ts.competency_codes, 'LEC') AS sub_cd,
+              COALESCE(sub.name, ts.topic, ts.description, sess.topic_covered, 'Subject') AS sub_name,
+              COALESCE(sess.section_cd::text, ts.section, '1') AS resolved_section
+       FROM "${slug}".attendance_sessions sess
+       LEFT JOIN "${slug}".subjects sub ON sub.id::text = sess.subject_id::text
+       LEFT JOIN "${slug}".timetable_slots ts ON ts.id::text = sess.timetable_slot_id::text
+       LEFT JOIN "${slug}".batches b ON b.id::text = sess.batch_id::text
+       WHERE sess.is_cancelled = false
+         AND sess.session_date::date >= $1::date
+         AND sess.session_date::date <= $2::date
+         AND (
+           $3::text IS NULL
+           OR sess.course_cd::text = $3
+           OR sub.course_cd::text = $3
+           OR ts.course_cd::text = $3
+           OR b.course_cd::text = $3
+         )
+         AND (
+           $4::text IS NULL
+           OR sess.batch_cd::text = $4
+           OR sess.batch_id::text = $4
+           OR sess.batch_id::text = ANY($5::text[])
+           OR b.batch_cd::text = $4
+           OR b.code::text = $4
+           OR ts.batch_cd::text = $4
+         )
+         AND (
+           $6::text IS NULL
+           OR sess.sem_cd::text = $6
+           OR ts.semester::text = $6
+         )
+         AND (
+           $7::text IS NULL
+           OR COALESCE(sess.section_cd::text, ts.section, '1') = $7
+         )`,
+      [normFdt, normTdt, coursecd ? String(coursecd) : null, String(ddl_batch), matchedBatchIds, sem_cd ? String(sem_cd) : null, secFilter],
     ).catch(() => []);
 
-    const pgAttMap: Record<string, Record<string, { present: number; total: number; percentage: number }>> = {};
-    if (pgAttendance && pgAttendance.length > 0) {
-      pgAttendance.forEach((row: any) => {
-        if (!pgAttMap[row.student_id]) pgAttMap[row.student_id] = {};
-        const total = row.total_classes || 0;
-        const present = row.present_count || 0;
-        const pct = total > 0 ? parseFloat(((present / total) * 100).toFixed(2)) : 0;
-        const stat = { present, total, percentage: pct };
-        if (row.subject_id) pgAttMap[row.student_id][row.subject_id] = stat;
-        if (row.sub_cd) pgAttMap[row.student_id][row.sub_cd] = stat;
-      });
-    }
+    // 4. Find scheduled classes (timetable slots) within scope and date range
+    const scheduledSlots = await this.ds.query(
+      `SELECT ts.id, ts.subject_id,
+              COALESCE(sub.code, sub.sub_addinfo, ts.competency_codes, ts.topic, 'LEC') AS sub_cd,
+              COALESCE(sub.name, ts.topic, ts.description, 'Subject') AS sub_name,
+              ts.section, ts.effective_from, ts.effective_until
+       FROM "${slug}".timetable_slots ts
+       LEFT JOIN "${slug}".subjects sub ON sub.id::text = ts.subject_id::text
+       LEFT JOIN "${slug}".batches b ON b.id::text = ts.batch_id::text
+       WHERE (
+           $1::text IS NULL
+           OR ts.course_cd::text = $1
+           OR sub.course_cd::text = $1
+           OR b.course_cd::text = $1
+         )
+         AND (
+           $2::text IS NULL
+           OR ts.batch_cd::text = $2
+           OR ts.batch_id::text = $2
+           OR ts.batch_id::text = ANY($3::text[])
+           OR b.batch_cd::text = $2
+           OR b.code::text = $2
+         )
+         AND (
+           $4::text IS NULL
+           OR ts.semester::text = $4
+         )
+         AND (
+           $5::text IS NULL
+           OR ts.section = $5
+         )
+         AND (
+           ts.effective_from IS NOT NULL AND ts.effective_until IS NOT NULL
+           AND ts.effective_from::date <= $7::date
+           AND ts.effective_until::date >= $6::date
+         )`,
+      [coursecd ? String(coursecd) : null, String(ddl_batch), matchedBatchIds, sem_cd ? String(sem_cd) : null, secFilter, normFdt, normTdt],
+    ).catch(() => []);
 
-    const students = dbStudents.map((st: any, idx: number) => {
-      const studentCollege = st.college_name || (colgcd === '2' ? 'SRMS CETR, BAREILLY' : 'SRMS CET, BAREILLY');
-      const studentCourse = st.course_name || (coursecd === '1' ? 'B.Tech' : coursecd === '2' ? 'MCA' : coursecd === '4' ? 'MBA' : 'BCA');
-      const studentBatch = st.batch_name || (ddl_batch === '17' || ddl_batch === '2024' ? '2024' : ddl_batch === '2' || ddl_batch === '2025' ? '2025' : '2024');
-
-      const isMuskan = String(st.registration_no) === '2025108257' ||
-                       String(st.rollno).includes('1790037') ||
-                       String(st.name || '').toUpperCase().includes('MUSKAN');
-
-      const attendanceMap: Record<string, any> = {};
-
-      if (pgAttMap[st.id]) {
-        // Use real PostgreSQL attendance records when available
-        subjects.forEach((sub) => {
-          attendanceMap[sub.sub_cd] = pgAttMap[st.id][sub.sub_cd] || null;
-        });
-      } else if (isBca && isMuskan && (ddl_batch === '2' || ddl_batch === '2025')) {
-        subjects.forEach((sub) => {
-          attendanceMap[sub.sub_cd] = muskanMetrics[sub.sub_cd] || { present: 7, total: 18, percentage: 38.89 };
-        });
-      } else if (isBca && (ddl_batch === '2' || ddl_batch === '2025')) {
-        // BCA 2025 calibrated roster metrics
-        subjects.forEach((sub, sIdx) => {
-          const totals = [18, 21, 6, 6, 6, 24, 18, 18, 24, 12];
-          const totalLecs = totals[sIdx] || 18;
-          const rOffset = (idx * 13 + sIdx * 7) % 40 - 15;
-          const baseRatio = sIdx === 0 ? 0.40 : sIdx === 1 ? 0.30 : sIdx === 2 ? 0.50 : sIdx === 3 ? 0.35 : sIdx === 4 ? 0.50 : 0.38;
-          const presentLecs = Math.max(1, Math.min(totalLecs, Math.round(totalLecs * Math.max(0.15, Math.min(0.85, baseRatio + rOffset / 100)))));
-          const pct = parseFloat(((presentLecs / totalLecs) * 100).toFixed(2));
-          attendanceMap[sub.sub_cd] = {
-            present: presentLecs,
-            total: totalLecs,
-            percentage: pct,
-          };
-        });
-      } else {
-        // Non-BCA courses without published sessions: null attendance, never fake BCA metrics
-        subjects.forEach((sub) => {
-          attendanceMap[sub.sub_cd] = null;
+    // 5. Build dynamic subjects map from sessions and scheduled slots
+    const subjectMap = new Map<string, { sub_cd: string; sub_name: string; id: string; hasSession: boolean }>();
+    sessionRows.forEach((r: any) => {
+      const key = String(r.sub_cd || r.subject_id || r.sub_name);
+      if (!subjectMap.has(key)) {
+        subjectMap.set(key, {
+          sub_cd: String(r.sub_cd || 'LEC'),
+          sub_name: String(r.sub_name),
+          id: String(r.subject_id || key),
+          hasSession: true,
         });
       }
+    });
+
+    scheduledSlots.forEach((s: any) => {
+      const key = String(s.sub_cd || s.subject_id || s.sub_name);
+      if (!subjectMap.has(key)) {
+        subjectMap.set(key, {
+          sub_cd: String(s.sub_cd || 'LEC'),
+          sub_name: String(s.sub_name),
+          id: String(s.subject_id || key),
+          hasSession: false,
+        });
+      }
+    });
+
+    const subjects = Array.from(subjectMap.values()).map((s) => ({ sub_cd: s.sub_cd, sub_name: s.sub_name }));
+
+    // 6. Query attendance records
+    const sessionIds = sessionRows.map((s: any) => String(s.session_id));
+    const studentIds = dbStudents.map((s: any) => String(s.id));
+    let recordRows: any[] = [];
+    if (sessionIds.length > 0 && studentIds.length > 0) {
+      recordRows = await this.ds.query(
+        `SELECT ar.student_id, ar.session_id, ar.status, sess.subject_id
+         FROM "${slug}".attendance_records ar
+         JOIN "${slug}".attendance_sessions sess ON sess.id::text = ar.session_id::text
+         WHERE ar.session_id::text = ANY($1::text[])
+           AND ar.student_id::text = ANY($2::text[])`,
+        [sessionIds, studentIds],
+      ).catch(() => []);
+    }
+
+    // 7. Resolve dynamic institution name
+    const collegeRows = await this.ds.query(`SELECT name FROM "${slug}".colleges LIMIT 1`).catch(() => []);
+    const resolvedCollege = collegeRows?.[0]?.name || tenantSlug.replace(/[-_]+/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase());
+
+    // 8. Build student matrix rows
+    const students = dbStudents.map((st: any, idx: number) => {
+      const stRecs = recordRows.filter((r: any) => String(r.student_id) === String(st.id));
+      const attendanceMap: Record<string, any> = {};
+
+      subjects.forEach((sub) => {
+        const subRecs = stRecs.filter((r: any) => {
+          const sess = sessionRows.find((s: any) => String(s.session_id) === String(r.session_id));
+          return sess && (sess.sub_cd === sub.sub_cd || sess.sub_name === sub.sub_name);
+        });
+        const present = subRecs.filter((r: any) => r.status === 'PRESENT' || r.status === 'LATE').length;
+        const total = subRecs.length;
+        const pct = total > 0 ? parseFloat(((present / total) * 100).toFixed(2)) : 0;
+
+        attendanceMap[sub.sub_cd] = {
+          present,
+          total,
+          percentage: pct,
+        };
+      });
 
       return {
         s_no: idx + 1,
-        college: studentCollege,
-        rollno: st.rollno || `250014179000${idx + 1}`,
-        registration_no: st.registration_no || `202410625${idx + 1}`,
+        college: resolvedCollege,
+        rollno: st.rollno || st.registration_no || `#${idx + 1}`,
+        registration_no: st.registration_no || st.rollno || `#${idx + 1}`,
         name: (st.name || 'STUDENT').toUpperCase(),
-        course: studentCourse,
-        batch: studentBatch,
-        semester: sem_cd || '3',
+        course: `Course ${st.course_cd || coursecd}`,
+        batch: `Batch ${st.batch_cd || ddl_batch}`,
+        semester: sem_cd || '1',
         attendance: attendanceMap,
       };
     });

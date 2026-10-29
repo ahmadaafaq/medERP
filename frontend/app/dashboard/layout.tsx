@@ -57,6 +57,7 @@ export default function DashboardRootLayout({
       if (
         (roleUpper === 'ADMIN' && (cleanPath === '/dashboard/admin' || cleanPath === '/dashboard')) ||
         (roleUpper === 'HOD' && (cleanPath.startsWith('/dashboard/hod') || cleanPath.startsWith('/dashboard/faculty') || cleanPath === '/dashboard')) ||
+        (roleUpper === 'DQAC' && (cleanPath.startsWith('/dashboard/dqac') || cleanPath.startsWith('/dashboard/faculty') || cleanPath.startsWith('/dashboard/hod') || cleanPath === '/dashboard')) ||
         (roleUpper === 'FACULTY' && (cleanPath === '/dashboard/faculty' || cleanPath === '/dashboard')) ||
         (roleUpper === 'STUDENT' && (cleanPath === '/dashboard/student' || cleanPath === '/dashboard')) ||
         (roleUpper === 'CLERK' && (cleanPath.startsWith('/dashboard/clerk') || cleanPath === '/dashboard')) ||
@@ -105,6 +106,7 @@ export default function DashboardRootLayout({
         if (
           (roleUpper === 'ADMIN' && pathname === '/dashboard/admin') ||
           (roleUpper === 'HOD' && (pathname === '/dashboard/hod' || pathname === '/dashboard/faculty')) ||
+          (roleUpper === 'DQAC' && (pathname?.startsWith('/dashboard/dqac') || pathname === '/dashboard/faculty')) ||
           (roleUpper === 'FACULTY' && pathname === '/dashboard/faculty') ||
           (roleUpper === 'STUDENT' && pathname === '/dashboard/student') ||
           (roleUpper === 'CLERK' && pathname === '/dashboard/clerk') ||

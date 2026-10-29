@@ -3843,26 +3843,38 @@ export default function AssessmentMasterPage() {
                   <div id="printable-exam-paper" className="space-y-6">
 
                     {/* 1. Official College Letterhead & Examination Header */}
-                    <div className="text-center border-b-2 border-black pb-4 space-y-1">
-                      <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-black font-sans">
-                        SRMS COLLEGE OF ENGINEERING &amp; TECHNOLOGY, BAREILLY
-                      </h1>
-                      <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">
-                        Faculty of Computer Science &amp; Information Technology
-                      </p>
-                      <p className="text-[10px] text-slate-600 italic">
-                        Approved by AICTE, New Delhi &amp; Affiliated to Dr. A.P.J. Abdul Kalam Technical University, Lucknow
-                      </p>
+                    {(() => {
+                      const institutionTitle = typeof window !== 'undefined' ? (() => {
+                        try {
+                          const u = JSON.parse(localStorage.getItem('user') || '{}');
+                          return u.collegeName || u.tenantName || u.firm_title || localStorage.getItem('tenantName') || 'EXAMINATION DEPARTMENT';
+                        } catch {
+                          return 'EXAMINATION DEPARTMENT';
+                        }
+                      })() : 'EXAMINATION DEPARTMENT';
 
-                      <div className="pt-2">
-                        <h2 className="text-sm sm:text-base font-black uppercase text-black underline decoration-2 underline-offset-4">
-                          {previewPaper.name || previewPaper.paperName || 'EXAMINATION QUESTION PAPER'}
-                        </h2>
-                        <p className="text-[11px] font-bold text-slate-800 pt-0.5">
-                          Academic Session: 2025–2026 • Paper Code: <span className="font-mono font-black">[{previewPaper.code || previewPaper.paperCode}]</span>
-                        </p>
-                      </div>
-                    </div>
+                      return (
+                        <div className="text-center border-b-2 border-black pb-4 space-y-1">
+                          <h1 className="text-lg sm:text-xl font-black uppercase tracking-wider text-black font-sans">
+                            {previewPaper.collegeName || previewPaper.college_name || institutionTitle}
+                          </h1>
+                          {previewPaper.department_name && (
+                            <p className="text-xs font-bold text-slate-700 uppercase tracking-wide">
+                              Department of {previewPaper.department_name}
+                            </p>
+                          )}
+
+                          <div className="pt-2">
+                            <h2 className="text-sm sm:text-base font-black uppercase text-black underline decoration-2 underline-offset-4">
+                              {previewPaper.name || previewPaper.paperName || 'EXAMINATION QUESTION PAPER'}
+                            </h2>
+                            <p className="text-[11px] font-bold text-slate-800 pt-0.5">
+                              Academic Session: 2025–2026 • Paper Code: <span className="font-mono font-black">[{previewPaper.code || previewPaper.paperCode}]</span>
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* 2. Metadata Bar (Course, Subject, Batch, Duration, Max Theory Marks, Student Roll No) */}
                     {(() => {
@@ -3954,7 +3966,7 @@ export default function AssessmentMasterPage() {
                               {theorySections.map((sec, secIdx) => {
                                 const qList = (sec.selectedQuestions || (sec as any).questions || [])
                                   .filter((q: any) => q.mode !== 'PRACTICAL' && !q.is_practical && q.type !== 'PRACTICAL');
-                                const secTotal = qList.reduce((acc: number, q: any) => acc + Number(q.marks || 0), 0);
+                                const secTotal = qList.reduce((acc: number, q: any) => acc + Number(q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 0), 0);
 
                                 return (
                                   <div key={sec.id || secIdx} className="space-y-3">
@@ -3984,9 +3996,20 @@ export default function AssessmentMasterPage() {
                                                 )}
                                               </p>
                                               <span className="font-mono text-[10px] text-slate-500 font-bold shrink-0">
-                                                [{q.marks || 1.0} Marks]
+                                                [{q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 1.0} Marks]
                                               </span>
                                             </div>
+
+                                            {/* Attached Diagram / Image */}
+                                            {(q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url) && (
+                                              <div className="my-2 pl-4">
+                                                <img
+                                                  src={q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url}
+                                                  alt={`Diagram for Q${qIdx + 1}`}
+                                                  className="max-h-56 max-w-full object-contain rounded border border-slate-300 p-1"
+                                                />
+                                              </div>
+                                            )}
 
                                             {/* Options for MCQ */}
                                             {sec.type === 'MCQ' && (
@@ -4022,7 +4045,7 @@ export default function AssessmentMasterPage() {
                           {/* End of Question Paper Footer */}
                           <div className="text-center pt-6 border-t border-black text-xs font-sans text-slate-500 space-y-1">
                             <p className="font-bold uppercase tracking-widest text-black">*** END OF QUESTION PAPER ***</p>
-                            <p className="text-[10px]">SRMS CET ERP Assessment Engine • Question Paper ID: {previewPaper.id || previewPaper.code}</p>
+                            <p className="text-[10px]">{previewPaper.collegeName || previewPaper.college_name || 'ERP Assessment Engine'} • Question Paper ID: {previewPaper.id || previewPaper.code}</p>
                           </div>
                         </>
                       );

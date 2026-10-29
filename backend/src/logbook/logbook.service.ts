@@ -364,6 +364,163 @@ export class LogbookService {
   }
 
   // ==========================================
+  // RESOLVE STUDENT COHORT HELPER
+  // ==========================================
+  private async resolveStudentCohort(
+    tenantSlug: string,
+    identifier?: string,
+  ): Promise<{
+    studentId: string;
+    userId: string | null;
+    name: string;
+    rollno: string;
+    registrationNo: string;
+    courseIds: string[];
+    batchIds: string[];
+    branchIds: string[];
+    semesterIds: string[];
+    semNumber: string;
+  } | null> {
+    const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
+    const trimmed = identifier ? String(identifier).trim() : '';
+    if (!trimmed) return null;
+    const cleaned = trimmed.replace(/^srms[-_]/i, '');
+
+    try {
+      const res = await this.tenantSchemaService.queryInTenant(
+        tenantSlug,
+        `SELECT s.id, s.user_id, s.rollno, s.registration_no, s.name,
+                s.course_cd, s.batch_cd, s.batch_id, s.branch_id, s.department_id,
+                sa.course_id as sa_course_id, sa.course_code as sa_course_code,
+                sa.batch_id as sa_batch_id, sa.batch_code as sa_batch_code,
+                sa.branch_id as sa_branch_id, sa.branch_code as sa_branch_code, sa.branch_name as sa_branch_name,
+                sa.professional_phase as sa_phase
+         FROM "${schema}".students s
+         LEFT JOIN "${schema}".student_admissions sa ON sa.student_id::text = s.id::text
+         WHERE s.id::text = $1
+            OR s.id::text = $2
+            OR s.user_id::text = $1
+            OR s.user_id::text = $2
+            OR LOWER(COALESCE(s.rollno, '')) = LOWER($1)
+            OR LOWER(COALESCE(s.rollno, '')) = LOWER($2)
+            OR LOWER(COALESCE(s.registration_no, '')) = LOWER($1)
+            OR LOWER(COALESCE(s.registration_no, '')) = LOWER($2)
+            OR LOWER(COALESCE(s.name, '')) = LOWER($1)
+            OR LOWER(COALESCE(s.name, '')) = LOWER($2)
+         LIMIT 1`,
+        [trimmed, cleaned],
+      );
+
+      if (!res || res.length === 0) return null;
+      const st = res[0];
+
+      const courseIds = new Set<string>(
+        [st.course_cd, st.sa_course_code, st.sa_course_id]
+          .filter(Boolean)
+          .map((x) => String(x).trim()),
+      );
+
+      // Expand matching course records from courses table
+      try {
+        const cRes = await this.tenantSchemaService.queryInTenant(
+          tenantSlug,
+          `SELECT id, code, course_cd, name FROM "${schema}".courses
+           WHERE id::text = ANY($1::text[]) 
+              OR code::text = ANY($1::text[])
+              OR (course_cd IS NOT NULL AND course_cd::text = ANY($1::text[]))`,
+          [Array.from(courseIds)],
+        );
+        cRes.forEach((c: any) => {
+          if (c.id) courseIds.add(String(c.id).trim());
+          if (c.code) courseIds.add(String(c.code).trim());
+          if (c.course_cd) courseIds.add(String(c.course_cd).trim());
+        });
+      } catch (e) {}
+
+      const batchIds = new Set<string>(
+        [st.batch_cd, st.batch_id, st.sa_batch_code, st.sa_batch_id]
+          .filter(Boolean)
+          .map((x) => String(x).trim()),
+      );
+
+      try {
+        const bRes = await this.tenantSchemaService.queryInTenant(
+          tenantSlug,
+          `SELECT id, code, batch_cd, year, name FROM "${schema}".batches
+           WHERE (
+             (course_cd IS NOT NULL AND course_cd::text = ANY($2::text[]))
+             OR id::text = ANY($1::text[])
+             OR code::text = ANY($1::text[])
+             OR (batch_cd IS NOT NULL AND batch_cd::text = ANY($1::text[]))
+           )`,
+          [Array.from(batchIds), Array.from(courseIds)],
+        );
+        bRes.forEach((b: any) => {
+          if (b.id) batchIds.add(String(b.id).trim());
+          if (b.code) batchIds.add(String(b.code).trim());
+          if (b.batch_cd) batchIds.add(String(b.batch_cd).trim());
+          if (b.year) batchIds.add(String(b.year).trim());
+        });
+      } catch (e) {}
+
+      const branchIds = new Set<string>(
+        [st.branch_id, st.department_id, st.sa_branch_code, st.sa_branch_id, st.sa_branch_name]
+          .filter(Boolean)
+          .map((x) => String(x).trim()),
+      );
+
+      try {
+        const dRes = await this.tenantSchemaService.queryInTenant(
+          tenantSlug,
+          `SELECT id, code, branch_cd, name FROM "${schema}".departments
+           WHERE id::text = ANY($1::text[]) 
+              OR code::text = ANY($1::text[])
+              OR (branch_cd IS NOT NULL AND branch_cd::text = ANY($1::text[]))`,
+          [Array.from(branchIds)],
+        );
+        dRes.forEach((d: any) => {
+          if (d.id) branchIds.add(String(d.id).trim());
+          if (d.code) branchIds.add(String(d.code).trim());
+          if (d.branch_cd) branchIds.add(String(d.branch_cd).trim());
+        });
+      } catch (e) {}
+
+      const semRaw = st.sa_phase || '';
+      const semMatch = semRaw.match(/\d+/);
+      const semNumber = semMatch ? semMatch[0] : '';
+      const semesterIds = new Set<string>(
+        [
+          semNumber,
+          semRaw,
+          semNumber ? `${semNumber}st Semester` : null,
+          semNumber ? `${semNumber}nd Semester` : null,
+          semNumber ? `${semNumber}rd Semester` : null,
+          semNumber ? `${semNumber}th Semester` : null,
+          semNumber ? `Semester ${semNumber}` : null,
+          semNumber ? `Sem ${semNumber}` : null,
+        ]
+          .filter(Boolean)
+          .map((x) => String(x).trim()),
+      );
+
+      return {
+        studentId: st.id,
+        userId: st.user_id,
+        name: st.name,
+        rollno: st.rollno,
+        registrationNo: st.registration_no,
+        courseIds: Array.from(courseIds),
+        batchIds: Array.from(batchIds),
+        branchIds: Array.from(branchIds),
+        semesterIds: Array.from(semesterIds),
+        semNumber,
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // ==========================================
   // 1. DASHBOARD & OVERVIEW STATS
   // ==========================================
   async getStudentDashboardStats(
@@ -390,8 +547,8 @@ export class LogbookService {
       tenantSlug,
       `SELECT st.*, cr.name as course_name, b.name as batch_name
        FROM "${schema}".students st
-       LEFT JOIN "${schema}".courses cr ON cr.course_cd::text = st.course_cd::text
-       LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR (b.batch_cd::text = st.batch_cd::text AND b.course_cd::text = st.course_cd::text))
+       LEFT JOIN "${schema}".courses cr ON (cr.id::text = st.course_cd::text OR cr.code::text = st.course_cd::text OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = st.course_cd::text))
+       LEFT JOIN "${schema}".batches b ON (b.id::text = st.batch_id::text OR b.code::text = st.batch_cd::text OR b.id::text = st.batch_cd::text OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = st.batch_cd::text))
        WHERE st.id::text = $1 LIMIT 1`,
       [studentId],
     );
@@ -501,32 +658,11 @@ export class LogbookService {
   ) {
     await this.ensureTables(tenantSlug);
     const schema = `tenant_${tenantSlug.replace(/^tenant_/, '')}`;
-    const studentId = await this.resolveStudentId(tenantSlug, userIdOrStudentId);
 
-    let studentCourseCd = queryFilters?.courseId || null;
-    let studentBatchCd = queryFilters?.batchId || null;
-    let studentBranchId = queryFilters?.branchId || null;
-
-    if (studentId || userIdOrStudentId) {
-      try {
-        const stRows = await this.tenantSchemaService.queryInTenant(
-          tenantSlug,
-          `SELECT id, course_cd, batch_cd, batch_id, branch_id, department_id
-           FROM "${schema}".students
-           WHERE id::text = $1
-              OR user_id::text = $1
-              OR LOWER(COALESCE(rollno, '')) = LOWER($1)
-              OR LOWER(COALESCE(registration_no, '')) = LOWER($1)
-           LIMIT 1`,
-          [studentId || userIdOrStudentId],
-        );
-        if (stRows && stRows.length > 0) {
-          if (!studentCourseCd && stRows[0].course_cd) studentCourseCd = String(stRows[0].course_cd).trim();
-          if (!studentBatchCd && (stRows[0].batch_cd || stRows[0].batch_id)) studentBatchCd = String(stRows[0].batch_cd || stRows[0].batch_id).trim();
-          if (!studentBranchId && (stRows[0].branch_id || stRows[0].department_id)) studentBranchId = String(stRows[0].branch_id || stRows[0].department_id).trim();
-        }
-      } catch (e) {}
-    }
+    const cohort = userIdOrStudentId
+      ? await this.resolveStudentCohort(tenantSlug, userIdOrStudentId)
+      : null;
+    const studentId = cohort?.studentId || (await this.resolveStudentId(tenantSlug, userIdOrStudentId));
 
     // 1. Direct assigned project to student
     if (studentId) {
@@ -542,48 +678,119 @@ export class LogbookService {
       if (directProject && directProject.length > 0) return directProject[0];
     }
 
-    // 2. Cohort project matching course_id and batch_id
+    // 2. Cohort-based mini project matching student course, batch, branch, and semester
+    if (cohort) {
+      const params: any[] = [];
+      params.push(cohort.courseIds);
+      const cIdx = params.length;
+      params.push(cohort.batchIds);
+      const bIdx = params.length;
+      params.push(cohort.branchIds);
+      const brIdx = params.length;
+      params.push(cohort.semesterIds);
+      const sIdx = params.length;
+      params.push(cohort.semNumber || '0');
+      const snIdx = params.length;
+
+      const cohortProject = await this.tenantSchemaService.queryInTenant(
+        tenantSlug,
+        `SELECT p.*, f.name as guide_name
+         FROM "${schema}".logbook_mini_projects p
+         LEFT JOIN "${schema}".faculty f ON (f.id::text = p.faculty_id::text OR f.user_id::text = p.faculty_id::text)
+         LEFT JOIN "${schema}".courses cr ON (cr.id::text = p.course_id::text OR cr.code::text = p.course_id::text OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = p.course_id::text))
+         LEFT JOIN "${schema}".batches b ON (b.id::text = p.batch_id::text OR b.code::text = p.batch_id::text OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = p.batch_id::text))
+         LEFT JOIN "${schema}".departments d ON (d.id::text = p.branch_id::text OR d.code::text = p.branch_id::text OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = p.branch_id::text))
+         WHERE 1=1
+           AND (
+             p.course_id = ANY($${cIdx}::text[])
+             OR cr.code = ANY($${cIdx}::text[])
+             OR cr.id::text = ANY($${cIdx}::text[])
+             OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = ANY($${cIdx}::text[]))
+           )
+           AND (
+             p.batch_id IS NULL OR p.batch_id = 'all' OR p.batch_id = ''
+             OR p.batch_id = ANY($${bIdx}::text[])
+             OR b.code = ANY($${bIdx}::text[])
+             OR b.year = ANY($${bIdx}::text[])
+             OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = ANY($${bIdx}::text[]))
+             OR b.id::text = ANY($${bIdx}::text[])
+           )
+           AND (
+             p.branch_id IS NULL OR p.branch_id = 'all' OR p.branch_id = ''
+             OR p.branch_id = ANY($${brIdx}::text[])
+             OR d.code = ANY($${brIdx}::text[])
+             OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = ANY($${brIdx}::text[]))
+             OR d.id::text = ANY($${brIdx}::text[])
+           )
+           AND (
+             p.semester_id IS NULL OR p.semester_id = 'all' OR p.semester_id = ''
+             OR p.semester_id = ANY($${sIdx}::text[])
+             OR (p.semester_id ~ '[0-9]' AND REGEXP_REPLACE(p.semester_id, '[^0-9]', '', 'g') = $${snIdx}::text)
+           )
+         ORDER BY p.created_at DESC LIMIT 1`,
+        params,
+      );
+      if (cohortProject && cohortProject.length > 0) return cohortProject[0];
+      return null;
+    }
+
+    // 3. Fallback when student cohort is not found, but query filters provided
     const params: any[] = [];
     let sql = `
       SELECT p.*, f.name as guide_name
       FROM "${schema}".logbook_mini_projects p
       LEFT JOIN "${schema}".faculty f ON (f.id::text = p.faculty_id::text OR f.user_id::text = p.faculty_id::text)
-      LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = p.course_id::text OR cr.id::text = p.course_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id::text = p.batch_id::text OR (b.batch_cd::text = p.batch_id::text AND b.course_cd::text = p.course_id::text))
+      LEFT JOIN "${schema}".courses cr ON (cr.id::text = p.course_id::text OR cr.code::text = p.course_id::text OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = p.course_id::text))
+      LEFT JOIN "${schema}".batches b ON (b.id::text = p.batch_id::text OR b.code::text = p.batch_id::text OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = p.batch_id::text))
+      LEFT JOIN "${schema}".departments d ON (d.id::text = p.branch_id::text OR d.code::text = p.branch_id::text OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = p.branch_id::text))
       WHERE 1=1
     `;
 
-    if (studentCourseCd && studentCourseCd !== 'all') {
-      params.push(studentCourseCd);
+    if (queryFilters.courseId && queryFilters.courseId !== 'all') {
+      params.push(queryFilters.courseId);
       const pIdx = params.length;
       sql += ` AND (
-        p.course_id IS NULL OR p.course_id = 'all' OR p.course_id = ''
-        OR p.course_id::text = $${pIdx}::text
-        OR cr.code::text = $${pIdx}::text
-        OR cr.course_cd::text = $${pIdx}::text
-        OR (CASE WHEN $${pIdx}::text = '4' THEN cr.name ILIKE '%MBA%' OR p.course_id = '4'
-                 WHEN $${pIdx}::text = '13' THEN cr.name ILIKE '%BCA%' OR p.course_id = '13'
-                 WHEN $${pIdx}::text = '3' THEN cr.name ILIKE '%MCA%' OR p.course_id = '3'
-                 WHEN $${pIdx}::text = '1' THEN cr.name ILIKE '%B.Tech%' OR cr.name ILIKE '%BTech%' OR p.course_id = '1'
-                 WHEN $${pIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR p.course_id = '2'
-                 ELSE false END)
+        p.course_id = $${pIdx}::text
+        OR cr.code = $${pIdx}::text
+        OR cr.id::text = $${pIdx}::text
+        OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = $${pIdx}::text)
       )`;
     }
 
-    if (studentBatchCd && studentBatchCd !== 'all') {
-      params.push(studentBatchCd);
-      const pIdx = params.length;
+    if (queryFilters.batchId && queryFilters.batchId !== 'all') {
+      params.push(queryFilters.batchId);
+      const bIdx = params.length;
       sql += ` AND (
         p.batch_id IS NULL OR p.batch_id = 'all' OR p.batch_id = ''
-        OR p.batch_id::text = $${pIdx}::text
-        OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = $${pIdx}::text)
-        OR (b.year IS NOT NULL AND b.year::text = $${pIdx}::text)
-        OR (b.name IS NOT NULL AND b.name ILIKE '%' || $${pIdx}::text || '%')
+        OR p.batch_id = $${bIdx}::text
+        OR b.code = $${bIdx}::text
+        OR b.year = $${bIdx}::text
+        OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = $${bIdx}::text)
+      )`;
+    }
+
+    if (queryFilters.branchId && queryFilters.branchId !== 'all') {
+      params.push(queryFilters.branchId);
+      const brIdx = params.length;
+      sql += ` AND (
+        p.branch_id IS NULL OR p.branch_id = 'all' OR p.branch_id = ''
+        OR p.branch_id = $${brIdx}::text
+        OR d.code = $${brIdx}::text
+        OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = $${brIdx}::text)
+      )`;
+    }
+
+    if (queryFilters.semesterId && queryFilters.semesterId !== 'all') {
+      params.push(queryFilters.semesterId);
+      const sIdx = params.length;
+      sql += ` AND (
+        p.semester_id IS NULL OR p.semester_id = 'all' OR p.semester_id = ''
+        OR p.semester_id = $${sIdx}::text
+        OR (p.semester_id ~ '[0-9]' AND REGEXP_REPLACE(p.semester_id, '[^0-9]', '', 'g') = REGEXP_REPLACE($${sIdx}::text, '[^0-9]', '', 'g'))
       )`;
     }
 
     sql += ` ORDER BY p.created_at DESC LIMIT 1`;
-
     const cohortProject = await this.tenantSchemaService.queryInTenant(tenantSlug, sql, params);
     if (cohortProject && cohortProject.length > 0) return cohortProject[0];
 
@@ -1125,7 +1332,9 @@ startxref
               (SELECT COUNT(DISTINCT student_id) FROM "${schema}".logbook_weekly_logs WHERE project_id = p.id OR project_id IS NULL) as students_count
        FROM "${schema}".logbook_mini_projects p
        LEFT JOIN "${schema}".faculty f ON (f.id::text = p.faculty_id::text OR f.user_id::text = p.faculty_id::text)
-       LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = p.course_id::text OR cr.id::text = p.course_id::text)
+       LEFT JOIN "${schema}".courses cr ON (cr.id::text = p.course_id::text OR cr.code::text = p.course_id::text OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = p.course_id::text))
+       LEFT JOIN "${schema}".batches b ON (b.id::text = p.batch_id::text OR b.code::text = p.batch_id::text OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = p.batch_id::text))
+       LEFT JOIN "${schema}".departments d ON (d.id::text = p.branch_id::text OR d.code::text = p.branch_id::text OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = p.branch_id::text))
        LEFT JOIN "${schema}".students st ON st.id::text = p.student_id::text
        WHERE 1=1
     `;
@@ -1148,26 +1357,42 @@ startxref
         p.course_id IS NULL OR p.course_id = 'all' OR p.course_id = ''
         OR p.course_id::text = $${pIdx}::text
         OR cr.code::text = $${pIdx}::text
-        OR cr.course_cd::text = $${pIdx}::text
-        OR (CASE WHEN $${pIdx}::text = '4' THEN cr.name ILIKE '%MBA%' OR p.course_id = '4'
-                 WHEN $${pIdx}::text = '13' THEN cr.name ILIKE '%BCA%' OR p.course_id = '13'
-                 WHEN $${pIdx}::text = '3' THEN cr.name ILIKE '%MCA%' OR p.course_id = '3'
-                 WHEN $${pIdx}::text = '1' THEN cr.name ILIKE '%B.Tech%' OR cr.name ILIKE '%BTech%' OR p.course_id = '1'
-                 WHEN $${pIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR p.course_id = '2'
-                 ELSE false END)
+        OR cr.id::text = $${pIdx}::text
+        OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = $${pIdx}::text)
       )`;
     }
 
     if (queryFilters.batchId && queryFilters.batchId !== 'all') {
       params.push(queryFilters.batchId);
       const bIdx = params.length;
-      sql += ` AND (p.batch_id IS NULL OR p.batch_id = 'all' OR p.batch_id::text = $${bIdx}::text)`;
+      sql += ` AND (
+        p.batch_id IS NULL OR p.batch_id = 'all' OR p.batch_id = ''
+        OR p.batch_id::text = $${bIdx}::text
+        OR b.code::text = $${bIdx}::text
+        OR b.year::text = $${bIdx}::text
+        OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = $${bIdx}::text)
+      )`;
     }
 
     if (queryFilters.branchId && queryFilters.branchId !== 'all') {
       params.push(queryFilters.branchId);
       const brIdx = params.length;
-      sql += ` AND (p.branch_id IS NULL OR p.branch_id = 'all' OR p.branch_id::text = $${brIdx}::text)`;
+      sql += ` AND (
+        p.branch_id IS NULL OR p.branch_id = 'all' OR p.branch_id = ''
+        OR p.branch_id::text = $${brIdx}::text
+        OR d.code::text = $${brIdx}::text
+        OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = $${brIdx}::text)
+      )`;
+    }
+
+    if (queryFilters.semesterId && queryFilters.semesterId !== 'all') {
+      params.push(queryFilters.semesterId);
+      const sIdx = params.length;
+      sql += ` AND (
+        p.semester_id IS NULL OR p.semester_id = 'all' OR p.semester_id = ''
+        OR p.semester_id::text = $${sIdx}::text
+        OR (p.semester_id ~ '[0-9]' AND REGEXP_REPLACE(p.semester_id, '[^0-9]', '', 'g') = REGEXP_REPLACE($${sIdx}::text, '[^0-9]', '', 'g'))
+      )`;
     }
 
     sql += ` ORDER BY COALESCE(p.id::text, p.title), p.created_at DESC`;
@@ -2135,28 +2360,13 @@ startxref
     let studentBranchId: string | null = query.branchId || null;
     let studentSemId: string | null = query.semesterId || null;
 
+    let cohort: any = null;
     if (effectiveStudentId) {
-      try {
-        const stRows = await this.tenantSchemaService.queryInTenant(
-          tenantSlug,
-          `SELECT id, user_id, course_cd, batch_cd, batch_id, branch_id, department_id
-           FROM "${schema}".students
-           WHERE id::text = $1
-              OR user_id::text = $1
-              OR LOWER(COALESCE(rollno, '')) = LOWER($1)
-              OR LOWER(COALESCE(registration_no, '')) = LOWER($1)
-              OR LOWER(COALESCE(name, '')) = LOWER($1)
-           LIMIT 1`,
-          [effectiveStudentId],
-        );
-        if (stRows && stRows.length > 0) {
-          effectiveStudentId = stRows[0].id;
-          fallbackUserId = stRows[0].user_id || fallbackUserId;
-          if (!studentCourseCd && stRows[0].course_cd) studentCourseCd = String(stRows[0].course_cd).trim();
-          if (!studentBatchCd && (stRows[0].batch_cd || stRows[0].batch_id)) studentBatchCd = String(stRows[0].batch_cd || stRows[0].batch_id).trim();
-          if (!studentBranchId && (stRows[0].branch_id || stRows[0].department_id)) studentBranchId = String(stRows[0].branch_id || stRows[0].department_id).trim();
-        }
-      } catch (e) {}
+      cohort = await this.resolveStudentCohort(tenantSlug, effectiveStudentId);
+      if (cohort) {
+        effectiveStudentId = cohort.studentId;
+        fallbackUserId = cohort.userId || fallbackUserId;
+      }
     }
 
     let sql = `
@@ -2202,8 +2412,9 @@ startxref
       FROM "${schema}".logbook_topics t
       LEFT JOIN "${schema}".logbook_categories c ON c.id = t.category_id
       LEFT JOIN "${schema}".faculty f ON (f.id::text = t.faculty_id::text OR f.user_id::text = t.faculty_id::text)
-      LEFT JOIN "${schema}".courses cr ON (cr.course_cd::text = t.course_id::text OR cr.id::text = t.course_id::text)
-      LEFT JOIN "${schema}".batches b ON (b.id::text = t.batch_id::text OR (b.batch_cd::text = t.batch_id::text AND b.course_cd::text = t.course_id::text))
+      LEFT JOIN "${schema}".courses cr ON (cr.id::text = t.course_id::text OR cr.code::text = t.course_id::text OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = t.course_id::text))
+      LEFT JOIN "${schema}".batches b ON (b.id::text = t.batch_id::text OR b.code::text = t.batch_id::text OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = t.batch_id::text))
+      LEFT JOIN "${schema}".departments d ON (d.id::text = t.branch_id::text OR d.code::text = t.branch_id::text OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = t.branch_id::text))
       WHERE t.is_active = true
     `;
 
@@ -2212,28 +2423,56 @@ startxref
       sql += ` AND (t.category_id::text = $${params.length}::text)`;
     }
 
-    const effectiveCourseFilter = query.courseId || (effectiveStudentId ? studentCourseCd : null);
-    if (query.facultyId && query.facultyId !== 'all') {
-      params.push(query.facultyId);
-      const facIdx = params.length;
-      if (effectiveCourseFilter && effectiveCourseFilter !== 'all') {
-        params.push(effectiveCourseFilter);
-        const crsIdx = params.length;
-        sql += ` AND (
-          (t.faculty_id::text = $${facIdx}::text OR f.id::text = $${facIdx}::text OR f.user_id::text = $${facIdx}::text OR f.emp_id::text = $${facIdx}::text)
-          OR (
-            (t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = '' OR t.course_id::text = $${crsIdx}::text OR cr.code::text = $${crsIdx}::text OR cr.course_cd::text = $${crsIdx}::text)
-            AND (
-              CASE WHEN $${crsIdx}::text = '4' THEN cr.name ILIKE '%MBA%' OR t.course_id = '4'
-                   WHEN $${crsIdx}::text = '13' THEN cr.name ILIKE '%BCA%' OR t.course_id = '13'
-                   WHEN $${crsIdx}::text = '3' THEN cr.name ILIKE '%MCA%' OR t.course_id = '3'
-                   WHEN $${crsIdx}::text = '1' THEN cr.name ILIKE '%B.Tech%' OR cr.name ILIKE '%BTech%' OR t.course_id = '1'
-                   WHEN $${crsIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR t.course_id = '2'
-                   ELSE true END
-            )
-          )
-        )`;
-      } else {
+    if (cohort) {
+      // STRICT STUDENT COHORT MATCHING:
+      // 1. Course Match (Must match student's enrolled course)
+      params.push(cohort.courseIds);
+      const cIdx = params.length;
+      sql += ` AND (
+        t.course_id = ANY($${cIdx}::text[])
+        OR cr.code = ANY($${cIdx}::text[])
+        OR cr.id::text = ANY($${cIdx}::text[])
+        OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = ANY($${cIdx}::text[]))
+      )`;
+
+      // 2. Batch Match (Student's batch or all-batches for this course)
+      params.push(cohort.batchIds);
+      const bIdx = params.length;
+      sql += ` AND (
+        t.batch_id IS NULL OR t.batch_id = 'all' OR t.batch_id = ''
+        OR t.batch_id = ANY($${bIdx}::text[])
+        OR b.code = ANY($${bIdx}::text[])
+        OR b.year::text = ANY($${bIdx}::text[])
+        OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = ANY($${bIdx}::text[]))
+        OR b.id::text = ANY($${bIdx}::text[])
+      )`;
+
+      // 3. Branch Match (Student's branch or common)
+      params.push(cohort.branchIds);
+      const brIdx = params.length;
+      sql += ` AND (
+        t.branch_id IS NULL OR t.branch_id = 'all' OR t.branch_id = ''
+        OR t.branch_id = ANY($${brIdx}::text[])
+        OR d.code = ANY($${brIdx}::text[])
+        OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = ANY($${brIdx}::text[]))
+        OR d.id::text = ANY($${brIdx}::text[])
+      )`;
+
+      // 4. Semester Match (Student's semester or common)
+      params.push(cohort.semesterIds);
+      const sIdx = params.length;
+      params.push(cohort.semNumber || '0');
+      const snIdx = params.length;
+      sql += ` AND (
+        t.semester_id IS NULL OR t.semester_id = 'all' OR t.semester_id = ''
+        OR t.semester_id = ANY($${sIdx}::text[])
+        OR (t.semester_id ~ '[0-9]' AND REGEXP_REPLACE(t.semester_id, '[^0-9]', '', 'g') = $${snIdx}::text)
+      )`;
+    } else {
+      // FACULTY / ADMIN VIEW FILTERS
+      if (query.facultyId && query.facultyId !== 'all') {
+        params.push(query.facultyId);
+        const facIdx = params.length;
         sql += ` AND (
           t.faculty_id::text = $${facIdx}::text
           OR f.id::text = $${facIdx}::text
@@ -2241,50 +2480,53 @@ startxref
           OR f.emp_id::text = $${facIdx}::text
         )`;
       }
-    } else if (effectiveCourseFilter && effectiveCourseFilter !== 'all') {
-      params.push(effectiveCourseFilter);
-      const pIdx = params.length;
-      sql += ` AND (
-        t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = ''
-        OR t.course_id::text = $${pIdx}::text
-        OR cr.code::text = $${pIdx}::text
-        OR cr.course_cd::text = $${pIdx}::text
-        OR (CASE WHEN $${pIdx}::text = '4' THEN cr.name ILIKE '%MBA%' OR t.course_id = '4'
-                 WHEN $${pIdx}::text = '13' THEN cr.name ILIKE '%BCA%' OR t.course_id = '13'
-                 WHEN $${pIdx}::text = '3' THEN cr.name ILIKE '%MCA%' OR t.course_id = '3'
-                 WHEN $${pIdx}::text = '1' THEN cr.name ILIKE '%B.Tech%' OR cr.name ILIKE '%BTech%' OR t.course_id = '1'
-                 WHEN $${pIdx}::text = '2' THEN cr.name ILIKE '%Pharm%' OR t.course_id = '2'
-                 ELSE false END)
-      )`;
+
+      if (query.courseId && query.courseId !== 'all') {
+        params.push(query.courseId);
+        const pIdx = params.length;
+        sql += ` AND (
+          t.course_id IS NULL OR t.course_id = 'all' OR t.course_id = ''
+          OR t.course_id = $${pIdx}::text
+          OR cr.code = $${pIdx}::text
+          OR cr.id::text = $${pIdx}::text
+          OR (cr.course_cd IS NOT NULL AND cr.course_cd::text = $${pIdx}::text)
+        )`;
+      }
+
+      if (query.batchId && query.batchId !== 'all') {
+        params.push(query.batchId);
+        const bIdx = params.length;
+        sql += ` AND (
+          t.batch_id IS NULL OR t.batch_id = 'all' OR t.batch_id = ''
+          OR t.batch_id = $${bIdx}::text
+          OR b.code = $${bIdx}::text
+          OR b.year::text = $${bIdx}::text
+          OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = $${bIdx}::text)
+        )`;
+      }
+
+      if (query.branchId && query.branchId !== 'all') {
+        params.push(query.branchId);
+        const brIdx = params.length;
+        sql += ` AND (
+          t.branch_id IS NULL OR t.branch_id = 'all' OR t.branch_id = ''
+          OR t.branch_id = $${brIdx}::text
+          OR d.code = $${brIdx}::text
+          OR (d.branch_cd IS NOT NULL AND d.branch_cd::text = $${brIdx}::text)
+        )`;
+      }
+
+      if (query.semesterId && query.semesterId !== 'all') {
+        params.push(query.semesterId);
+        const sIdx = params.length;
+        sql += ` AND (
+          t.semester_id IS NULL OR t.semester_id = 'all' OR t.semester_id = ''
+          OR t.semester_id::text = $${sIdx}::text
+          OR (t.semester_id ~ '[0-9]' AND REGEXP_REPLACE(t.semester_id, '[^0-9]', '', 'g') = REGEXP_REPLACE($${sIdx}::text, '[^0-9]', '', 'g'))
+        )`;
+      }
     }
 
-    const effectiveBatchFilter = query.batchId || (effectiveStudentId ? studentBatchCd : null);
-    if (effectiveBatchFilter && effectiveBatchFilter !== 'all') {
-      params.push(effectiveBatchFilter);
-      const pIdx = params.length;
-      sql += ` AND (
-        t.batch_id IS NULL OR t.batch_id = 'all' OR t.batch_id = ''
-        OR t.batch_id::text = $${pIdx}::text
-        OR (b.batch_cd IS NOT NULL AND b.batch_cd::text = $${pIdx}::text)
-        OR (b.year IS NOT NULL AND b.year::text = $${pIdx}::text)
-        OR (b.name IS NOT NULL AND b.name ILIKE '%' || $${pIdx}::text || '%')
-      )`;
-    }
-
-    const effectiveBranchFilter = query.branchId || (effectiveStudentId && studentBranchId && studentBranchId !== '1' ? studentBranchId : null);
-    if (effectiveBranchFilter && effectiveBranchFilter !== 'all' && effectiveBranchFilter !== '1') {
-      params.push(effectiveBranchFilter);
-      const pIdx = params.length;
-      sql += ` AND (
-        t.branch_id IS NULL OR t.branch_id = 'all' OR t.branch_id = '1' OR t.branch_id = ''
-        OR t.branch_id::text = $${pIdx}::text
-      )`;
-    }
-
-    if (query.semesterId && query.semesterId !== 'all') {
-      params.push(query.semesterId);
-      sql += ` AND (t.semester_id IS NULL OR t.semester_id = 'all' OR t.semester_id = '' OR t.semester_id = $${params.length})`;
-    }
     if (query.search) {
       params.push(`%${query.search}%`);
       sql += ` AND (t.title ILIKE $${params.length} OR t.description ILIKE $${params.length} OR c.name ILIKE $${params.length})`;

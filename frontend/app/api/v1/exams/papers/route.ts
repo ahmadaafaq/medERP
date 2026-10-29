@@ -24,11 +24,16 @@ export async function GET(req: NextRequest) {
   const batchCd = url.searchParams.get('batchCd') || undefined;
   const semester = url.searchParams.get('semester') || undefined;
   const section = url.searchParams.get('section') || undefined;
+  const role = url.searchParams.get('role') || req.headers.get('x-user-role') || undefined;
+  const createdBy = url.searchParams.get('createdBy') || undefined;
+  const facultyId = url.searchParams.get('facultyId') || undefined;
+  const userId = url.searchParams.get('userId') || req.headers.get('x-user-id') || undefined;
 
   // Try direct PostgreSQL first for instant schema-isolated speed & reliability
   try {
     const papers = await getExamPapersFromDb(tenantSlug, {
-      status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section
+      status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section,
+      role, createdBy, facultyId, userId,
     });
     return NextResponse.json({ success: true, data: papers, timestamp: new Date().toISOString() });
   } catch {

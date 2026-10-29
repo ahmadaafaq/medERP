@@ -14,12 +14,58 @@ export class ExaminationService {
     const userId = user?.userId || user?.sub || user?.id || (dto as any).createdBy || (dto as any).facultyId || null;
     const validUserId = userId && this.isUUID(userId) ? userId : null;
     const rawDeptId = dto.departmentId || dto.department_id;
-    const validDeptId = rawDeptId && this.isUUID(rawDeptId) ? rawDeptId : null;
+    let validDeptId = rawDeptId && this.isUUID(rawDeptId) ? rawDeptId : null;
     const finalColgCd = dto.colgCd || dto.colg_cd || null;
     const finalCourseCd = dto.courseCd || dto.course_cd || null;
     const finalBranchCd = dto.branchCd || dto.branch_cd || null;
     const finalBatchCd = dto.batchCd || dto.batch_cd || null;
     const finalAcademicYear = dto.academicYear || dto.academic_year || null;
+
+    // Resolve Department UUID if not already a UUID or if branch/course maps to a department
+    if (!validDeptId && (finalBranchCd || finalCourseCd)) {
+      try {
+        const foundDept = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM departments WHERE code = $1 OR code = $2 LIMIT 1`,
+          [String(finalBranchCd || ''), String(finalCourseCd || '')],
+        );
+        if (foundDept && foundDept.length > 0) {
+          validDeptId = foundDept[0].id;
+        }
+      } catch {}
+    }
+
+    // Resolve Subject UUID if non-UUID code is provided
+    let validSubjId = dto.subjectId && this.isUUID(dto.subjectId) ? dto.subjectId : null;
+    if (!validSubjId && (dto.subjectId || dto.code)) {
+      try {
+        const sTarget = dto.subjectId || dto.code;
+        const foundSubj = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM subjects WHERE code = $1 OR $2 ILIKE (code || '%') LIMIT 1`,
+          [sTarget, sTarget],
+        );
+        if (foundSubj && foundSubj.length > 0) {
+          validSubjId = foundSubj[0].id;
+        }
+      } catch {}
+    }
+
+    // Resolve Batch UUID if non-UUID batch is provided
+    let validBatchId = dto.batchId && this.isUUID(dto.batchId) ? dto.batchId : null;
+    if (!validBatchId && (dto.batchCd || finalBatchCd)) {
+      try {
+        const bTarget = dto.batchCd || finalBatchCd;
+        const foundBatch = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM batches WHERE batch_cd = $1 OR code = $1 OR name ILIKE ('%' || $1 || '%') LIMIT 1`,
+          [bTarget],
+        );
+        if (foundBatch && foundBatch.length > 0) {
+          validBatchId = foundBatch[0].id;
+        }
+      } catch {}
+    }
 
     try {
       const validId = dto.id && this.isUUID(dto.id) ? dto.id : null;
@@ -69,8 +115,8 @@ export class ExaminationService {
           [
             dto.code,
             dto.name,
-            this.isUUID(dto.subjectId) ? dto.subjectId : null,
-            this.isUUID(dto.batchId) ? dto.batchId : null,
+            validSubjId,
+            validBatchId,
             dto.examDate || null,
             Number(dto.maxMarks) || 0,
             Number(dto.passingMarks) || 0,
@@ -118,8 +164,8 @@ export class ExaminationService {
             validId,
             dto.code,
             dto.name,
-            this.isUUID(dto.subjectId) ? dto.subjectId : null,
-            this.isUUID(dto.batchId) ? dto.batchId : null,
+            validSubjId,
+            validBatchId,
             dto.examDate || null,
             Number(dto.maxMarks) || 0,
             Number(dto.passingMarks) || 0,
@@ -157,8 +203,8 @@ export class ExaminationService {
         [
           dto.code,
           dto.name,
-          this.isUUID(dto.subjectId) ? dto.subjectId : null,
-          this.isUUID(dto.batchId) ? dto.batchId : null,
+          validSubjId,
+          validBatchId,
           dto.examDate || null,
           Number(dto.maxMarks) || 0,
           Number(dto.passingMarks) || 0,
@@ -213,20 +259,22 @@ export class ExaminationService {
 
     // ─── ROLE-BASED QUESTION PAPER CONFIDENTIALITY ACCESS CONTROL ───
     // 1. Admin/SuperAdmin/Principal -> full preview across all departments
-    // 2. HOD of department -> can preview papers from their department
-    // 3. Faculty -> STRICT CONFIDENTIALITY: can ONLY view question papers that he/she prepared.
-    //    Other faculties from the same department cannot see it.
+    // 2. HOD & DQAC of department -> can preview papers from their department
+    // 3. Faculty -> STRICT CONFIDENTIALITY: can ONLY view question papers that he/she prepared/submitted.
+    //    Once approved, paper shows ONLY to the particular faculty who created it.
+    //    Rest of faculties from the same department CANNOT view it under any circumstances.
     const rawRole = (user?.role || filters?.role || '').toUpperCase();
-    const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+    const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL' || rawRole === 'SUPERADMIN';
     const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+    const isDqac = rawRole === 'DQAC';
     const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
 
     const userId = user?.userId || user?.sub || user?.id || filters?.createdBy || filters?.facultyId || null;
     const validUserId = userId && this.isUUID(userId) ? userId : null;
 
     if (!isAdmin) {
-      if (isHod) {
-        // HOD can preview question papers belonging to their department
+      if (isHod || isDqac) {
+        // HOD & DQAC can preview question papers belonging to their department
         const targetDept = filters?.departmentId || user?.departmentId || user?.department;
         if (targetDept) {
           if (this.isUUID(targetDept)) {
@@ -238,15 +286,19 @@ export class ExaminationService {
             pIdx++;
           }
         }
-      } else if (isFaculty || validUserId) {
-        // Faculty strictly sees only their prepared question papers
-        // Other faculties from the same department cannot view it
+      } else {
+        // Faculty strictly sees ONLY their prepared question papers (creator only)
+        // Even once DQAC/HOD approved, it only shows to the particular creator faculty.
+        // Rest of faculties cannot see it.
         if (validUserId) {
-          whereClauses.push(`p.created_by::text = $${pIdx++}`);
+          whereClauses.push(`p.created_by::text = $${pIdx}`);
           params.push(validUserId);
+          pIdx++;
         } else if (filters?.createdBy || filters?.facultyId) {
-          whereClauses.push(`p.created_by::text = $${pIdx++}`);
-          params.push(filters.createdBy || filters.facultyId);
+          const fid = filters.createdBy || filters.facultyId;
+          whereClauses.push(`p.created_by::text = $${pIdx}`);
+          params.push(fid);
+          pIdx++;
         } else {
           // Strict confidentiality: Block leakage if faculty user is unidentifiable
           whereClauses.push(`1 = 0`);
@@ -255,8 +307,14 @@ export class ExaminationService {
     }
 
     if (filters?.status && filters.status !== 'ALL') {
-      whereClauses.push(`p.status = $${pIdx++}`);
-      params.push(filters.status);
+      if (filters.status.includes(',')) {
+        const statuses = filters.status.split(',').map(s => s.trim().toUpperCase());
+        whereClauses.push(`UPPER(p.status) = ANY($${pIdx++})`);
+        params.push(statuses);
+      } else {
+        whereClauses.push(`UPPER(p.status) = UPPER($${pIdx++})`);
+        params.push(filters.status.trim());
+      }
     }
     if (filters?.departmentId && this.isUUID(filters.departmentId)) {
       whereClauses.push(`p.department_id::text = $${pIdx++}`);
@@ -293,17 +351,21 @@ export class ExaminationService {
       slug,
       `SELECT p.*, 
               c.name as course_name,
-              s.name as subject_name, 
-              s.code as subject_code, 
-              s.course_cd as subject_course_cd,
-              s.semester as subject_semester,
-              b.code as batch_code,
-              d.name as department_name
+              COALESCE(s.name, s2.name) as subject_name, 
+              COALESCE(s.code, s2.code) as subject_code, 
+              COALESCE(s.course_cd, s2.course_cd) as subject_course_cd,
+              COALESCE(s.semester, s2.semester) as subject_semester,
+              COALESCE(b.code, b2.code, p.batch_cd) as batch_code,
+              COALESCE(b.name, b2.name, CASE WHEN p.batch_cd IS NOT NULL THEN 'Batch ' || p.batch_cd ELSE 'Current Batch' END) as batch_name,
+              COALESCE(d.name, d2.name) as department_name
        FROM examination_papers p 
        LEFT JOIN courses c ON p.course_cd = c.course_cd OR p.course_cd = c.code
        LEFT JOIN subjects s ON p.subject_id::text = s.id::text 
+       LEFT JOIN subjects s2 ON (p.subject_id IS NULL AND (s2.code = p.code OR p.code ILIKE s2.code || '%') AND s2.code != '')
        LEFT JOIN batches b ON p.batch_id::text = b.id::text 
+       LEFT JOIN batches b2 ON (p.batch_id IS NULL AND (p.batch_cd = b2.batch_cd OR p.batch_cd = b2.code))
        LEFT JOIN departments d ON p.department_id::text = d.id::text
+       LEFT JOIN departments d2 ON (p.department_id IS NULL AND (p.branch_cd = d2.code OR p.course_cd = d2.code))
        ${whereStr}
        ORDER BY COALESCE(p.updated_at, p.created_at, '1970-01-01'::timestamptz) DESC, p.id DESC`,
       params,
@@ -315,16 +377,22 @@ export class ExaminationService {
     const res = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT p.*, 
-              s.name as subject_name, 
-              s.code as subject_code, 
-              s.course_cd as subject_course_cd,
-              s.semester as subject_semester,
-              b.code as batch_code,
-              d.name as department_name
+              c.name as course_name,
+              COALESCE(s.name, s2.name) as subject_name, 
+              COALESCE(s.code, s2.code) as subject_code, 
+              COALESCE(s.course_cd, s2.course_cd) as subject_course_cd,
+              COALESCE(s.semester, s2.semester) as subject_semester,
+              COALESCE(b.code, b2.code, p.batch_cd) as batch_code,
+              COALESCE(b.name, b2.name, CASE WHEN p.batch_cd IS NOT NULL THEN 'Batch ' || p.batch_cd ELSE 'Current Batch' END) as batch_name,
+              COALESCE(d.name, d2.name) as department_name
        FROM examination_papers p 
+       LEFT JOIN courses c ON p.course_cd = c.course_cd OR p.course_cd = c.code
        LEFT JOIN subjects s ON p.subject_id::text = s.id::text 
+       LEFT JOIN subjects s2 ON (p.subject_id IS NULL AND (s2.code = p.code OR p.code ILIKE s2.code || '%') AND s2.code != '')
        LEFT JOIN batches b ON p.batch_id::text = b.id::text 
+       LEFT JOIN batches b2 ON (p.batch_id IS NULL AND (p.batch_cd = b2.batch_cd OR p.batch_cd = b2.code))
        LEFT JOIN departments d ON p.department_id::text = d.id::text
+       LEFT JOIN departments d2 ON (p.department_id IS NULL AND (p.branch_cd = d2.code OR p.course_cd = d2.code))
        WHERE p.id::text = $1 LIMIT 1`,
       [id],
     );
@@ -334,19 +402,24 @@ export class ExaminationService {
     // Strict confidentiality check on paper preview
     if (user) {
       const rawRole = (user.role || '').toUpperCase();
-      const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+      const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL' || rawRole === 'SUPERADMIN';
       const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+      const isDqac = rawRole === 'DQAC';
       const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
       const userId = user.userId || user.sub || user.id || null;
 
       if (!isAdmin) {
-        if (isFaculty && paper.created_by && userId && String(paper.created_by) !== String(userId)) {
-          throw new BadRequestException('Confidentiality violation: You are not authorized to view a question paper prepared by another faculty member.');
-        }
-        if (isHod) {
+        if (isHod || isDqac) {
           const targetDept = user.departmentId || user.department;
           if (targetDept && paper.department_id && String(paper.department_id) !== String(targetDept)) {
             throw new BadRequestException('Confidentiality violation: You are not authorized to view question papers outside your department.');
+          }
+        } else {
+          // Strictly creator-only for faculties
+          const isCreator = (paper.created_by && userId && String(paper.created_by) === String(userId)) ||
+                            (paper.faculty_id && userId && String(paper.faculty_id) === String(userId));
+          if (!isCreator) {
+            throw new BadRequestException('Confidentiality violation: You are not authorized to view a question paper prepared by another faculty member.');
           }
         }
       }
@@ -569,16 +642,34 @@ export class ExaminationService {
     // 1. Ensure table schema columns exist
     await this.tenantSchemaService.queryInTenant(
       slug,
-      `ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS created_by UUID;
+      `ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS image_url TEXT;
+       ALTER TABLE question_bank ALTER COLUMN image_url TYPE TEXT;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS created_by UUID;
        ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS subtopic_id UUID;
-       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS subtopic_name VARCHAR;`
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS subtopic_name VARCHAR(250);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS sub_topic_id UUID;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS unit_id UUID;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS unit_name VARCHAR(250);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS topic_id UUID;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS topic_code VARCHAR(100);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS competency_id UUID;
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS competency_code VARCHAR(100);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS topic VARCHAR(250);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+       ALTER TABLE question_bank ADD COLUMN IF NOT EXISTS section VARCHAR(50);`
     );
 
     // 2. Resolve Subject (UUID or Code)
     let resolvedSubjectId: string | null = null;
     let resolvedSubjectCode: string | null = null;
     let resolvedSubjectName: string | null = null;
-    const rawSubject = dto.subjectId || dto.subjectCode;
+    const rawSubject = dto.subjectId || dto.subject_id || dto.subjectCode || dto.subject_code;
     if (rawSubject) {
       if (this.isUUID(rawSubject)) {
         const subRows = await this.tenantSchemaService.queryInTenant(
@@ -609,9 +700,9 @@ export class ExaminationService {
 
     // 3. Resolve Unit and validate hierarchy (Unit -> Subject)
     let resolvedUnitId: string | null = null;
-    let resolvedUnitCode = dto.unitCode || null;
-    let resolvedUnitName = dto.unitName || null;
-    const rawUnit = dto.unitId || dto.unitCode;
+    let resolvedUnitCode = dto.unitCode || dto.unit_code || null;
+    let resolvedUnitName = dto.unitName || dto.unit_name || null;
+    const rawUnit = dto.unitId || dto.unit_id || dto.unitCode || dto.unit_code;
     if (rawUnit) {
       let unitRows: any[] = [];
       if (this.isUUID(rawUnit)) {
@@ -646,24 +737,24 @@ export class ExaminationService {
 
         // Hierarchy validation: verify Unit belongs to Subject
         if (resolvedSubjectId && u.subject_id) {
-          const matchSub = String(u.subject_id) === String(resolvedSubjectId) ||
-            (resolvedSubjectCode && String(u.subject_code) === String(resolvedSubjectCode));
+          const matchSub = String(u.subject_id).toLowerCase() === String(resolvedSubjectId).toLowerCase() ||
+            (resolvedSubjectCode && String(u.subject_code).toLowerCase() === String(resolvedSubjectCode).toLowerCase()) ||
+            (rawSubject && String(u.subject_id).toLowerCase() === String(rawSubject).toLowerCase()) ||
+            (rawSubject && String(u.subject_code).toLowerCase() === String(rawSubject).toLowerCase());
           if (!matchSub) {
-            throw new BadRequestException(
-              `Hierarchy Validation Failed: Unit '${resolvedUnitCode || u.name}' does not belong to the selected subject '${resolvedSubjectCode || rawSubject}'.`
-            );
+            this.logger.warn(`Unit '${resolvedUnitCode || u.name}' subject mismatch warning with subject '${resolvedSubjectCode || rawSubject}'`);
           }
         }
-      } else if (this.isUUID(dto.unitId)) {
-        resolvedUnitId = dto.unitId;
+      } else if (this.isUUID(dto.unitId || dto.unit_id)) {
+        resolvedUnitId = dto.unitId || dto.unit_id;
       }
     }
 
     // 4. Resolve Topic and validate hierarchy (Topic -> Unit)
     let resolvedTopicId: string | null = null;
-    let resolvedTopicCode = dto.topicCode || null;
+    let resolvedTopicCode = dto.topicCode || dto.topic_code || null;
     let resolvedTopicName = dto.topic || null;
-    const rawTopic = dto.topicId || dto.topicCode || dto.topic;
+    const rawTopic = dto.topicId || dto.topic_id || dto.topicCode || dto.topic_code || dto.topic;
     if (rawTopic) {
       let topicRows: any[] = [];
       if (this.isUUID(rawTopic)) {
@@ -698,24 +789,24 @@ export class ExaminationService {
 
         // Hierarchy validation: verify Topic belongs to Unit
         if (resolvedUnitId && t.unit_id) {
-          const matchUnit = String(t.unit_id) === String(resolvedUnitId) ||
-            (resolvedUnitCode && String(t.unit_code) === String(resolvedUnitCode));
+          const matchUnit = String(t.unit_id).toLowerCase() === String(resolvedUnitId).toLowerCase() ||
+            (resolvedUnitCode && String(t.unit_code).toLowerCase() === String(resolvedUnitCode).toLowerCase()) ||
+            (rawUnit && String(t.unit_id).toLowerCase() === String(rawUnit).toLowerCase()) ||
+            (rawUnit && String(t.unit_code).toLowerCase() === String(rawUnit).toLowerCase());
           if (!matchUnit) {
-            throw new BadRequestException(
-              `Hierarchy Validation Failed: Topic '${resolvedTopicName || t.code}' does not belong to the selected unit '${resolvedUnitCode || 'selected'}'.`
-            );
+            this.logger.warn(`Topic '${resolvedTopicName || t.code}' unit mismatch warning with unit '${resolvedUnitCode || 'selected'}'`);
           }
         }
-      } else if (this.isUUID(dto.topicId)) {
-        resolvedTopicId = dto.topicId;
+      } else if (this.isUUID(dto.topicId || dto.topic_id)) {
+        resolvedTopicId = dto.topicId || dto.topic_id;
       }
     }
 
     // 5. Resolve Subtopic / Competency and validate hierarchy (Subtopic -> Topic)
     let resolvedCompId: string | null = null;
-    let resolvedCompCode = dto.competencyCode || dto.subTopicCode || null;
+    let resolvedCompCode = dto.competencyCode || dto.competency_code || dto.subTopicCode || dto.sub_topic_code || null;
     let resolvedCompName: string | null = null;
-    const rawSubTopic = dto.subTopicId || dto.competencyId || dto.competencyCode || dto.subTopicCode;
+    const rawSubTopic = dto.subTopicId || dto.sub_topic_id || dto.subtopicId || dto.subtopic_id || dto.competencyId || dto.competency_id || dto.competencyCode || dto.competency_code || dto.subTopicCode || dto.sub_topic_code;
     if (rawSubTopic) {
       let compRows: any[] = [];
       if (this.isUUID(rawSubTopic)) {
@@ -750,25 +841,25 @@ export class ExaminationService {
 
         // Hierarchy validation: verify Subtopic belongs to Topic
         if (resolvedTopicId && c.topic_id) {
-          const matchTopic = String(c.topic_id) === String(resolvedTopicId) ||
-            (resolvedTopicCode && String(c.topic_code) === String(resolvedTopicCode));
+          const matchTopic = String(c.topic_id).toLowerCase() === String(resolvedTopicId).toLowerCase() ||
+            (resolvedTopicCode && String(c.topic_code).toLowerCase() === String(resolvedTopicCode).toLowerCase()) ||
+            (rawTopic && String(c.topic_id).toLowerCase() === String(rawTopic).toLowerCase()) ||
+            (rawTopic && String(c.topic_code).toLowerCase() === String(rawTopic).toLowerCase());
           if (!matchTopic) {
-            throw new BadRequestException(
-              `Hierarchy Validation Failed: Subtopic/Competency '${resolvedCompCode || c.name}' does not belong to the selected topic '${resolvedTopicName || 'selected'}'.`
-            );
+            this.logger.warn(`Subtopic/Competency '${resolvedCompCode || c.name}' topic mismatch warning with topic '${resolvedTopicName || 'selected'}'`);
           }
         }
-      } else if (this.isUUID(dto.subTopicId || dto.competencyId)) {
-        resolvedCompId = dto.subTopicId || dto.competencyId;
+      } else if (this.isUUID(dto.subTopicId || dto.sub_topic_id || dto.competencyId || dto.competency_id)) {
+        resolvedCompId = dto.subTopicId || dto.sub_topic_id || dto.competencyId || dto.competency_id;
       }
     }
 
     // 6. Resolve created_by user
-    const rawUserId = user?.userId || user?.sub || user?.id || (dto as any).createdBy || null;
+    const rawUserId = user?.userId || user?.sub || user?.id || (dto as any).createdBy || (dto as any).created_by || null;
     const resolvedCreatedBy = rawUserId && this.isUUID(rawUserId) ? rawUserId : null;
-    const finalColgCd = dto.colgCd || (slug.toLowerCase().includes('srms') ? '1' : null);
+    const finalColgCd = dto.colgCd || dto.colg_cd || (slug.toLowerCase().includes('srms') ? '1' : null);
 
-    const subQuestionsJson = JSON.stringify(dto.subQuestions || []);
+    const subQuestionsJson = JSON.stringify(dto.subQuestions || dto.sub_questions || []);
     const res = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO question_bank (
@@ -781,23 +872,23 @@ export class ExaminationService {
        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31, $32, $33, $34, $35)
        RETURNING *`,
       [
-        this.isUUID(dto.collegeId) ? dto.collegeId : null,
-        this.isUUID(dto.departmentId) ? dto.departmentId : null,
+        this.isUUID(dto.collegeId || dto.college_id) ? (dto.collegeId || dto.college_id) : null,
+        this.isUUID(dto.departmentId || dto.department_id) ? (dto.departmentId || dto.department_id) : null,
         resolvedSubjectId,
-        dto.professionalPhase || null,
+        dto.professionalPhase || dto.professional_phase || null,
         resolvedTopicName || dto.topic || null,
         dto.mode,
-        dto.questionText,
-        dto.optionA || null,
-        dto.optionB || null,
-        dto.optionC || null,
-        dto.optionD || null,
-        dto.correctOption || null,
-        dto.difficultyLevel || 'Medium',
+        dto.questionText || dto.question_text,
+        dto.optionA || dto.option_a || null,
+        dto.optionB || dto.option_b || null,
+        dto.optionC || dto.option_c || null,
+        dto.optionD || dto.option_d || null,
+        dto.correctOption || dto.correct_option || null,
+        dto.difficultyLevel || dto.difficulty_level || 'Medium',
         resolvedCompCode || null,
-        dto.hasSubQuestions ?? false,
+        dto.hasSubQuestions ?? dto.has_sub_questions ?? false,
         subQuestionsJson,
-        dto.maxMarks ?? 1.0,
+        dto.maxMarks ?? dto.max_marks ?? 1.0,
         resolvedTopicId,
         resolvedCompId,
         resolvedUnitId,
@@ -809,12 +900,12 @@ export class ExaminationService {
         resolvedCompId,
         resolvedCompName || null,
         finalColgCd,
-        dto.courseCd || null,
-        dto.branchCd || null,
-        dto.batchCd || null,
+        dto.courseCd || dto.course_cd || null,
+        dto.branchCd || dto.branch_cd || null,
+        dto.batchCd || dto.batch_cd || null,
         dto.semester || null,
         dto.section || null,
-        dto.imageUrl || dto.image_url || null,
+        dto.imageUrl || dto.image_url || dto.image || dto.diagramUrl || dto.diagram_url || null,
         resolvedCreatedBy,
       ],
     );
@@ -1109,7 +1200,7 @@ export class ExaminationService {
         params.push(statusFilter);
         whereClause = `WHERE p.status = $1`;
       } else {
-        whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'CHANGES_REQUESTED', 'RESUBMITTED')`;
+        whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'PENDING_DQAC_APPROVAL', 'CHANGES_REQUESTED', 'RESUBMITTED', 'DQAC_APPROVED')`;
       }
 
       if (departmentId && this.isUUID(departmentId)) {
@@ -1161,6 +1252,10 @@ export class ExaminationService {
     }
 
     const actionRemarks = dto.remarks || dto.hodRemarks || dto.hod_remarks || dto.notes || null;
+    const dqacRemarks = dto.dqacRemarks || dto.dqac_remarks || (dto.action === 'dqac_approve' ? actionRemarks : null);
+    const paperSet = dto.paperSet || dto.paper_set || null;
+    const targetSections = dto.targetSections || dto.target_sections || null;
+    const targetSectionsJson = targetSections ? JSON.stringify(Array.isArray(targetSections) ? targetSections : [targetSections]) : null;
 
     if (dto.action === 'approve') {
       const res = await this.tenantSchemaService.queryInTenant(
@@ -1168,25 +1263,93 @@ export class ExaminationService {
         `UPDATE examination_papers 
          SET status = 'HOD_APPROVED', 
              hod_remarks = COALESCE($1, hod_remarks), 
+             paper_set = COALESCE($2, paper_set),
+             target_sections = COALESCE($3::jsonb, target_sections),
              updated_at = NOW() 
-         WHERE id::text = $2 RETURNING *`,
-        [actionRemarks, dto.paperId],
+         WHERE id::text = $4 RETURNING *`,
+        [actionRemarks, paperSet, targetSectionsJson, dto.paperId],
       );
       return res[0] || { success: true, status: 'HOD_APPROVED' };
+    } else if (dto.action === 'dqac_approve') {
+      const res = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE examination_papers 
+         SET status = 'DQAC_APPROVED', 
+             dqac_status = 'DQAC_APPROVED',
+             dqac_remarks = COALESCE($1, dqac_remarks),
+             paper_set = COALESCE($2, paper_set),
+             target_sections = COALESCE($3::jsonb, target_sections),
+             updated_at = NOW() 
+         WHERE id::text = $4 RETURNING *`,
+        [dqacRemarks || actionRemarks, paperSet, targetSectionsJson, dto.paperId],
+      );
+      if (paper.created_by) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO notifications (recipient_id, title, message, type, category, is_read, created_at)
+           VALUES ($1, $2, $3, 'success', 'assessment', false, NOW())`,
+          [
+            String(paper.created_by),
+            'DQAC Quality Audit: Certified',
+            `DQAC has verified and approved "${paper.name || paper.code}". It is now queued for HOD final sign-off.`,
+          ],
+        ).catch(() => null);
+      }
+      return res[0] || { success: true, status: 'DQAC_APPROVED' };
+    } else if (dto.action === 'postpone') {
+      const res = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE examination_papers 
+         SET status = 'POSTPONED', 
+             dqac_status = 'POSTPONED',
+             dqac_remarks = COALESCE($1, dqac_remarks),
+             updated_at = NOW() 
+         WHERE id::text = $2 RETURNING *`,
+        [actionRemarks || 'Examination postponed by DQAC.', dto.paperId],
+      );
+      if (paper.created_by) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO notifications (recipient_id, title, message, type, category, is_read, created_at)
+           VALUES ($1, $2, $3, 'warning', 'assessment', false, NOW())`,
+          [
+            String(paper.created_by),
+            'Examination Postponed by DQAC',
+            `DQAC has postponed examination paper "${paper.name || paper.code}". Reason: ${actionRemarks || 'Examination rescheduled by Quality Assurance Cell.'}`,
+          ],
+        ).catch(() => null);
+      }
+      return res[0] || { success: true, status: 'POSTPONED' };
     } else {
-      // Changes requested
-      const newStatus = 'CHANGES_REQUESTED';
+      // Changes requested or rejected
+      const newStatus = dto.action === 'reject' ? 'REJECTED' : 'CHANGES_REQUESTED';
       const questionRemarksJson = JSON.stringify(dto.questionRemarks || {});
       const res = await this.tenantSchemaService.queryInTenant(
         slug,
         `UPDATE examination_papers 
          SET status = $1, 
+             dqac_status = $1,
+             dqac_remarks = $2,
              hod_remarks = $2, 
              question_remarks = $3::jsonb, 
+             paper_set = COALESCE($4, paper_set),
+             target_sections = COALESCE($5::jsonb, target_sections),
              updated_at = NOW() 
-         WHERE id::text = $4 RETURNING *`,
-        [newStatus, actionRemarks || 'HOD requested revisions on specific questions.', questionRemarksJson, dto.paperId],
+         WHERE id::text = $6 RETURNING *`,
+        [newStatus, actionRemarks || 'Revisions requested on specific questions.', questionRemarksJson, paperSet, targetSectionsJson, dto.paperId],
       );
+      if (newStatus === 'CHANGES_REQUESTED' && paper.created_by) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO notifications (recipient_id, title, message, type, category, is_read, created_at)
+           VALUES ($1, $2, $3, 'warning', 'assessment', false, NOW())`,
+          [
+            String(paper.created_by),
+            'DQAC Quality Audit: Revisions Required',
+            `DQAC has requested revisions on your question paper "${paper.name || paper.code}". Directives: ${actionRemarks || 'Please review flagged questions in Assessment & Q Bank.'}`,
+          ],
+        ).catch(() => null);
+      }
       return res[0] || { success: true, status: newStatus };
     }
   }

@@ -62,6 +62,7 @@ export class MenuRegistryService implements OnModuleInit {
       admin: MenuRole.ADMIN,
       faculty: MenuRole.FACULTY,
       hod: MenuRole.HOD,
+      dqac: MenuRole.DQAC,
       student: MenuRole.STUDENT,
       clerk: MenuRole.CLERK,
       warden: MenuRole.WARDEN,
@@ -247,6 +248,15 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.HOD, menu_key: 'hod_reports_attendance', menu_label: 'Dept Attendance Report', route_path: '/dashboard/faculty/reports/attendance', parent_menu_key: 'hod_faculty_reports', sort_order: 101, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.HOD, menu_key: 'hod_reports_theory_result', menu_label: 'Dept Theory Result', route_path: '/dashboard/faculty/reports/theory-result', parent_menu_key: 'hod_faculty_reports', sort_order: 102, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.HOD, menu_key: 'hod_reports_logbook', menu_label: 'Dept Academic Portfolio (Logbook)', route_path: '/dashboard/faculty/reports/logbook', parent_menu_key: 'hod_faculty_reports', sort_order: 103, applicable_firm_mode: ApplicableFirmMode.BOTH },
+
+      // ═══════════════════════════ DQAC ═══════════════════════════
+      { role: MenuRole.DQAC, menu_key: 'dqac_overview', menu_label: 'DQAC Quality Dashboard', route_path: '/dashboard/dqac', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.DQAC, menu_key: 'dqac_qp_approvals', menu_label: 'Question Paper Quality Approvals', route_path: '/dashboard/dqac/qp-approvals', sort_order: 20, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.DQAC, menu_key: 'dqac_question_bank', menu_label: 'Question Bank & Bloom\'s Taxonomy', route_path: '/dashboard/hod/question-bank', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.DQAC, menu_key: 'dqac_curriculum_subjects', menu_label: 'Curriculum & Course Outcomes', route_path: '/dashboard/faculty/curriculum-subjects', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.DQAC, menu_key: 'dqac_matrix_mapping', menu_label: 'CO-PO Matrix Mapping', route_path: '/dashboard/faculty/matrix-mapping', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.DQAC, menu_key: 'dqac_obe_attainment', menu_label: 'OBE Attainment & Gap Analysis', route_path: '/dashboard/admin/obe-attainment', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.DQAC, menu_key: 'dqac_chat', menu_label: 'Department Faculty & Staff Chat', route_path: '/dashboard/hod/chat', sort_order: 70, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       // ═══════════════════════════ STUDENT ═══════════════════════════
       { role: MenuRole.STUDENT, menu_key: 'student_overview', menu_label: 'Student Dashboard', route_path: '/dashboard/student', sort_order: 10, applicable_firm_mode: ApplicableFirmMode.BOTH },

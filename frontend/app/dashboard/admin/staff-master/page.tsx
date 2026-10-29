@@ -1270,6 +1270,7 @@ export default function StaffMasterPage() {
     const roleMapping: Record<string, string> = {
       'Faculty': 'FACULTY',
       'HOD': 'HOD',
+      'DQAC': 'DQAC',
       'Admin': 'COLLEGE_ADMIN',
       'Administrator': 'COLLEGE_ADMIN',
       'COLLEGE_ADMIN': 'COLLEGE_ADMIN',

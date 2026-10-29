@@ -235,6 +235,11 @@ export default function ChatAddBatchModal({
       );
     }
 
+    // If still no match, show all batches available in tenant
+    if (filtered.length === 0) {
+      filtered = batchSource;
+    }
+
     setBatches(filtered);
     if (filtered.length > 0) {
       const first = filtered[0];
@@ -270,7 +275,8 @@ export default function ChatAddBatchModal({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedBatchYear && batches.length === 0) {
+    const effectiveYear = selectedBatchYear || (batches[0]?.year) || '2026';
+    if (!effectiveYear && batches.length === 0) {
       setErrorMsg('No feeded batches available for this course and branch.');
       return;
     }
@@ -280,6 +286,7 @@ export default function ChatAddBatchModal({
       : selectedDeptName;
 
     const currentTenant = getActiveTenant();
+    const effectiveBatchCode = selectedBatchCode || (batches[0]?.code) || effectiveYear;
 
     try {
       setSubmitting(true);
@@ -290,18 +297,16 @@ export default function ChatAddBatchModal({
         course_name: selectedCourseName,
         department_id: selectedDeptId,
         department_name: cleanDeptName,
-        batch_year: selectedBatchYear,
-        batch_code: selectedBatchCode || selectedBatchYear,
+        batch_year: String(effectiveYear),
+        batch_code: String(effectiveBatchCode),
         tenant: currentTenant,
       });
 
       if (success) {
         onClose();
-      } else {
-        setErrorMsg('Could not add batch group. Please try again.');
       }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Failed to add batch group.');
+      setErrorMsg(err?.message || 'Could not add batch group. Please try again.');
     } finally {
       setSubmitting(false);
     }

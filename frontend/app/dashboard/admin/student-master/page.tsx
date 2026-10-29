@@ -795,6 +795,39 @@ export default function StudentMasterPage() {
     }));
   };
 
+  const generateRegistrationNumber = async (selectedSessionName?: string, currentCollegeId?: string) => {
+    const sName = selectedSessionName || formData.academicSession || allSessions[0]?.name || allSessions[0]?.session_name || '2026-2027';
+    const match = sName.match(/\d{4}/);
+    const year = match ? match[0] : new Date().getFullYear().toString();
+    const cId = currentCollegeId || formData.collegeId;
+    const formCollege = colleges.find((c) => c.code === cId || c.colg_cd === cId || c.id === cId || c.slug === cId);
+    const tenantSlug = formCollege?.slug || getActiveTenantSlug();
+    try {
+      const res = await fetch(`${API_BASE}/student-master/next-registration-no?tenant=${tenantSlug}&sessionYear=${year}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
+        },
+      });
+      const result = await res.json();
+      const reg = result?.data?.registrationNo || result?.registrationNo;
+      if (reg) {
+        setFormData((prev) => ({
+          ...prev,
+          registrationNo: reg,
+        }));
+        return reg;
+      }
+    } catch (err) {
+      console.error('Failed to generate registration number', err);
+    }
+    const fallbackReg = `${year}${String(Math.floor(1000 + Math.random() * 9000))}`;
+    setFormData((prev) => ({
+      ...prev,
+      registrationNo: prev.registrationNo || fallbackReg,
+    }));
+    return fallbackReg;
+  };
+
   // When session selection changes, generate auto-reg number
   const handleSessionChange = async (sessId: string) => {
     const sess = allSessions.find((s) => s.session_cd === sessId || s.code === sessId || s.name === sessId || s.id === sessId);
@@ -807,32 +840,7 @@ export default function StudentMasterPage() {
     }));
 
     if (sessName && !editModeId) {
-      const match = sessName.match(/\d{4}/);
-      const year = match ? match[0] : new Date().getFullYear().toString();
-      try {
-        // Use the selected college's slug for registration number generation
-        const formCollege = colleges.find((c) => c.code === formData.collegeId || c.id === formData.collegeId);
-        const tenantSlug = formCollege?.slug || colleges[0]?.slug || 'srms-cet-bareilly';
-        const res = await fetch(`${API_BASE}/student-master/next-registration-no?tenant=${tenantSlug}&sessionYear=${year}`, {
-          headers: {
-            'Authorization': `Bearer ${localStorage.getItem('token') || ''}`,
-          },
-        });
-        const result = await res.json();
-        if (result.data && result.data.registrationNo) {
-          setFormData((prev) => ({
-            ...prev,
-            registrationNo: result.data.registrationNo,
-          }));
-        } else if (result.registrationNo) {
-          setFormData((prev) => ({
-            ...prev,
-            registrationNo: result.registrationNo,
-          }));
-        }
-      } catch (err) {
-        console.error('Failed to generate registration number', err);
-      }
+      await generateRegistrationNumber(sessName);
     }
   };
 
@@ -1182,6 +1190,36 @@ export default function StudentMasterPage() {
       const payload: any = { ...formData };
       delete payload.declarationSigned;
       delete payload.id;
+      delete payload.created_at;
+      delete payload.updated_at;
+
+      // Strip NEET medical scores and rank data for non-medical / engineering / university courses
+      if (!isFormMedicalCourse) {
+        delete payload.neetRollNo;
+        delete payload.neetScore;
+        delete payload.neetPercentile;
+        delete payload.neetAirRank;
+        delete payload.neetScoreCardUrl;
+      }
+
+      // Convert numeric fields to numbers or delete if empty/NaN to prevent class-validator 400
+      const numericFields = [
+        'annualIncome', 'class10Pct', 'class12Physics', 'class12Chemistry',
+        'class12Biology', 'class12English', 'class12Pct', 'neetScore',
+        'neetPercentile', 'neetAirRank', 'paidFees', 'totalFees', 'githubFollowers', 'github_followers'
+      ];
+      numericFields.forEach((field) => {
+        if (payload[field] !== undefined && payload[field] !== null && payload[field] !== '') {
+          const num = Number(payload[field]);
+          if (!isNaN(num)) {
+            payload[field] = num;
+          } else {
+            delete payload[field];
+          }
+        } else {
+          delete payload[field];
+        }
+      });
 
       // Fields that are strictly required (do not delete if empty)
       const mandatoryFields = [
@@ -1254,8 +1292,12 @@ export default function StudentMasterPage() {
 
   const validateStep = (step: number): boolean => {
     if (step === 1) {
-      if (!formData.collegeId || !formData.courseId || !formData.sessionId || !formData.batchId || !formData.registrationNo) {
-        showToast('error', 'Please complete all academic enrollments, including Course, Session, Batch and generated Registration Number.');
+      if (!formData.collegeId || !formData.courseId) {
+        showToast('error', 'Please select a College and Course to continue.');
+        return false;
+      }
+      if (!formData.sessionId || !formData.batchId) {
+        showToast('error', 'Please select an Academic Session and Batch.');
         return false;
       }
     }
@@ -1268,7 +1310,10 @@ export default function StudentMasterPage() {
     return true;
   };
 
-  const handleNextStep = () => {
+  const handleNextStep = async () => {
+    if (currentStep === 1 && !formData.registrationNo) {
+      await generateRegistrationNumber();
+    }
     if (validateStep(currentStep)) {
       setCurrentStep((prev) => Math.min(prev + 1, 6));
     }
@@ -2531,10 +2576,28 @@ export default function StudentMasterPage() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
                     setEditModeId(null);
+                    const defaultCol = selectedCollege !== 'all' ? selectedCollege : (colleges[0]?.code || colleges[0]?.slug || '1');
+                    const defaultCollegeObj = colleges.find(c => c.code === defaultCol || c.slug === defaultCol || c.id === defaultCol) || colleges[0];
+                    const defaultColName = defaultCollegeObj?.name || 'TEAM UNIVERSITY';
+                    const defaultCrs = selectedCourse !== 'all' ? selectedCourse : (allCourses[0]?.course_cd || allCourses[0]?.code || '1');
+                    const defaultCrsObj = allCourses.find(c => c.course_cd === defaultCrs || c.code === defaultCrs || c.id === defaultCrs);
+                    const defaultCrsCode = defaultCrsObj?.course_cd || defaultCrsObj?.code || defaultCrs;
+                    const defaultBat = selectedBatch !== 'all' ? selectedBatch : (allBatches[0]?.batch_cd || allBatches[0]?.code || '2026');
+                    const defaultSess = selectedSession !== 'all' ? selectedSession : (allSessions[0]?.session_cd || allSessions[0]?.code || '1');
+                    const sessObj = allSessions.find(s => s.session_cd === defaultSess || s.code === defaultSess || s.id === defaultSess);
+                    const defaultSessName = sessObj?.name || allSessions[0]?.name || '2026-2027';
+
                     setFormData((prev) => ({
                       ...prev,
+                      collegeId: defaultCol,
+                      collegeName: defaultColName,
+                      courseId: defaultCrsCode,
+                      courseCode: defaultCrsCode,
+                      batchId: defaultBat,
+                      sessionId: defaultSess,
+                      academicSession: defaultSessName,
                       firstName: '',
                       middleName: '',
                       lastName: '',
@@ -2542,10 +2605,14 @@ export default function StudentMasterPage() {
                       rollNo: '',
                       mobileNumber: '',
                       emailAddress: '',
+                      photoUrl: '',
                       declarationSigned: false,
                     }));
                     setCurrentStep(1);
                     setIsModalOpen(true);
+                    setTimeout(() => {
+                      generateRegistrationNumber(defaultSessName, defaultCol);
+                    }, 50);
                   }}
                   className="h-7.5 py-1 px-2.5 rounded-lg font-bold text-[10.5px] bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs flex items-center gap-1 shrink-0 transition-all cursor-pointer"
                 >
@@ -2945,9 +3012,9 @@ export default function StudentMasterPage() {
                       currentStep === 1 ? 'Academic & College Enrollment' :
                         currentStep === 2 ? 'Personal Details' :
                           currentStep === 3 ? 'Guardian & Addresses' :
-                            currentStep === 4 ? 'NEET & Educational Qualifications' :
+                            currentStep === 4 ? (isFormMedicalCourse ? 'NEET & Educational Qualifications' : 'Educational Qualifications & Academic History') :
                               currentStep === 5 ? 'Hostel, Transport & Bank Details' :
-                                'Medical Fitness & Digital Declaration'
+                                (isFormMedicalCourse ? 'Medical Fitness & Digital Declaration' : 'Enrollment Verification & Digital Declaration')
                     }
                   </p>
                 </div>
@@ -3137,13 +3204,22 @@ export default function StudentMasterPage() {
                       </div>
 
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">Registration Number *</label>
+                        <div className="flex justify-between items-center mb-2">
+                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider">Registration Number *</label>
+                          <button
+                            type="button"
+                            onClick={() => generateRegistrationNumber()}
+                            className="text-[9.5px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                          >
+                            ⚡ Auto-Generate
+                          </button>
+                        </div>
                         <input
                           type="text"
-                          disabled
                           value={formData.registrationNo}
+                          onChange={(e) => setFormData({ ...formData, registrationNo: e.target.value })}
                           placeholder="Auto-generated based on Session"
-                          className="w-full bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-800 rounded-xl px-4 py-2.5 text-xs text-slate-600 dark:text-slate-400 focus:outline-none cursor-not-allowed font-mono"
+                          className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
                         />
                       </div>
 
@@ -3550,49 +3626,51 @@ export default function StudentMasterPage() {
                       </div>
                     </div>
 
-                    <div className="border-t border-slate-300/40 dark:border-slate-300 dark:border-slate-800/40 pt-4">
-                      <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">NEET Score & Rank Details</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET Roll Number</label>
-                          <input
-                            type="text"
-                            value={formData.neetRollNo}
-                            onChange={(e) => setFormData({ ...formData, neetRollNo: e.target.value })}
-                            placeholder="24041012345"
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET Score (out of 720)</label>
-                          <input
-                            type="number"
-                            value={formData.neetScore}
-                            onChange={(e) => setFormData({ ...formData, neetScore: Number(e.target.value) })}
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET Percentile</label>
-                          <input
-                            type="number"
-                            step="0.001"
-                            value={formData.neetPercentile}
-                            onChange={(e) => setFormData({ ...formData, neetPercentile: Number(e.target.value) })}
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET All India Rank (AIR)</label>
-                          <input
-                            type="number"
-                            value={formData.neetAirRank}
-                            onChange={(e) => setFormData({ ...formData, neetAirRank: Number(e.target.value) })}
-                            className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
-                          />
+                    {isFormMedicalCourse && (
+                      <div className="border-t border-slate-300/40 dark:border-slate-300 dark:border-slate-800/40 pt-4">
+                        <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-4 uppercase tracking-wider">NEET Score & Rank Details</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET Roll Number</label>
+                            <input
+                              type="text"
+                              value={formData.neetRollNo}
+                              onChange={(e) => setFormData({ ...formData, neetRollNo: e.target.value })}
+                              placeholder="24041012345"
+                              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET Score (out of 720)</label>
+                            <input
+                              type="number"
+                              value={formData.neetScore}
+                              onChange={(e) => setFormData({ ...formData, neetScore: Number(e.target.value) })}
+                              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET Percentile</label>
+                            <input
+                              type="number"
+                              step="0.001"
+                              value={formData.neetPercentile}
+                              onChange={(e) => setFormData({ ...formData, neetPercentile: Number(e.target.value) })}
+                              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">NEET All India Rank (AIR)</label>
+                            <input
+                              type="number"
+                              value={formData.neetAirRank}
+                              onChange={(e) => setFormData({ ...formData, neetAirRank: Number(e.target.value) })}
+                              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-800 focus:border-indigo-500 rounded-xl px-4 py-2.5 text-xs text-slate-900 dark:text-white focus:outline-none transition-colors font-mono"
+                            />
+                          </div>
                         </div>
                       </div>
-                    </div>
+                    )}
                   </div>
                 )}
 
@@ -3725,7 +3803,10 @@ export default function StudentMasterPage() {
                     <div className="bg-slate-50 dark:bg-slate-950/40 p-5 rounded-2xl border border-slate-300 dark:border-slate-800">
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white mb-2 uppercase tracking-wider">Candidate Verification & Compliance</h4>
                       <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed mb-4">
-                        By checking the box below, you verify that all details provided in this NMC medical student registration form (Steps 1 to 5) have been verified against original certificates, NEET rank letters, and eligibility certificates.
+                        {isFormMedicalCourse
+                          ? "By checking the box below, you verify that all details provided in this NMC medical student registration form (Steps 1 to 5) have been verified against original certificates, NEET rank letters, and eligibility certificates."
+                          : "By checking the box below, you verify that all details provided in this student registration form (Steps 1 to 5) have been verified against original academic certificates, qualifying examination marks, and institution enrollment criteria."
+                        }
                       </p>
                       <label className="flex items-start gap-3 text-xs text-slate-700 dark:text-slate-300 font-semibold cursor-pointer select-none">
                         <input
@@ -3734,7 +3815,12 @@ export default function StudentMasterPage() {
                           onChange={(e) => setFormData({ ...formData, declarationSigned: e.target.checked })}
                           className="w-4.5 h-4.5 mt-0.5 rounded border-slate-300 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-indigo-600 focus:ring-indigo-500"
                         />
-                        <span>I confirm that the applicant's credentials, physical medical fitness, and documents have been checked and verified in compliance with medical university regulations.</span>
+                        <span>
+                          {isFormMedicalCourse
+                            ? "I confirm that the applicant's credentials, physical medical fitness, and documents have been checked and verified in compliance with medical university regulations."
+                            : "I confirm that the applicant's credentials, academic records, and documents have been verified in compliance with university enrollment regulations."
+                          }
+                        </span>
                       </label>
                     </div>
                   </div>

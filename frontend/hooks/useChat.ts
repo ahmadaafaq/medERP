@@ -57,7 +57,10 @@ export interface ChatMember {
   email?: string;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+// Always use relative /api/v1 path so requests go through Next.js proxy rewrite
+// (which points to the locally-running backend configured in .env.local).
+// Never call NEXT_PUBLIC_API_URL directly from the browser — it may be a remote IP.
+const API_BASE = '/api/v1';
 
 export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
   const [groups, setGroups] = useState<ChatGroup[]>([]);
@@ -137,15 +140,24 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
       } catch {}
     }
 
-    return {
+    const headers: Record<string, string> = {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`,
-      'x-tenant-slug': tenantSlug,
-      'x-user-id': userId,
-      'x-user-name': userName,
-      'x-user-role': userRole,
-      'x-user-avatar': userAvatar,
+      'x-tenant-slug': tenantSlug || '',
+      'x-user-id': String(userId || 'user').substring(0, 100),
+      'x-user-name': String(userName || 'User').substring(0, 100),
+      'x-user-role': String(userRole || 'FACULTY').substring(0, 50),
     };
+
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    // Never attach large base64 data URIs in HTTP headers (causes 431 Request Header Fields Too Large)
+    if (userAvatar && typeof userAvatar === 'string' && !userAvatar.startsWith('data:') && userAvatar.length < 300) {
+      headers['x-user-avatar'] = userAvatar;
+    }
+
+    return headers;
   }, [getTenantSlug, role]);
 
   // Fetch groups
@@ -628,8 +640,22 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
   }): Promise<boolean> => {
     try {
       const slug = (params.tenant || getTenantSlug() || '').trim();
+      let userAvatar: string | undefined = undefined;
+      if (typeof window !== 'undefined') {
+        try {
+          const raw = localStorage.getItem('user');
+          if (raw) {
+            const u = JSON.parse(raw);
+            const p = u.profile || u;
+            const av = u.photo_url || p.photo_url || p.avatar_url || p.photoUrl || '';
+            if (av) userAvatar = av;
+          }
+        } catch {}
+      }
+
       const payload = {
         ...params,
+        sender_avatar: userAvatar,
         tenant: slug,
         tenantSlug: slug,
       };
@@ -639,7 +665,7 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
         ...(slug ? { 'x-tenant-slug': slug } : {}),
       };
 
-      // Try primary API_BASE endpoint first, with automatic fallback to relative /api/v1 proxy
+      // Use relative /api/v1 path — always proxied through Next.js to local backend
       let res: Response | null = null;
       try {
         res = await fetch(`${API_BASE}/chat/join-batch?tenant=${encodeURIComponent(slug)}`, {
@@ -647,24 +673,13 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
           headers: reqHeaders,
           body: JSON.stringify(payload),
         });
-      } catch (networkErr) {
-        console.warn('[useChat] Primary endpoint join-batch network error, trying relative proxy:', networkErr);
-      }
-
-      if (!res || !res.ok) {
-        try {
-          res = await fetch(`/api/v1/chat/join-batch?tenant=${encodeURIComponent(slug)}`, {
-            method: 'POST',
-            headers: reqHeaders,
-            body: JSON.stringify(payload),
-          });
-        } catch (proxyErr) {
-          console.warn('[useChat] Relative proxy join-batch error:', proxyErr);
-        }
+      } catch (networkErr: any) {
+        console.warn('[useChat] join-batch network error:', networkErr);
+        throw new Error(networkErr?.message || 'Network error connecting to chat service.');
       }
 
       if (res && res.ok) {
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
         const joined = json.data?.group;
         if (joined) {
           setGroups((prev) => {
@@ -673,17 +688,30 @@ export function useChat(role: 'FACULTY' | 'STUDENT' | 'ADMIN' = 'FACULTY') {
           });
           setSelectedGroup(joined);
         }
-        await fetchGroups(true);
+        try {
+          await fetchGroups(true);
+        } catch (refreshErr) {
+          console.warn('[useChat] Post-join group refresh error:', refreshErr);
+        }
         return true;
       }
 
       if (res) {
-        const errJson = await res.json().catch(() => null);
-        if (errJson?.message) {
-          throw new Error(errJson.message);
+        let errorMsg = `Server returned error (${res.status} ${res.statusText})`;
+        try {
+          const errJson = await res.json();
+          if (errJson?.message) {
+            errorMsg = Array.isArray(errJson.message) ? errJson.message.join(', ') : String(errJson.message);
+          } else if (errJson?.error) {
+            errorMsg = String(errJson.error);
+          }
+        } catch {
+          const text = await res.text().catch(() => '');
+          if (text && text.length < 300) errorMsg = text;
         }
+        throw new Error(errorMsg);
       }
-      return false;
+      throw new Error('Could not add batch group. Please check connection and try again.');
     } catch (err: any) {
       console.error('Failed to join batch group:', err);
       throw err;

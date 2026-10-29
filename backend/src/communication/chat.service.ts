@@ -53,10 +53,21 @@ export class ChatService implements OnModuleInit {
    */
   async ensureTables(tenantSlug: string): Promise<void> {
     const slug = this.resolveTenantSlug(tenantSlug);
+    if (!slug) return;
     if (this.ensuredTenants.has(slug)) return;
     this.ensuredTenants.add(slug);
 
     const schema = `tenant_${slug}`;
+
+    try {
+      const check = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT to_regclass('"${schema}".chat_groups') AS tbl`,
+      ).catch(() => []);
+      if (check?.[0]?.tbl) {
+        return;
+      }
+    } catch {}
 
     const statements = [
       `CREATE TABLE IF NOT EXISTS "${schema}".chat_groups (
@@ -270,30 +281,22 @@ export class ChatService implements OnModuleInit {
             if (insRes?.length) membersAdded++;
           }
 
-          // Enroll students belonging to this department & batch
-          const studentRows = await this.tenantSchemaService.queryInTenant(
-            slug,
-            `SELECT s.user_id, s.name, s.photo_url 
-             FROM "${schema}".students s 
-             LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
-             WHERE s.department_id::text = $1::text 
-               AND (s.admission_year::text = $2::text OR b.year::text = $2::text OR s.batch_cd ILIKE $3)
-               AND s.user_id IS NOT NULL 
-               AND s.is_active = true`,
-            [dept.id, year, `%${year}%`],
-          ).catch(() => []);
-
-          for (const stu of studentRows) {
-            const insRes = await this.tenantSchemaService.queryInTenant(
+          // Fast enroll students belonging to this department & batch with a single set-based query
+          try {
+            await this.tenantSchemaService.queryInTenant(
               slug,
               `INSERT INTO "${schema}".chat_group_members (chat_group_id, user_id, role, name, avatar_url)
-               VALUES ($1, $2, 'STUDENT', $3, $4)
-               ON CONFLICT (chat_group_id, user_id) DO UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url
-               RETURNING id`,
-              [groupId, stu.user_id, stu.name, stu.photo_url || null],
-            ).catch(() => []);
-            if (insRes?.length) membersAdded++;
-          }
+               SELECT $1, s.user_id::text, 'STUDENT', s.name, s.photo_url 
+               FROM "${schema}".students s 
+               LEFT JOIN "${schema}".batches b ON b.id::text = s.batch_id::text
+               WHERE (s.department_id::text = $2::text OR s.course_cd::text = $2::text)
+                 AND (s.admission_year::text = $3::text OR b.year::text = $3::text OR s.batch_cd::text ILIKE $4)
+                 AND s.user_id IS NOT NULL 
+                 AND s.is_active = true
+               ON CONFLICT (chat_group_id, user_id) DO UPDATE SET name = EXCLUDED.name, avatar_url = EXCLUDED.avatar_url`,
+              [groupId, String(dept.id), year, `%${year}%`],
+            ).catch(() => null);
+          } catch {}
         }
       }
     } catch (err) {
@@ -1238,28 +1241,18 @@ export class ChatService implements OnModuleInit {
         [group.id, userId, userRole, userName, userAvatar],
       );
 
-      // 3. Auto enroll all students of that department & batch into the group
+      // 3. Fast auto-enroll all students of that department & batch into the group
       try {
-        const stuRows = await this.tenantSchemaService.queryInTenant(
+        await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT s.user_id::text AS user_id, s.name, s.photo_url 
+          `INSERT INTO "${schema}".chat_group_members (chat_group_id, user_id, role, name, avatar_url)
+           SELECT $1, s.user_id::text, 'STUDENT', s.name, s.photo_url 
            FROM "${schema}".students s 
-           WHERE (s.admission_year::text = $1 OR s.batch_cd ILIKE $2)
-             AND s.user_id IS NOT NULL AND s.is_active = true`,
-          [batchYear, `%${batchYear}%`],
-        ).catch(() => []);
-
-        for (const stu of stuRows) {
-          if (stu.user_id) {
-            await this.tenantSchemaService.queryInTenant(
-              slug,
-              `INSERT INTO "${schema}".chat_group_members (chat_group_id, user_id, role, name, avatar_url)
-               VALUES ($1, $2, 'STUDENT', $3, $4)
-               ON CONFLICT (chat_group_id, user_id) DO NOTHING`,
-              [group.id, String(stu.user_id), stu.name, stu.photo_url || null],
-            ).catch(() => null);
-          }
-        }
+           WHERE (s.admission_year::text = $2::text OR s.batch_cd::text ILIKE $3)
+             AND s.user_id IS NOT NULL AND s.is_active = true
+           ON CONFLICT (chat_group_id, user_id) DO NOTHING`,
+          [group.id, batchYear, `%${batchYear}%`],
+        ).catch(() => null);
       } catch {}
 
       return {
@@ -1296,18 +1289,47 @@ export class ChatService implements OnModuleInit {
       ).catch(() => []),
     ]);
 
+    let mappedBatches = batches.map((b: any) => ({
+      id: b.id,
+      code: b.code || b.batch_cd || b.year,
+      batch_cd: b.batch_cd || b.code || b.year,
+      year: b.year,
+      course_cd: b.course_cd,
+      department_id: b.department_id,
+      name: b.name || (b.year ? `Batch ${b.year}` : `Batch ${b.code}`),
+    }));
+
+    if (mappedBatches.length === 0) {
+      const stuYears = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT DISTINCT admission_year FROM "${schema}".students WHERE admission_year IS NOT NULL AND admission_year::text >= '2024' ORDER BY admission_year DESC`,
+      ).catch(() => []);
+      const years = stuYears.length > 0 ? stuYears.map((s: any) => String(s.admission_year)) : ['2026', '2025'];
+      mappedBatches = years.map((y: string) => ({
+        id: y,
+        code: y,
+        batch_cd: y,
+        year: y,
+        course_cd: null,
+        department_id: null,
+        name: `Batch ${y}`,
+      }));
+    }
+
+    let mappedDepts = departments;
+    if (mappedDepts.length === 0 && courses.length > 0) {
+      mappedDepts = courses.map((c: any) => ({
+        id: c.course_cd || c.code || '1',
+        name: c.course_name || c.name || 'Department',
+        code: c.course_cd || c.code || '1',
+        course_cd: c.course_cd || c.code || '1',
+      }));
+    }
+
     return {
       courses: courses.filter((c: any) => c.course_cd || c.course_name),
-      departments,
-      batches: batches.map((b: any) => ({
-        id: b.id,
-        code: b.code || b.batch_cd || b.year,
-        batch_cd: b.batch_cd || b.code || b.year,
-        year: b.year,
-        course_cd: b.course_cd,
-        department_id: b.department_id,
-        name: b.name || (b.year ? `Batch ${b.year}` : `Batch ${b.code}`),
-      })),
+      departments: mappedDepts,
+      batches: mappedBatches,
     };
   }
 

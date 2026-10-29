@@ -93,6 +93,9 @@ export default function FacultyDashboard() {
     draftTitle: '',
   });
 
+  // 6. DQAC Quality Audit Revision Alerts for Submitting Faculty
+  const [dqacRevisionAlerts, setDqacRevisionAlerts] = useState<any[]>([]);
+
   useEffect(() => {
     const slug = typeof window !== 'undefined'
       ? (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').replace(/^tenant_/, '').replace(/^tenant-/, '') || 'srms-cet-bareilly'
@@ -119,6 +122,29 @@ export default function FacultyDashboard() {
           facId = profile.id || me.id || '';
           targetEmpId = profile.emp_id || me.emp_id || targetEmpId;
           targetName = profile.name || me.name || targetName;
+        }
+
+        // Fetch Question Papers with Changes Requested by DQAC specifically for this faculty
+        let uObj: any = {};
+        try {
+          uObj = JSON.parse(localStorage.getItem('user') || '{}');
+        } catch {}
+        const resolvedUserId = facId || uObj.id || uObj.sub || uObj.faculty_id || localStorage.getItem('userId') || '';
+        if (resolvedUserId) {
+          fetch(`/api/v1/exams/papers?tenant=${slug}&role=FACULTY&status=CHANGES_REQUESTED&createdBy=${encodeURIComponent(resolvedUserId)}`, { headers })
+            .then(async (pr) => {
+              if (pr.ok) {
+                const pj = await pr.json();
+                const papers = Array.isArray(pj.data) ? pj.data : Array.isArray(pj) ? pj : [];
+                // STRICT CONFIDENTIALITY: Filter strictly by submitting faculty user ID
+                const myPapers = papers.filter((p: any) => {
+                  const pCreated = String(p.created_by || p.faculty_id || '').toLowerCase();
+                  return pCreated === String(resolvedUserId).toLowerCase();
+                });
+                setDqacRevisionAlerts(myPapers);
+              }
+            })
+            .catch(() => setDqacRevisionAlerts([]));
         }
 
         // Fetch Clerk-scheduled Drafts for Faculty Schedule Planner Alert
@@ -368,6 +394,71 @@ export default function FacultyDashboard() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="Faculty Academic & Research Portal" />
         <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+          {/* DQAC Quality Audit Alert: Revisions Required on Submitted Question Papers */}
+          {dqacRevisionAlerts.length > 0 && (
+            <div className="p-4 sm:p-5 rounded-[22px] border bg-gradient-to-r from-rose-500/10 via-amber-500/10 to-orange-500/10 border-rose-300 dark:border-rose-800/60 shadow-sm transition-all animate-fadeIn">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="flex items-start gap-3.5">
+                  <div className="w-11 h-11 rounded-2xl flex items-center justify-center text-xl shrink-0 shadow-sm bg-gradient-to-br from-[#F04438] to-amber-500 text-white animate-pulse">
+                    ⚠️
+                  </div>
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h2 className="text-base font-extrabold text-[#1B1E28] dark:text-white">
+                        DQAC Quality Audit — Revisions Required on {dqacRevisionAlerts.length} Question Paper{dqacRevisionAlerts.length > 1 ? 's' : ''}
+                      </h2>
+                      <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black uppercase tracking-wider bg-[#F04438] text-white shadow-sm">
+                        Action Required
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#4E5969] dark:text-slate-300 leading-relaxed">
+                      The Department Quality Assurance Cell (DQAC) reviewed your submitted question paper and requested revisions before HOD approval.
+                    </p>
+                    <div className="space-y-2 pt-2">
+                      {dqacRevisionAlerts.map((p: any) => {
+                        const qRemCount = p.question_remarks
+                          ? Object.keys(typeof p.question_remarks === 'string' ? JSON.parse(p.question_remarks || '{}') : p.question_remarks).length
+                          : 0;
+                        return (
+                          <div key={p.id} className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-rose-200 dark:border-rose-900/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-sm">
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-extrabold text-[#1B1E28] dark:text-white text-xs">
+                                  {p.name || p.code}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
+                                  {p.course_name || p.course_cd || 'Course'} • Sem {p.semester || '1'}
+                                </span>
+                                <span className="px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-[#FEECEB] text-[#F04438]">
+                                  {p.code}
+                                </span>
+                              </div>
+                              <p className="text-xs text-rose-900 dark:text-rose-200 font-medium">
+                                <strong>Directives:</strong> {p.dqac_remarks || p.hod_remarks || 'Quality audit directives provided. Please review flagged questions.'}
+                              </p>
+                              {qRemCount > 0 && (
+                                <p className="text-[11px] text-amber-700 dark:text-amber-300 font-bold">
+                                  📌 {qRemCount} specific question(s) flagged for replacement or mark adjustment.
+                                </p>
+                              )}
+                            </div>
+                            <Link
+                              href="/dashboard/faculty/assessment"
+                              className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3FE4] text-white text-xs font-black shadow-md transition-all shrink-0 flex items-center gap-1.5 self-start sm:self-center"
+                            >
+                              <span>Revise in Assessment &amp; Q Bank</span>
+                              <span>➔</span>
+                            </Link>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Clerk Weekly Schedule Alert Banner for Faculty Schedule Planner */}
           {plannerAlert.hasDrafts && (
             <div className={`p-4 sm:p-5 rounded-[22px] border transition-all ${

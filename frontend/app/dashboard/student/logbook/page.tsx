@@ -296,7 +296,7 @@ export default function StudentLogbookPage() {
           courseCd: String(p.course_cd || p.courseCd || p.course_id || u.course_cd || u.courseCd || '').trim(),
           batchCd: String(p.batch_cd || p.batchCd || p.batch_id || u.batch_cd || u.batchCd || '').trim(),
           branchId: String(p.branch_id || p.branchId || p.branch_cd || p.department_id || u.branch_id || '').trim(),
-          semester: String(p.semester || p.current_semester || p.semester_id || u.semester || '').trim(),
+          semester: String(p.semester || p.current_semester || p.semester_id || p.professional_phase || u.semester || u.professional_phase || '').trim(),
         };
       }
     } catch (e) {}
@@ -304,7 +304,7 @@ export default function StudentLogbookPage() {
       courseCd: localStorage.getItem('courseCd') || localStorage.getItem('course_cd') || '',
       batchCd: localStorage.getItem('batchCd') || localStorage.getItem('batch_cd') || '',
       branchId: localStorage.getItem('branchId') || localStorage.getItem('branch_id') || '',
-      semester: localStorage.getItem('semester') || '',
+      semester: localStorage.getItem('semester') || localStorage.getItem('professional_phase') || '',
     };
   };
 
@@ -317,6 +317,7 @@ export default function StudentLogbookPage() {
     const courseQuery = cohort.courseCd ? `&courseId=${encodeURIComponent(cohort.courseCd)}` : '';
     const batchQuery = cohort.batchCd ? `&batchId=${encodeURIComponent(cohort.batchCd)}` : '';
     const branchQuery = cohort.branchId ? `&branchId=${encodeURIComponent(cohort.branchId)}` : '';
+    const semesterQuery = cohort.semester ? `&semesterId=${encodeURIComponent(cohort.semester)}` : '';
 
     const headers = {
       Authorization: `Bearer ${token}`,
@@ -345,11 +346,11 @@ export default function StudentLogbookPage() {
     try {
       const results = await Promise.allSettled([
         // 1. Dashboard Overview
-        fetchSafe(`/api/v1/logbook/dashboard/overview?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}`),
+        fetchSafe(`/api/v1/logbook/dashboard/overview?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}${semesterQuery}`),
         // 2. My Activity Submissions
         fetchSafe(`/api/v1/logbook/submissions/me?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
         // 3. Mini Project
-        fetchSafe(`/api/v1/logbook/mini-project?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}`),
+        fetchSafe(`/api/v1/logbook/mini-project?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}${semesterQuery}`),
         // 4. Weekly Logs
         fetchSafe(`/api/v1/logbook/weekly-logs?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
         // 5. Seminars
@@ -365,7 +366,7 @@ export default function StudentLogbookPage() {
         // 10. Final Evaluation
         fetchSafe(`/api/v1/logbook/final-evaluation?tenant=${slug}&studentId=${encodeURIComponent(studentIdentifier)}`),
         // 11. Topics
-        fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}`),
+        fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}${courseQuery}${batchQuery}${branchQuery}${semesterQuery}`),
       ]);
 
       const [dash, subs, proj, weeks, sems, tuts, techs, revs, rems, finalEv, tops] = results.map(
@@ -390,15 +391,7 @@ export default function StudentLogbookPage() {
       if (revs) setReviews(Array.isArray(revs.data) ? revs.data : Array.isArray(revs) ? revs : []);
       if (rems) setRemarks(Array.isArray(rems.data) ? rems.data : Array.isArray(rems) ? rems : []);
       if (finalEv) setFinalEval(finalEv.data || finalEv);
-      let loadedTopics = Array.isArray(tops?.data) ? tops.data : Array.isArray(tops) ? tops : [];
-      if (loadedTopics.length === 0) {
-        // Fallback: fetch active topics without restrictive cohort filter so student never sees empty list
-        const fallbackTops = await fetchSafe(`/api/v1/logbook/topics?tenant=${slug}&studentView=true&studentId=${encodeURIComponent(studentIdentifier)}`);
-        const fallbackList = Array.isArray(fallbackTops?.data) ? fallbackTops.data : Array.isArray(fallbackTops) ? fallbackTops : [];
-        if (fallbackList.length > 0) {
-          loadedTopics = fallbackList;
-        }
-      }
+      const loadedTopics = Array.isArray(tops?.data) ? tops.data : Array.isArray(tops) ? tops : [];
       setTopics(loadedTopics);
     } catch (e) {
       console.error('Failed to load student logbook details:', e);

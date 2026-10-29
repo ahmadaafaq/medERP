@@ -1,4 +1,5 @@
 import { IsString, IsNotEmpty, IsNumber, IsOptional, IsArray, IsBoolean } from 'class-validator';
+import { Transform } from 'class-transformer';
 
 export class CreateExamPaperDto {
   @IsString()
@@ -54,42 +55,52 @@ export class CreateExamPaperDto {
   @IsOptional()
   department_id?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   colgCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   colg_cd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   courseCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   course_cd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   branchCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   branch_cd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   batchCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   batch_cd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   semester?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   section?: string;
@@ -198,7 +209,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  college_id?: string;
+
+  @IsString()
+  @IsOptional()
   departmentId?: string;
+
+  @IsString()
+  @IsOptional()
+  department_id?: string;
 
   @IsString()
   @IsOptional()
@@ -206,7 +225,23 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  subject_id?: string;
+
+  @IsString()
+  @IsOptional()
+  subjectCode?: string;
+
+  @IsString()
+  @IsOptional()
+  subject_code?: string;
+
+  @IsString()
+  @IsOptional()
   professionalPhase?: string;
+
+  @IsString()
+  @IsOptional()
+  professional_phase?: string;
 
   @IsString()
   @IsOptional()
@@ -214,7 +249,19 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  topic_id?: string;
+
+  @IsString()
+  @IsOptional()
   topic?: string;
+
+  @IsString()
+  @IsOptional()
+  topicCode?: string;
+
+  @IsString()
+  @IsOptional()
+  topic_code?: string;
 
   @IsString()
   @IsOptional()
@@ -222,7 +269,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  competency_id?: string;
+
+  @IsString()
+  @IsOptional()
   competencyCode?: string;
+
+  @IsString()
+  @IsOptional()
+  competency_code?: string;
 
   @IsString()
   @IsNotEmpty()
@@ -234,7 +289,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  question_text?: string;
+
+  @IsString()
+  @IsOptional()
   optionA?: string;
+
+  @IsString()
+  @IsOptional()
+  option_a?: string;
 
   @IsString()
   @IsOptional()
@@ -242,7 +305,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  option_b?: string;
+
+  @IsString()
+  @IsOptional()
   optionC?: string;
+
+  @IsString()
+  @IsOptional()
+  option_c?: string;
 
   @IsString()
   @IsOptional()
@@ -250,43 +321,92 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  option_d?: string;
+
+  @IsString()
+  @IsOptional()
   correctOption?: string;
 
   @IsString()
   @IsOptional()
-  difficultyLevel?: 'Easy' | 'Medium' | 'Hard' | 'Expert';
+  correct_option?: string;
+
+  @IsString()
+  @IsOptional()
+  difficultyLevel?: string;
+
+  @IsString()
+  @IsOptional()
+  difficulty_level?: string;
 
   @IsOptional()
   hasSubQuestions?: boolean;
+
+  @IsOptional()
+  has_sub_questions?: boolean;
 
   @IsArray()
   @IsOptional()
   subQuestions?: any[];
 
+  @IsArray()
+  @IsOptional()
+  sub_questions?: any[];
+
   @IsNumber()
   @IsOptional()
   maxMarks?: number;
 
+  @IsNumber()
+  @IsOptional()
+  max_marks?: number;
+
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   colgCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
+  @IsString()
+  @IsOptional()
+  colg_cd?: string;
+
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   courseCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
+  @IsString()
+  @IsOptional()
+  course_cd?: string;
+
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   branchCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
+  @IsString()
+  @IsOptional()
+  branch_cd?: string;
+
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   batchCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
+  @IsString()
+  @IsOptional()
+  batch_cd?: string;
+
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   semester?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   section?: string;
@@ -297,7 +417,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  unit_id?: string;
+
+  @IsString()
+  @IsOptional()
   unitCode?: string;
+
+  @IsString()
+  @IsOptional()
+  unit_code?: string;
 
   @IsString()
   @IsOptional()
@@ -305,7 +433,7 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
-  topicCode?: string;
+  unit_name?: string;
 
   @IsString()
   @IsOptional()
@@ -313,7 +441,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  sub_topic_id?: string;
+
+  @IsString()
+  @IsOptional()
   subTopicCode?: string;
+
+  @IsString()
+  @IsOptional()
+  sub_topic_code?: string;
 
   @IsString()
   @IsOptional()
@@ -321,7 +457,15 @@ export class CreateQuestionDto {
 
   @IsString()
   @IsOptional()
+  subtopic_id?: string;
+
+  @IsString()
+  @IsOptional()
   subtopicName?: string;
+
+  @IsString()
+  @IsOptional()
+  subtopic_name?: string;
 
   @IsString()
   @IsOptional()
@@ -330,6 +474,26 @@ export class CreateQuestionDto {
   @IsString()
   @IsOptional()
   image_url?: string;
+
+  @IsString()
+  @IsOptional()
+  image?: string;
+
+  @IsString()
+  @IsOptional()
+  diagramUrl?: string;
+
+  @IsString()
+  @IsOptional()
+  diagram_url?: string;
+
+  @IsString()
+  @IsOptional()
+  createdBy?: string;
+
+  @IsString()
+  @IsOptional()
+  created_by?: string;
 }
 
 export class CreatePaperDesignDto {
@@ -369,30 +533,37 @@ export class PublishPaperDto {
   @IsNotEmpty()
   paperId: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   colgCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   courseCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   branchCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   batchId?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   batchCd?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   target_batch?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   semester?: string;
@@ -452,6 +623,28 @@ export class HodApproveQPDto {
   @IsNumber()
   @IsOptional()
   version?: number;
+
+  @IsString()
+  @IsOptional()
+  paperSet?: string;
+
+  @IsString()
+  @IsOptional()
+  paper_set?: string;
+
+  @IsOptional()
+  targetSections?: any;
+
+  @IsOptional()
+  target_sections?: any;
+
+  @IsString()
+  @IsOptional()
+  dqacRemarks?: string;
+
+  @IsString()
+  @IsOptional()
+  dqac_remarks?: string;
 }
 
 /** HOD approves or rejects a timetable draft */
@@ -494,10 +687,12 @@ export class CreateTimetableDraftDto {
   @IsOptional()
   departmentName?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   batchId?: string;
 
+  @Transform(({ value }) => (value !== null && value !== undefined ? String(value) : value))
   @IsString()
   @IsOptional()
   semester?: string;

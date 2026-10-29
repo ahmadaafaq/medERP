@@ -144,6 +144,53 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     } catch (err: any) {
       this.logger.warn(`Primary schema upgrade note: ${err.message}`);
     }
+
+    try {
+      await this.autoMigrateQuestionBankColumns();
+    } catch (err: any) {
+      this.logger.warn(`autoMigrateQuestionBankColumns warning: ${err.message}`);
+    }
+  }
+
+  /**
+   * Auto-migrate question_bank columns (image_url, etc.) across all existing tenant schemas
+   */
+  async autoMigrateQuestionBankColumns(): Promise<void> {
+    try {
+      const schemas: { schema_name: string }[] = await this.dataSource.query(
+        `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%'`
+      );
+      for (const s of schemas) {
+        const schema = s.schema_name;
+        await this.dataSource.query(`
+          DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'question_bank') THEN
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS image_url TEXT;
+              ALTER TABLE "${schema}".question_bank ALTER COLUMN image_url TYPE TEXT;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS created_by UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS subtopic_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS subtopic_name VARCHAR(255);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic_code VARCHAR(100);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS competency_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
+            END IF;
+          EXCEPTION WHEN OTHERS THEN NULL; END $$;
+        `).catch(() => {});
+      }
+      this.logger.log(`Question bank columns auto-migrated across ${schemas.length} tenant schemas.`);
+    } catch (err: any) {
+      this.logger.warn(`autoMigrateQuestionBankColumns error: ${err.message}`);
+    }
   }
 
   /**
@@ -1456,6 +1503,32 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         END $$;
       `).catch(() => { });
 
+        // Ensure question_bank columns exist
+        await runner.query(`
+          DO $$ BEGIN
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'question_bank') THEN
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS image_url TEXT;
+              ALTER TABLE "${schema}".question_bank ALTER COLUMN image_url TYPE TEXT;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS created_by UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS subtopic_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS subtopic_name VARCHAR(255);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic_code VARCHAR(100);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS competency_id UUID;
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
+              ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
+            END IF;
+          EXCEPTION WHEN OTHERS THEN NULL; END $$;
+        `).catch(() => { });
+
         try {
           await this.ensureMedicalLogbookTables(runner, schema);
         } catch (tableErr: any) {
@@ -2027,6 +2100,7 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS hod_remarks TEXT;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS question_remarks JSONB DEFAULT '{}'::jsonb;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS created_by UUID;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS faculty_id UUID;`).catch(() => { });
 
     // ── Examination Competencies ───────────────────────────────────────────
     await runner.query(`
@@ -2121,6 +2195,23 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         has_sub_questions  BOOLEAN      DEFAULT false,
         sub_questions      JSONB        DEFAULT '[]'::jsonb,
         max_marks          NUMERIC(5,2) DEFAULT 1.00,
+        image_url          TEXT,
+        created_by         UUID,
+        subtopic_id        UUID,
+        subtopic_name      VARCHAR(255),
+        unit_id            UUID,
+        unit_name          VARCHAR(255),
+        topic_id           UUID,
+        topic_code         VARCHAR(100),
+        competency_id      UUID,
+        colg_cd            VARCHAR(50),
+        course_cd          VARCHAR(50),
+        branch_cd          VARCHAR(50),
+        batch_cd           VARCHAR(50),
+        semester           VARCHAR(50),
+        section            VARCHAR(50),
+        unit_code          VARCHAR(100),
+        sub_topic_code     VARCHAR(100),
         is_active          BOOLEAN      DEFAULT true,
         created_at         TIMESTAMPTZ  DEFAULT NOW()
       )
@@ -2137,8 +2228,19 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
         ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS image_url TEXT;
+        ALTER TABLE "${schema}".question_bank ALTER COLUMN image_url TYPE TEXT;
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS created_by UUID;
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS subtopic_id UUID;
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS subtopic_name VARCHAR(255);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_id UUID;
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_name VARCHAR(255);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic_id UUID;
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS topic_code VARCHAR(100);
+        ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS competency_id UUID;
         ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS paper_set VARCHAR(50) DEFAULT 'Set A';
         ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS target_sections JSONB DEFAULT '["All"]'::jsonb;
+        ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS dqac_remarks TEXT;
+        ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS dqac_status VARCHAR(50);
       EXCEPTION WHEN OTHERS THEN NULL; END $$;
     `).catch(() => { });
 

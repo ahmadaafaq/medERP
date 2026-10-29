@@ -230,6 +230,26 @@ const DEFAULT_COLLEGES: College[] = [
       theme_mode: 'LIGHT',
     },
   },
+  {
+    code: 'team-university',
+    colg_cd: 'team-university',
+    name: 'TEAM UNIVERSITY',
+    slug: 'team-university',
+    domain: 'team-university.mederp.app',
+    plan: 'enterprise',
+    primary_color: '#5B4BFF',
+    theme_config: {
+      primary_color: '#5B4BFF',
+      secondary_color: '#7867FF',
+      accent_color: '#F36C21',
+      sidebar_bg: '#2D2575',
+      header_bg: '#2D2575',
+      page_bg: '#F6F8FC',
+      card_bg: '#FFFFFF',
+      card_radius: '22px',
+      theme_mode: 'LIGHT',
+    },
+  },
 ];
 
 export default function LoginPage() {
@@ -242,7 +262,7 @@ export default function LoginPage() {
   const [collegeSearchQuery, setCollegeSearchQuery] = useState<string>('');
 
   // ─── 2. Auth Credentials & Role State ──────────────────────────────────────
-  const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
+  const [role, setRole] = useState<'STUDENT' | 'FACULTY' | 'HOD' | 'DQAC' | 'ADMIN' | 'CLERK' | 'WARDEN'>('STUDENT');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -320,7 +340,7 @@ export default function LoginPage() {
       const urlRole = urlParams.get('role');
       const urlCollege = urlParams.get('college');
 
-      if (urlRole && ['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN'].includes(urlRole.toUpperCase())) {
+      if (urlRole && ['STUDENT', 'FACULTY', 'HOD', 'DQAC', 'ADMIN', 'CLERK', 'WARDEN'].includes(urlRole.toUpperCase())) {
         applyRolePreset(urlRole.toUpperCase() as any);
       }
 
@@ -332,6 +352,7 @@ export default function LoginPage() {
             c.slug.toLowerCase() === k ||
             String(c.code).toLowerCase() === k ||
             String(c.colg_cd).toLowerCase() === k ||
+            (k.includes('team') && c.slug === 'team-university') ||
             (k.includes('rajshree') && (c.slug === 'rmribar' || c.slug === 'rimt-bareilly'))
         );
       };
@@ -353,6 +374,33 @@ export default function LoginPage() {
         const found = matchCollege(savedSlug) || matchCollege(savedColgCd);
         if (found) {
           setSelectedCollege(found);
+          return;
+        } else if (savedSlug && savedSlug !== 'srms-cet-bareilly') {
+          const storedName =
+            localStorage.getItem('collegeName') ||
+            localStorage.getItem('college_name') ||
+            localStorage.getItem('tenantName') ||
+            savedSlug.replace(/[-_]+/g, ' ').toUpperCase();
+          const dynamicCol: College = {
+            code: savedColgCd || savedSlug,
+            colg_cd: savedColgCd || savedSlug,
+            name: storedName,
+            slug: savedSlug,
+            domain: `${savedSlug}.mederp.app`,
+            primary_color: '#5B4BFF',
+            theme_config: {
+              primary_color: '#5B4BFF',
+              secondary_color: '#7867FF',
+              accent_color: '#F36C21',
+              sidebar_bg: '#2D2575',
+              header_bg: '#2D2575',
+              page_bg: '#F6F8FC',
+              card_bg: '#FFFFFF',
+              card_radius: '22px',
+              theme_mode: 'LIGHT',
+            },
+          };
+          setSelectedCollege(dynamicCol);
           return;
         }
       }
@@ -513,7 +561,7 @@ export default function LoginPage() {
     }
   };
 
-  const applyRolePreset = (newRole: 'STUDENT' | 'FACULTY' | 'HOD' | 'ADMIN' | 'CLERK' | 'WARDEN') => {
+  const applyRolePreset = (newRole: 'STUDENT' | 'FACULTY' | 'HOD' | 'DQAC' | 'ADMIN' | 'CLERK' | 'WARDEN') => {
     setRole(newRole);
     setErrorMsg('');
   };
@@ -555,6 +603,11 @@ export default function LoginPage() {
           localStorage.setItem('tenant', verifiedSlug);
           localStorage.setItem('colg_cd', userColgCd);
           const rawRole = (authData.user?.role || role || '').toUpperCase();
+          const isDqacUser =
+            role === 'DQAC' ||
+            rawRole === 'DQAC' ||
+            (authData.user?.assigned_roles && String(authData.user.assigned_roles).toUpperCase().includes('DQAC'));
+
           const isHodUser =
             role === 'HOD' ||
             rawRole === 'HOD' ||
@@ -569,7 +622,10 @@ export default function LoginPage() {
             (authData.user?.assigned_roles && String(authData.user.assigned_roles).toUpperCase().includes('CLERK'));
 
           let verifiedRole = rawRole || 'FACULTY';
-          if (isHodUser && (role === 'HOD' || verifiedRole === 'FACULTY' || !verifiedRole)) {
+          if (role === 'DQAC' || (isDqacUser && (verifiedRole === 'FACULTY' || !verifiedRole))) {
+            verifiedRole = 'DQAC';
+            if (authData.user) authData.user.role = 'DQAC';
+          } else if (isHodUser && (role === 'HOD' || verifiedRole === 'FACULTY' || !verifiedRole)) {
             verifiedRole = 'HOD';
             if (authData.user) authData.user.role = 'HOD';
           } else if (isClerkUser && (role === 'CLERK' || verifiedRole === 'FACULTY' || !verifiedRole)) {
@@ -640,6 +696,8 @@ export default function LoginPage() {
             router.push('/dashboard/admin');
           } else if (effectiveRole === 'HOD') {
             router.push('/dashboard/hod');
+          } else if (effectiveRole === 'DQAC') {
+            router.push('/dashboard/dqac');
           } else if (effectiveRole === 'FACULTY' || effectiveRole === 'STAFF') {
             router.push('/dashboard/faculty');
           } else if (effectiveRole === 'STUDENT') {
@@ -947,18 +1005,18 @@ export default function LoginPage() {
           </div>
 
           {/* Role Tabs */}
-          <div className="grid grid-cols-6 gap-1 p-1 rounded-xl bg-[#FFF5ED] border border-[#FBE0D0] text-[11px] font-bold">
-            {(['STUDENT', 'FACULTY', 'HOD', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
+          <div className="grid grid-cols-7 gap-1 p-1 rounded-xl bg-[#FFF5ED] border border-[#FBE0D0] text-[10px] sm:text-[11px] font-bold">
+            {(['STUDENT', 'FACULTY', 'HOD', 'DQAC', 'ADMIN', 'CLERK', 'WARDEN'] as const).map((r) => {
               const isActive = role === r;
               const labelMap: Record<string, string> = {
-                STUDENT: 'Student', FACULTY: 'Faculty', HOD: 'HOD', ADMIN: 'Admin', CLERK: 'Clerk', WARDEN: 'Warden',
+                STUDENT: 'Student', FACULTY: 'Faculty', HOD: 'HOD', DQAC: 'DQAC', ADMIN: 'Admin', CLERK: 'Clerk', WARDEN: 'Warden',
               };
               return (
                 <button
                   key={r}
                   type="button"
                   onClick={() => applyRolePreset(r)}
-                  className={`py-1.5 rounded-lg text-center transition-all cursor-pointer ${isActive
+                  className={`py-1.5 px-0.5 rounded-lg text-center transition-all cursor-pointer truncate ${isActive
                     ? 'bg-gradient-to-r from-[#F36C21] to-[#E05A10] text-white font-black shadow-md shadow-orange-500/25'
                     : 'text-[#7C2D12]/75 hover:text-[#F36C21] hover:bg-white/90'
                     }`}
@@ -980,7 +1038,19 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-2.5">
             <div className="space-y-1">
               <label className="block text-[10px] font-black uppercase tracking-wider text-[#475569]">
-                {role === 'STUDENT' ? 'Student Registration / Roll No' : role === 'FACULTY' ? 'Faculty Emp ID / Email' : role === 'HOD' ? 'HOD Emp ID / Email' : role === 'CLERK' ? 'Clerk Username / Email' : 'Admin Username / Email'}
+                {role === 'STUDENT'
+                  ? 'Student Registration / Roll No'
+                  : role === 'FACULTY'
+                  ? 'Faculty Emp ID / Email'
+                  : role === 'HOD'
+                  ? 'HOD Emp ID / Email'
+                  : role === 'DQAC'
+                  ? 'DQAC Emp ID / Email'
+                  : role === 'CLERK'
+                  ? 'Clerk Username / Email'
+                  : role === 'WARDEN'
+                  ? 'Warden Username / Email'
+                  : 'Admin Username / Email'}
               </label>
               <div className="relative">
                 <span className="absolute left-3 top-2.5 text-[#F36C21] text-xs">👤</span>
@@ -988,7 +1058,21 @@ export default function LoginPage() {
                   type="text"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  placeholder={role === 'STUDENT' ? 'Enter Registration / Roll No' : role === 'FACULTY' ? 'Enter Faculty ID / Email' : role === 'HOD' ? 'Enter HOD ID / Email' : role === 'CLERK' ? 'Enter Clerk Username / Email' : 'Enter Username / Email'}
+                  placeholder={
+                    role === 'STUDENT'
+                      ? 'Enter Registration / Roll No'
+                      : role === 'FACULTY'
+                      ? 'Enter Faculty ID / Email'
+                      : role === 'HOD'
+                      ? 'Enter HOD ID / Email'
+                      : role === 'DQAC'
+                      ? 'Enter DQAC ID / Email'
+                      : role === 'CLERK'
+                      ? 'Enter Clerk Username / Email'
+                      : role === 'WARDEN'
+                      ? 'Enter Warden Username / Email'
+                      : 'Enter Username / Email'
+                  }
                   className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 transition placeholder-[#94A3B8]"
                   required
                 />

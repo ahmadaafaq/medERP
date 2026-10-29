@@ -30,6 +30,11 @@ export class AttendanceEntryDto {
 }
 
 export class CreateSessionDto {
+  @ApiPropertyOptional({ description: 'Optional session ID for updating an existing session' })
+  @IsOptional()
+  @IsString()
+  sessionId?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

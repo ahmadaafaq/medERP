@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import FacultyAcademicCascadingDropdown, {
@@ -91,9 +91,24 @@ interface ExamPaper {
   mode?: string;
   status?: string;
   subject_id?: string;
+  subject_name?: string;
+  subject_code?: string;
+  course_name?: string;
+  course_cd?: string;
+  branch_cd?: string;
   batch_id?: string;
-  topic_name?: string;
+  batch_name?: string;
   batch_code?: string;
+  topic_name?: string;
+  department_name?: string;
+  department_id?: string;
+  paper_set?: string;
+  exam_date?: string;
+  created_at?: string;
+  room_no?: string;
+  hall_name?: string;
+  type?: string;
+  created_by?: string;
   sections?: PaperSection[];
 }
 
@@ -114,114 +129,25 @@ interface StudentRow {
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
-
-
-const defaultSections: PaperSection[] = [
+const createGenericPaperSections = (paperName: string, maxMarks: number, isNonMed: boolean): PaperSection[] => [
   {
     id: 'sec-1',
-    name: 'Section A',
-    type: 'MCQ',
-    description: 'Multiple Choice Questions (20 Marks)',
-    questions: [
-      {
-        questionId: 'q-101',
-        questionText: 'The hormone primarily responsible for stimulating erythropoiesis is:',
-        mode: 'MCQ',
-        topic: 'General Physiology & Hematology',
-        competencyCode: 'PY1.1(2024)',
-        defaultMarks: 2,
-        customMarks: 2,
-        optionA: 'Insulin',
-        optionB: 'Thyroxine',
-        optionC: 'Erythropoietin',
-        optionD: 'Cortisol',
-        correctOption: 'option_c'
-      },
-      {
-        questionId: 'q-102',
-        questionText: 'The principal site of erythropoiesis in adults is:',
-        mode: 'MCQ',
-        topic: 'General Physiology & Hematology',
-        competencyCode: 'PY1.1(2024)',
-        defaultMarks: 2,
-        customMarks: 2,
-        optionA: 'Liver',
-        optionB: 'Spleen',
-        optionC: 'Red bone marrow',
-        optionD: 'Kidney',
-        correctOption: 'option_c'
-      },
-      {
-        questionId: 'q-103',
-        questionText: 'The most abundant formed element in human peripheral blood is:',
-        mode: 'MCQ',
-        topic: 'Hematology & Plasma Proteins',
-        competencyCode: 'PY2.1(2024)',
-        defaultMarks: 2,
-        customMarks: 2,
-        optionA: 'Erythrocytes (RBCs)',
-        optionB: 'Neutrophils',
-        optionC: 'Platelets',
-        optionD: 'Lymphocytes',
-        correctOption: 'option_a'
-      },
-      {
-        questionId: 'q-104',
-        questionText: 'Which plasma protein is primarily responsible for maintaining intravascular oncotic pressure?',
-        mode: 'MCQ',
-        topic: 'Plasma Proteins & Hemostasis',
-        competencyCode: 'PY2.1(2024)',
-        defaultMarks: 2,
-        customMarks: 2,
-        optionA: 'Albumin',
-        optionB: 'Gamma Globulin',
-        optionC: 'Fibrinogen',
-        optionD: 'Prothrombin',
-        correctOption: 'option_a'
-      },
-    ]
-  },
-  {
-    id: 'sec-2',
-    name: 'Section B',
+    name: 'Section A - Evaluation',
     type: 'DESC',
-    description: 'Long Descriptive & Structured Short Notes (60 Marks)',
+    description: `${paperName} - Question Assessment (${maxMarks} Marks)`,
+    practicalMarks: 0,
     questions: [
       {
-        questionId: 'q-201',
-        questionText: 'Describe cell membrane transport mechanisms and physiological homeostasis under CBME PY1.1.',
+        questionId: 'q-gen-1',
+        questionText: `${paperName} - Evaluation & Question Assessment`,
         mode: 'DESC',
-        topic: 'General Physiology & Cell Membrane',
-        competencyCode: 'PY1.1(2024)',
-        defaultMarks: 10,
-        customMarks: 10,
-        subQuestions: [
-          { id: 'sub-1', label: 'a)', questionText: 'Differentiate between primary and secondary active transport with renal examples.', marks: 5 },
-          { id: 'sub-2', label: 'b)', questionText: 'Explain negative feedback regulation in internal environment homeostasis.', marks: 5 }
-        ]
-      },
-      {
-        questionId: 'q-202',
-        questionText: 'Describe the stages of erythropoiesis and the factors regulating red blood cell production.',
-        mode: 'DESC',
-        topic: 'Haematology & Erythropoiesis',
-        competencyCode: 'PY2.1(2024)',
-        defaultMarks: 10,
-        customMarks: 10,
-        subQuestions: [
-          { id: 'sub-3', label: 'a)', questionText: 'Describe morphological stages of normoblastic maturation in bone marrow.', marks: 5 },
-          { id: 'sub-4', label: 'b)', questionText: 'Detail the role of Vitamin B12, Folic Acid and Iron in hemoglobin synthesis.', marks: 5 }
-        ]
+        topic: isNonMed ? 'Course Syllabus' : 'Curriculum Units',
+        competencyCode: isNonMed ? 'MOD-1' : 'CBME-1',
+        defaultMarks: maxMarks,
+        customMarks: maxMarks,
+        subQuestions: [],
       }
     ]
-  },
-  {
-    id: 'sec-3',
-    name: 'Section C - Practical',
-    type: 'PRACTICAL',
-    description: 'Practical Spotting, OSPE Stations & Viva Voce (20 Marks)',
-    practicalMarks: 20,
-    questions: []
   }
 ];
 
@@ -240,26 +166,8 @@ export default function FacultyMarksPage() {
   const [metaLoaded, setMetaLoaded] = useState<boolean>(false);
 
   const [tenantName, setTenantName] = useState<string>('');
-  const [facultyDeptName, setFacultyDeptName] = useState<string>('Physiology Department');
-
-  // ── Paper States ──────────────────────────────────────────────────────
-  const [allFetchedPapers, setAllFetchedPapers] = useState<ExamPaper[]>([]);
-  const [selectedPaperId, setSelectedPaperId] = useState<string>('');
-
-  // ── Student Roster ────────────────────────────────────────────────────
-  const [students, setStudents] = useState<StudentRow[]>([]);
-  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState<string>('');
-
-  // ── Marks Entry State ─────────────────────────────────────────────────
-  const [questionMarksMap, setQuestionMarksMap] = useState<{ [qId: string]: number }>({});
-  const [subPartMarksMap, setSubPartMarksMap] = useState<{ [subId: string]: number }>({});
-  const [practicalSectionMark, setPracticalSectionMark] = useState<number>(0);
-  const [practicalComponentMarksMap, setPracticalComponentMarksMap] = useState<{ [compId: string]: number }>({});
-
-  const [loading, setLoading] = useState<boolean>(false);
-  const [saving, setSaving] = useState<boolean>(false);
-  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
+  const [facultyDeptName, setFacultyDeptName] = useState<string>('');
+  const [firmMode, setFirmMode] = useState<string>('NONMED');
 
   // ── Dynamic Course & Subject Linker Cascade State ────────────────────
   const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
@@ -279,9 +187,108 @@ export default function FacultyMarksPage() {
     }
   };
 
+  const isNonMed = useMemo(() => {
+    if (firmMode === 'NONMED') return true;
+    if (firmMode === 'MED') return false;
+    const slug = getTenantSlug().toLowerCase();
+    if (slug === 'team-university' || slug === 'apex-tech') return true;
+    const courseName = (academicCascade?.course?.course_name || '').toLowerCase();
+    if (courseName && (
+      courseName.includes('bba') ||
+      courseName.includes('btech') ||
+      courseName.includes('b.tech') ||
+      courseName.includes('engineering') ||
+      courseName.includes('business') ||
+      courseName.includes('commerce') ||
+      courseName.includes('law') ||
+      courseName.includes('computer')
+    )) {
+      return true;
+    }
+    return false;
+  }, [firmMode, academicCascade]);
+
+  const cleanDescription = (desc?: string) => {
+    if (!desc) {
+      return isNonMed
+        ? 'Laboratory experiment, project assessment, and oral viva voce evaluation.'
+        : 'Clinical procedure execution, OSPE stations, and oral viva voce evaluation.';
+    }
+    if (isNonMed) {
+      return desc
+        .replace(/OSPE Stations/gi, 'Lab Tasks')
+        .replace(/Practical Spotting,\s*OSPE Stations\s*&/gi, 'Practical &')
+        .replace(/OSPE Spotting/gi, 'Practical Assessment')
+        .replace(/OSPE/gi, 'Lab Assessment');
+    }
+    return desc;
+  };
+
+  // ── Paper States ──────────────────────────────────────────────────────
+  const [allFetchedPapers, setAllFetchedPapers] = useState<ExamPaper[]>([]);
+  const [selectedPaperId, setSelectedPaperId] = useState<string>('');
+
+  // ── Student Roster ────────────────────────────────────────────────────
+  const [students, setStudents] = useState<StudentRow[]>([]);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // ── Marks Entry State ─────────────────────────────────────────────────
+  const [questionMarksMap, setQuestionMarksMap] = useState<{ [qId: string]: number | string }>({});
+  const [subPartMarksMap, setSubPartMarksMap] = useState<{ [subId: string]: number | string }>({});
+  const [practicalSectionMark, setPracticalSectionMark] = useState<number | string>(0);
+  const [practicalComponentMarksMap, setPracticalComponentMarksMap] = useState<{ [compId: string]: number | string }>({});
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  const [loading, setLoading] = useState<boolean>(false);
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string>('');
+
+  const detectFirmMode = async () => {
+    const stored = typeof window !== 'undefined' ? (localStorage.getItem('firm_mode') || localStorage.getItem('firmMode')) : '';
+    if (stored) {
+      setFirmMode(stored.toUpperCase());
+      return;
+    }
+    try {
+      const uStr = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+      if (uStr) {
+        const u = JSON.parse(uStr);
+        if (u.firm_mode || u.firmMode) {
+          const fm = String(u.firm_mode || u.firmMode).toUpperCase();
+          setFirmMode(fm);
+          return;
+        }
+      }
+    } catch {}
+
+    const slug = getTenantSlug().toLowerCase();
+    if (slug === 'team-university' || slug === 'apex-tech') {
+      setFirmMode('NONMED');
+      return;
+    }
+
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null;
+    if (token) {
+      try {
+        const res = await fetch(`${API_BASE}/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const d = await res.json();
+          const fm = d?.firm_mode || d?.firmMode || d?.user?.firm_mode || d?.user?.firmMode;
+          if (fm) {
+            setFirmMode(String(fm).toUpperCase());
+          }
+        }
+      } catch {}
+    }
+  };
+
   // ── On Mount: fetch all metadata ──────────────────────────────────────
   useEffect(() => {
     setTenantName(getTenantName());
+    detectFirmMode();
     fetchAllMetadata();
   }, []);
 
@@ -309,7 +316,6 @@ export default function FacultyMarksPage() {
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
 
     try {
-      // 1. Faculty profile for dept context (use dept_id & dept_name for auto-select)
       let userDeptId = typeof window !== 'undefined' ? localStorage.getItem('departmentId') || '' : '';
       let userDeptNameStr = typeof window !== 'undefined' ? localStorage.getItem('departmentName') || '' : '';
       let userSubjId = typeof window !== 'undefined' ? localStorage.getItem('subjectId') || '' : '';
@@ -383,7 +389,6 @@ export default function FacultyMarksPage() {
         if (fetchedSubjects.length > 0) {
           const deptSubjs = fetchedSubjects.filter(s => s.department_id === matched.id);
           const matchedSubj = (userSubjId ? deptSubjs.find(s => s.id === userSubjId) || fetchedSubjects.find(s => s.id === userSubjId) : null) ||
-            deptSubjs.find(s => s.code === 'PY' || s.name.toUpperCase() === 'PHYSIOLOGY') ||
             deptSubjs[0] ||
             fetchedSubjects[0];
           if (matchedSubj) setSelectedSubject(matchedSubj.id);
@@ -395,9 +400,9 @@ export default function FacultyMarksPage() {
         const bList = parseList(await bRes.json());
         const mapped: Batch[] = bList.map((b: any) => ({
           id: b.id,
-          code: b.code || `${b.year}-MBBS`,
+          code: b.code || (b.year ? `Batch ${b.year}` : `Batch ${b.batch_cd || b.id}`),
           year: b.year,
-          name: b.name || `${b.code} Batch (Year ${b.year})`,
+          name: b.name || `${b.code || (b.year ? `Batch ${b.year}` : 'Batch')}`,
         }));
         setBatches(mapped);
         const latest = mapped.sort((a, b) => (b.year || 0) - (a.year || 0))[0];
@@ -449,68 +454,115 @@ export default function FacultyMarksPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const headers = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
 
+    let facIdParam = '';
+    let currentRole = '';
+    if (typeof window !== 'undefined') {
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        facIdParam = u.faculty_id || u.profile?.id || u.id || u.sub || u.emp_id || localStorage.getItem('empid') || '';
+        currentRole = (u.role || '').toUpperCase();
+      } catch {}
+    }
+
     try {
-      const res = await fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers });
+      // Query authentic examination papers from backend database
+      const queryParams = new URLSearchParams({
+        tenant: slug,
+        status: 'DQAC_APPROVED,HOD_APPROVED,APPROVED,PUBLISHED',
+      });
+      if (facIdParam) queryParams.set('facultyId', facIdParam);
+      if (currentRole) queryParams.set('role', currentRole);
+
+      if (academicCascade?.college?.colg_cd) queryParams.set('colgCd', academicCascade.college.colg_cd);
+      if (academicCascade?.course?.course_cd) queryParams.set('courseCd', String(academicCascade.course.course_cd));
+      if (academicCascade?.branch?.branch_cd) queryParams.set('branchCd', String(academicCascade.branch.branch_cd));
+      if (academicCascade?.batch?.batch_cd) queryParams.set('batchCd', String(academicCascade.batch.batch_cd));
+      if (academicCascade?.semester?.sem_cd) queryParams.set('semester', String(academicCascade.semester.sem_cd));
+      if (academicCascade?.section) queryParams.set('section', String(academicCascade.section));
+
+      const res = await fetch(`${API_BASE}/exams/papers?${queryParams.toString()}`, { headers });
+      let rawList: any[] = [];
       if (res.ok) {
         const json = await res.json();
-        const rawList: any[] = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        if (rawList.length > 0) {
-          const seen = new Set<string>();
-          const mapped: ExamPaper[] = rawList
-            .filter((p: any) => {
-              const code = (p.code || '').toUpperCase();
-              const name = (p.name || '').toUpperCase();
-              if (code === 'EXAM-PAPER' || name === 'EXAM-PAPER' || code === 'TEST' || code === 'DUMMY') return false;
-              if (seen.has(p.id) || (p.code && seen.has(p.code))) return false;
-              seen.add(p.id);
-              if (p.code) seen.add(p.code);
-              return true;
-            })
-            .map((p: any) => ({
+        rawList = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+      } else {
+        // Fallback fetch if specific filter returned error
+        const fallbackRes = await fetch(`${API_BASE}/exams/papers?tenant=${slug}${facIdParam ? `&facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers });
+        if (fallbackRes.ok) {
+          const json = await fallbackRes.json();
+          rawList = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
+        }
+      }
+
+      if (rawList.length > 0) {
+        const seen = new Set<string>();
+        const mapped: ExamPaper[] = rawList
+          .filter((p: any) => {
+            const code = (p.code || '').toUpperCase();
+            const name = (p.name || '').toUpperCase();
+            if (code === 'EXAM-PAPER' || name === 'EXAM-PAPER' || code === 'TEST' || code === 'DUMMY') return false;
+
+            // Strictly filter for DQAC / HOD approved papers
+            const st = (p.status || '').toUpperCase().trim();
+            const isApproved = st === 'DQAC_APPROVED' || st === 'HOD_APPROVED' || st === 'APPROVED' || st === 'PUBLISHED';
+            if (!isApproved) return false;
+
+            if (seen.has(p.id) || (p.code && seen.has(p.code))) return false;
+            seen.add(p.id);
+            if (p.code) seen.add(p.code);
+            return true;
+          })
+          .map((p: any) => {
+            const parsedSections = Array.isArray(p.sections) && p.sections.length > 0
+              ? mapRawSections(p.sections)
+              : [];
+            return {
               id: p.id,
-              code: p.code || 'MED-2025-PHY-T1',
-              name: p.name || 'MBBS Physiology Sessional Examination',
+              code: p.code || 'EXAM-PAPER',
+              name: p.name || 'Examination Paper',
               max_marks: Number(p.max_marks || 100),
-              passing_marks: Number(p.passing_marks || 50),
-              duration_mins: Number(p.duration_minutes || p.duration_mins || 180),
-              sections_count: Array.isArray(p.sections) ? p.sections.length : 3,
-              mode: 'MCQs & DESC',
-              status: p.status || 'Approved',
+              passing_marks: Number(p.passing_marks || Math.round(Number(p.max_marks || 100) * 0.4)),
+              duration_mins: Number(p.duration_minutes || p.duration_mins || 60),
+              sections_count: parsedSections.length || 1,
+              mode: p.type || 'MCQs & DESC',
+              status: p.status || 'DQAC_APPROVED',
               subject_id: p.subject_id,
+              subject_name: p.subject_name || '',
+              subject_code: p.subject_code || '',
+              course_name: p.course_name || '',
+              course_cd: p.course_cd || '',
+              branch_cd: p.branch_cd || '',
               batch_id: p.batch_id,
-              topic_name: p.topic_name || 'General Physiology & Cell Membrane',
-              batch_code: p.batch_code || selectedBatch?.code || '2025-MBBS',
-              sections: (Array.isArray(p.sections) && p.sections.length > 0) ? mapRawSections(p.sections) : defaultSections,
-            }));
-          if (mapped.length > 0) {
-            setAllFetchedPapers(mapped);
-            if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
-              setSelectedPaperId(mapped[0].id);
-            }
-            return;
+              batch_name: p.batch_name || '',
+              batch_code: p.batch_code || (p.batch_cd ? `Batch ${p.batch_cd}` : selectedBatch?.code || ''),
+              topic_name: p.topic_name || '',
+              department_name: p.department_name || '',
+              paper_set: p.paper_set || '',
+              exam_date: p.exam_date || '',
+              created_at: p.created_at || '',
+              room_no: p.room_no || '',
+              hall_name: p.hall_name || '',
+              type: p.type || 'THEORY',
+              created_by: p.created_by,
+              sections: parsedSections.length > 0 ? parsedSections : createGenericPaperSections(p.name, Number(p.max_marks || 100), isNonMed),
+            };
+          });
+
+        if (mapped.length > 0) {
+          setAllFetchedPapers(mapped);
+          if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
+            setSelectedPaperId(mapped[0].id);
           }
+          return;
         }
       }
     } catch (e) {
-      console.error('Failed to fetch papers', e);
+      console.error('Failed to fetch authentic papers from database', e);
     }
-    // Fallback if DB empty: create clean initial paper
-    const fallbackPaper: ExamPaper = {
-      id: 'paper-phys-01',
-      code: 'MED-2025-PHY-T1',
-      name: 'MBBS Physiology Sessional Examination (Paper I)',
-      max_marks: 100,
-      passing_marks: 50,
-      duration_mins: 180,
-      sections_count: 3,
-      mode: 'MCQs & DESC',
-      status: 'Approved',
-      topic_name: 'General Physiology & Cell Membrane',
-      batch_code: selectedBatch?.code || '2025-MBBS',
-      sections: defaultSections,
-    };
-    setAllFetchedPapers([fallbackPaper]);
-    setSelectedPaperId(fallbackPaper.id);
+
+    // Never generate fake / mock / medical fallback papers
+    setAllFetchedPapers([]);
+    setSelectedPaperId('');
   };
 
   const mapRawSections = (rawSections: any[]): PaperSection[] => {
@@ -556,10 +608,12 @@ export default function FacultyMarksPage() {
 
     return allFetchedPapers.filter(p => {
       if (p.subject_id && String(p.subject_id).toLowerCase() === subjId) return true;
-      const pCode = p.code.toLowerCase();
-      const pName = p.name.toLowerCase();
-      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjCode))) return true;
-      if (subjName && pName.includes(subjName)) return true;
+      const pCode = (p.code || '').toLowerCase();
+      const pName = (p.name || '').toLowerCase();
+      const pSubjName = (p.subject_name || '').toLowerCase();
+      const pSubjCode = (p.subject_code || '').toLowerCase();
+      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjCode) || pSubjCode.includes(subjCode))) return true;
+      if (subjName && (pName.includes(subjName) || pSubjName.includes(subjName))) return true;
       return false;
     });
   }, [allFetchedPapers, selectedSubject, allSubjects, academicCascade]);
@@ -715,7 +769,38 @@ export default function FacultyMarksPage() {
     return Boolean(activePaper?.sections?.some(s => s.type === 'PRACTICAL'));
   }, [activePaper]);
 
-  // Reset / populate marks when selected student or paper changes
+  // Pre-calculate flat index of all input fields for keyboard Enter navigation
+  const inputIndexMap = useMemo(() => {
+    const map: { [fieldKey: string]: number } = {};
+    let idx = 0;
+    if (!activePaper?.sections) return map;
+
+    activePaper.sections.forEach(sec => {
+      if (sec.type === 'PRACTICAL') {
+        map[`practical_sec_${sec.id}`] = idx++;
+        if (Array.isArray(sec.practicalComponents) && sec.practicalComponents.length > 0) {
+          sec.practicalComponents.forEach((comp, cIdx) => {
+            const compKey = comp.id || `comp_${cIdx}`;
+            map[`practical_comp_${compKey}`] = idx++;
+          });
+        }
+      } else {
+        sec.questions.forEach(q => {
+          if (!q.subQuestions || q.subQuestions.length === 0) {
+            map[`q_${q.questionId}`] = idx++;
+          } else {
+            q.subQuestions.forEach(sq => {
+              map[`sq_${sq.id}`] = idx++;
+            });
+          }
+        });
+      }
+    });
+
+    return map;
+  }, [activePaper]);
+
+  // Reset / populate marks when selected student or paper changes — 0 by default
   useEffect(() => {
     if (!selectedStudent || !activePaper?.sections) return;
     const qMarks: { [qId: string]: number } = {};
@@ -725,14 +810,14 @@ export default function FacultyMarksPage() {
       sec.questions.forEach(q => {
         const savedQ = selectedStudent.questionMarks?.[q.questionId];
         qMarks[q.questionId] = selectedStudent.evaluated
-          ? (savedQ !== undefined ? savedQ : (q.customMarks || q.defaultMarks || 2))
+          ? (savedQ !== undefined && !isNaN(Number(savedQ)) ? Number(savedQ) : 0)
           : 0;
 
         if (Array.isArray(q.subQuestions)) {
           q.subQuestions.forEach(sq => {
             const savedSub = selectedStudent.subPartMarks?.[sq.id];
             subMarks[sq.id] = selectedStudent.evaluated
-              ? (savedSub !== undefined ? savedSub : sq.marks)
+              ? (savedSub !== undefined && !isNaN(Number(savedSub)) ? Number(savedSub) : 0)
               : 0;
           });
         }
@@ -748,13 +833,111 @@ export default function FacultyMarksPage() {
     );
   }, [selectedStudentId, selectedPaperId, selectedStudent?.evaluated, hasPracticalSec]);
 
-  const handleUpdateQMark = (qId: string, mark: number) => setQuestionMarksMap(prev => ({ ...prev, [qId]: mark }));
-  const handleUpdateSubMark = (subId: string, mark: number) => setSubPartMarksMap(prev => ({ ...prev, [subId]: mark }));
+  // Auto focus and select first number when student is selected
+  useEffect(() => {
+    if (selectedStudentId) {
+      const timer = setTimeout(() => {
+        const firstInput = inputRefs.current[0];
+        if (firstInput) {
+          firstInput.focus();
+          firstInput.select();
+        }
+      }, 70);
+      return () => clearTimeout(timer);
+    }
+  }, [selectedStudentId, activePaper?.id]);
+
+  const handleMarkChange = (
+    id: string,
+    rawVal: string,
+    maxMarks: number,
+    type: 'question' | 'sub' | 'practical'
+  ) => {
+    // If user hits backspace and makes it empty, allow empty state for typing
+    if (rawVal === '') {
+      if (type === 'question') setQuestionMarksMap(prev => ({ ...prev, [id]: '' }));
+      else if (type === 'sub') setSubPartMarksMap(prev => ({ ...prev, [id]: '' }));
+      else setPracticalSectionMark('');
+      return;
+    }
+
+    const parsed = parseFloat(rawVal);
+    if (isNaN(parsed)) return;
+
+    // Validation: no negative marks, do not exceed question max marks
+    let validated = parsed;
+    if (validated < 0) {
+      validated = 0;
+    } else if (validated > maxMarks) {
+      validated = maxMarks;
+    }
+
+    if (type === 'question') setQuestionMarksMap(prev => ({ ...prev, [id]: validated }));
+    else if (type === 'sub') setSubPartMarksMap(prev => ({ ...prev, [id]: validated }));
+    else setPracticalSectionMark(validated);
+  };
+
+  const handleMarkBlur = (
+    id: string,
+    maxMarks: number,
+    type: 'question' | 'sub' | 'practical'
+  ) => {
+    // On blur, if field is empty or NaN, default back to 0
+    if (type === 'question') {
+      setQuestionMarksMap(prev => {
+        const v = prev[id];
+        const num = typeof v === 'number' ? v : parseFloat(String(v));
+        const finalVal = isNaN(num) ? 0 : Math.min(maxMarks, Math.max(0, num));
+        return { ...prev, [id]: finalVal };
+      });
+    } else if (type === 'sub') {
+      setSubPartMarksMap(prev => {
+        const v = prev[id];
+        const num = typeof v === 'number' ? v : parseFloat(String(v));
+        const finalVal = isNaN(num) ? 0 : Math.min(maxMarks, Math.max(0, num));
+        return { ...prev, [id]: finalVal };
+      });
+    } else {
+      setPracticalSectionMark(prev => {
+        const num = typeof prev === 'number' ? prev : parseFloat(String(prev));
+        return isNaN(num) ? 0 : Math.min(maxMarks, Math.max(0, num));
+      });
+    }
+  };
+
+  const handleKeyDown = (
+    e: React.KeyboardEvent<HTMLInputElement>,
+    currentIndex: number,
+    id: string,
+    maxMarks: number,
+    type: 'question' | 'sub' | 'practical'
+  ) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleMarkBlur(id, maxMarks, type);
+
+      const nextInput = inputRefs.current[currentIndex + 1];
+      if (nextInput) {
+        nextInput.focus();
+        nextInput.select();
+      } else {
+        // Last question input reached: auto submit and load next student
+        handleSaveStudentEvaluation();
+      }
+    }
+  };
 
   const calculatedStudentTotal = useMemo(() => {
-    const qTotal = Object.values(questionMarksMap).reduce((a, b) => a + Number(b || 0), 0);
-    const subTotal = Object.values(subPartMarksMap).reduce((a, b) => a + Number(b || 0), 0);
-    const total = qTotal + subTotal + (hasPracticalSec ? Number(practicalSectionMark || 0) : 0);
+    const qTotal = Object.values(questionMarksMap).reduce<number>((acc, val) => {
+      const num = typeof val === 'number' ? val : (parseFloat(String(val)) || 0);
+      return acc + (isNaN(num) ? 0 : num);
+    }, 0);
+    const subTotal = Object.values(subPartMarksMap).reduce<number>((acc, val) => {
+      const num = typeof val === 'number' ? val : (parseFloat(String(val)) || 0);
+      return acc + (isNaN(num) ? 0 : num);
+    }, 0);
+    const practVal = typeof practicalSectionMark === 'number' ? practicalSectionMark : (parseFloat(String(practicalSectionMark)) || 0);
+    const total = qTotal + subTotal + (hasPracticalSec ? (isNaN(practVal) ? 0 : practVal) : 0);
     return Math.round(total * 100) / 100;
   }, [questionMarksMap, subPartMarksMap, practicalSectionMark, hasPracticalSec]);
 
@@ -763,6 +946,25 @@ export default function FacultyMarksPage() {
     setSaving(true);
     const slug = getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+
+    const sanitizedQMarks: { [k: string]: number } = {};
+    Object.entries(questionMarksMap).forEach(([k, v]) => {
+      const num = typeof v === 'number' ? v : parseFloat(String(v));
+      sanitizedQMarks[k] = isNaN(num) ? 0 : num;
+    });
+
+    const sanitizedSubMarks: { [k: string]: number } = {};
+    Object.entries(subPartMarksMap).forEach(([k, v]) => {
+      const num = typeof v === 'number' ? v : parseFloat(String(v));
+      sanitizedSubMarks[k] = isNaN(num) ? 0 : num;
+    });
+
+    const sanitizedPractical = typeof practicalSectionMark === 'number'
+      ? practicalSectionMark
+      : (parseFloat(String(practicalSectionMark)) || 0);
+
+    const evaluatedTotal = calculatedStudentTotal;
+
     try {
       await fetch(`${API_BASE}/exams/results?tenant=${slug}`, {
         method: 'POST',
@@ -772,10 +974,10 @@ export default function FacultyMarksPage() {
           rollno: selectedStudent.rollno,
           studentName: selectedStudent.name,
           paperId: activePaper.id,
-          marksObtained: calculatedStudentTotal,
-          questionMarks: questionMarksMap,
-          subPartMarks: subPartMarksMap,
-          practicalMark: hasPracticalSec ? practicalSectionMark : 0,
+          marksObtained: evaluatedTotal,
+          questionMarks: sanitizedQMarks,
+          subPartMarks: sanitizedSubMarks,
+          practicalMark: hasPracticalSec ? sanitizedPractical : 0,
         }),
       });
     } catch (err) {
@@ -791,9 +993,9 @@ export default function FacultyMarksPage() {
         const compMax = compQs.reduce((a, q) => a + (q.customMarks || 2), 0);
         const compScored = compQs.reduce((a, q) => {
           if (q.subQuestions?.length) {
-            return a + q.subQuestions.reduce((sa, sq) => sa + (subPartMarksMap[sq.id] || 0), 0);
+            return a + q.subQuestions.reduce((sa, sq) => sa + (sanitizedSubMarks[sq.id] || 0), 0);
           }
-          return a + (questionMarksMap[q.questionId] || 0);
+          return a + (sanitizedQMarks[q.questionId] || 0);
         }, 0);
         compScores[comp] = { scored: compScored, max: compMax || 50 };
       });
@@ -801,17 +1003,29 @@ export default function FacultyMarksPage() {
       return {
         ...s,
         evaluated: true,
-        marks_obtained: calculatedStudentTotal,
+        marks_obtained: evaluatedTotal,
         max_marks: maxM,
-        questionMarks: questionMarksMap,
-        subPartMarks: subPartMarksMap,
-        practicalMark: hasPracticalSec ? practicalSectionMark : 0,
+        questionMarks: sanitizedQMarks,
+        subPartMarks: sanitizedSubMarks,
+        practicalMark: hasPracticalSec ? sanitizedPractical : 0,
         competencyScores: compScores,
-        is_pass: calculatedStudentTotal >= (maxM * 0.4)
+        is_pass: evaluatedTotal >= (maxM * 0.4)
       };
     }));
 
-    setSaveSuccessMsg(`Evaluation for ${selectedStudent.name} (${calculatedStudentTotal.toFixed(2)} / ${activePaper.max_marks} Marks) saved successfully!`);
+    // Auto-load next student from the roster
+    const currentIdx = filteredStudents.findIndex(s => s.id === selectedStudent.id);
+    const nextStudent = currentIdx >= 0 && currentIdx + 1 < filteredStudents.length
+      ? filteredStudents[currentIdx + 1]
+      : null;
+
+    if (nextStudent) {
+      setSelectedStudentId(nextStudent.id);
+      setSaveSuccessMsg(`Evaluation for ${selectedStudent.name} (${evaluatedTotal.toFixed(2)} / ${activePaper.max_marks} Marks) saved! Next student loaded: ${nextStudent.name}`);
+    } else {
+      setSaveSuccessMsg(`Evaluation for ${selectedStudent.name} (${evaluatedTotal.toFixed(2)} / ${activePaper.max_marks} Marks) saved! All students in roster evaluated.`);
+    }
+
     setTimeout(() => setSaveSuccessMsg(''), 5000);
     setSaving(false);
   };
@@ -869,7 +1083,7 @@ export default function FacultyMarksPage() {
                 Faculty Evaluation Center — Designed Paper Grading
               </h2>
               <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
-                Evaluate student paper submissions section-wise, enter marks per question, and track CBME Competency Achievement.
+                Evaluate student paper submissions section-wise, enter marks per question, and track {isNonMed ? 'Course Learning Outcomes & Module Performance' : 'CBME Competency Achievement'}.
               </p>
             </div>
 
@@ -900,15 +1114,19 @@ export default function FacultyMarksPage() {
                 STEP 2: DESIGNED &amp; APPROVED EXAMINATION PAPERS ({filteredPapers.length} Papers)
               </h3>
               <span className="px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                ✓ Approved — MCQs &amp; DESC Mode
+                ✓ DAQC Approved — Marking Enabled
               </span>
             </div>
 
             {filteredPapers.length === 0 ? (
               <div className="py-12 text-center space-y-2">
                 <span className="text-4xl">📋</span>
-                <p className="text-sm font-black text-[#1B1E28] dark:text-white">No Designed Examination Papers Found</p>
-                <p className="text-xs text-[#4E5969] dark:text-slate-400">Design and publish examination papers in the Assessment Designer tab first.</p>
+                <p className="text-sm font-black text-[#1B1E28] dark:text-white">
+                  No DQAC-Approved Examination Papers Found
+                </p>
+                <p className="text-xs text-[#4E5969] dark:text-slate-400 max-w-md mx-auto">
+                  Only authentic question papers created and approved by DQAC / HOD for this faculty and subject are displayed here for marks entry.
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
@@ -937,28 +1155,51 @@ export default function FacultyMarksPage() {
                         {/* Left Side: Time / Duration & Date */}
                         <div className="shrink-0 space-y-1">
                           <p className="text-lg sm:text-xl font-black text-[#F36C21] tracking-tight">
-                            {paper.duration_mins ? `${paper.duration_mins} MINS` : '180 MINS'}
+                            {paper.duration_mins ? `${paper.duration_mins} MINS` : '60 MINS'}
                           </p>
                           <p className="text-[11px] font-extrabold uppercase text-[#4E5969] dark:text-slate-400">
                             {paper.max_marks} MARKS
                           </p>
                           <p className="text-[10px] font-bold text-[#7B8794] uppercase mt-1">
-                            MON, AUG 10
+                            {(() => {
+                              const rawDate = paper.exam_date || paper.created_at;
+                              if (!rawDate) return 'SESSION 2026';
+                              try {
+                                const d = new Date(rawDate);
+                                if (isNaN(d.getTime())) return 'SESSION 2026';
+                                return d.toLocaleDateString('en-US', {
+                                  weekday: 'short',
+                                  month: 'short',
+                                  day: 'numeric',
+                                }).toUpperCase();
+                              } catch {
+                                return 'SESSION 2026';
+                              }
+                            })()}
                           </p>
                         </div>
 
                         {/* Right Side: Title, Peach Tag, and Meta */}
                         <div className="flex-1 min-w-0 space-y-2 text-right">
-                          <h4 className="text-xs sm:text-sm font-black text-[#1B1E28] dark:text-white uppercase truncate">
-                            {deptObj?.name || 'PHYSIOLOGY'} — {paper.name}
+                          <h4 className="text-xs sm:text-sm font-black text-[#1B1E28] dark:text-white uppercase truncate" title={paper.name}>
+                            {(() => {
+                              const subj = paper.subject_name || academicCascade?.subject?.name || '';
+                              if (subj && !paper.name.toLowerCase().includes(subj.toLowerCase())) {
+                                return `${subj} — ${paper.name}`;
+                              }
+                              return paper.name;
+                            })()}
                           </h4>
 
                           <div className="inline-block px-3 py-1 rounded-full bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30 text-[10px] font-extrabold uppercase tracking-tight truncate max-w-full">
-                            THEORY "{paper.topic_name || 'General Physiology & Cell Membrane'}"
+                            {(paper.type || 'EXAM').toUpperCase()} &quot;{paper.topic_name || (paper.paper_set ? `SET ${paper.paper_set}` : paper.subject_name || paper.name)}&quot;
                           </div>
 
                           <div className="text-[11px] text-[#4E5969] dark:text-slate-400 font-bold space-y-0.5">
-                            <p>#{paper.batch_code || selectedBatch?.code || '2025-MBBS'} • Room LT-1 Medical</p>
+                            <p>
+                              #{paper.batch_name || paper.batch_code || academicCascade?.batch?.batch_name || selectedBatch?.name || 'Batch'}
+                              {paper.room_no || paper.hall_name ? ` • ${paper.room_no || paper.hall_name}` : ''}
+                            </p>
                             <p className="text-[10px] text-[#7B8794]">
                               🕒 [{paper.code}] • Pass: {paper.passing_marks} Marks
                             </p>
@@ -1111,42 +1352,54 @@ export default function FacultyMarksPage() {
                                 {sec.type}
                               </span>
                             </h4>
-                            <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-bold">{sec.description}</span>
+                            <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-bold">{cleanDescription(sec.description)}</span>
                           </div>
 
-                          {/* Practical Section OSPE */}
+                          {/* Practical Section OSPE / Lab Assessment */}
                           {sec.type === 'PRACTICAL' ? (
                             <div className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-800 shadow-sm space-y-3">
                               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-purple-100 dark:border-purple-900/40 pb-2.5">
                                 <div>
                                   <p className="text-xs font-black text-[#1B1E28] dark:text-white flex items-center gap-1.5">
-                                    <span>🧪</span>
-                                    <span>{sec.name || 'Practical & Viva Voce Assessment'}</span>
+                                    <span>{isNonMed ? '📊' : '🧪'}</span>
+                                    <span>{sec.name || (isNonMed ? 'Practical / Lab & Viva Voce Assessment' : 'Practical & Viva Voce Assessment')}</span>
                                   </p>
                                   <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">
-                                    {sec.description || 'OSPE Spotting, procedure execution, and oral viva voce evaluation.'} · Max Weightage: {sec.practicalMarks || 20} Marks
+                                    {cleanDescription(sec.description)} · Max Weightage: {sec.practicalMarks || 20} Marks
                                   </span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-[#4E5969] dark:text-slate-300">Total Awarded Marks:</span>
-                                  <input
-                                    type="number"
-                                    min={0}
-                                    max={sec.practicalMarks || 20}
-                                    step="any"
-                                    value={practicalSectionMark}
-                                    onChange={e => setPracticalSectionMark(parseFloat(e.target.value) || 0)}
-                                    className="w-20 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-purple-400 text-purple-700 dark:text-purple-300 font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-purple-400 shadow-sm"
-                                  />
-                                  <span className="text-xs text-[#7B8794] font-bold">/ {sec.practicalMarks || 20}</span>
-                                </div>
+                                  {(() => {
+                                    const pMax = sec.practicalMarks || 20;
+                                    const inputIdx = inputIndexMap[`practical_sec_${sec.id}`] ?? 0;
+                                    const currentVal = practicalSectionMark !== undefined ? practicalSectionMark : 0;
+                                    return (
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-xs font-bold text-[#4E5969] dark:text-slate-300">Total Awarded Marks:</span>
+                                        <input
+                                          ref={el => { inputRefs.current[inputIdx] = el; }}
+                                          type="number"
+                                          min={0}
+                                          max={pMax}
+                                          step="any"
+                                          value={currentVal}
+                                          placeholder="0"
+                                          onFocus={e => e.target.select()}
+                                          onChange={e => handleMarkChange(sec.id, e.target.value, pMax, 'practical')}
+                                          onBlur={() => handleMarkBlur(sec.id, pMax, 'practical')}
+                                          onKeyDown={e => handleKeyDown(e, inputIdx, sec.id, pMax, 'practical')}
+                                          className="w-20 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-purple-400 text-purple-700 dark:text-purple-300 font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-purple-400 shadow-sm transition"
+                                        />
+                                        <span className="text-xs text-[#7B8794] font-bold">/ {pMax}</span>
+                                      </div>
+                                    );
+                                  })()}
                               </div>
 
                               {/* Station Breakdown if practicalComponents are defined */}
                               {Array.isArray(sec.practicalComponents) && sec.practicalComponents.length > 0 && (
                                 <div className="space-y-2 pt-1">
                                   <span className="text-[10px] font-extrabold uppercase text-purple-700 dark:text-purple-300 block">
-                                    Station-Wise Rubric Scoring (Auto-Sums into Total):
+                                    {isNonMed ? 'Component-Wise Rubric Scoring (Auto-Sums into Total):' : 'Station-Wise Rubric Scoring (Auto-Sums into Total):'}
                                   </span>
                                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                     {sec.practicalComponents.map((comp: any, cIdx: number) => {
@@ -1230,22 +1483,31 @@ export default function FacultyMarksPage() {
                                     </div>
 
                                     {/* Direct Marks Input (for single prompt questions) */}
-                                    {(!q.subQuestions || q.subQuestions.length === 0) && (
-                                      <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
-                                        <span className="text-[11px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
-                                        <input
-                                          type="number"
-                                          min={0}
-                                          max={q.customMarks || q.defaultMarks || 2}
-                                          step={0.5}
-                                          value={questionMarksMap[q.questionId] !== undefined ? questionMarksMap[q.questionId] : ''}
-                                          placeholder="0"
-                                          onChange={e => handleUpdateQMark(q.questionId, Number(e.target.value))}
-                                          className="w-16 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-[#5B4BFF]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] shadow-sm"
-                                        />
-                                        <span className="text-[11px] text-[#7B8794] font-bold">/ {q.customMarks || q.defaultMarks || 2}</span>
-                                      </div>
-                                    )}
+                                    {(!q.subQuestions || q.subQuestions.length === 0) && (() => {
+                                      const qMax = q.customMarks || q.defaultMarks || 2;
+                                      const inputIdx = inputIndexMap[`q_${q.questionId}`] ?? 0;
+                                      const currentVal = questionMarksMap[q.questionId] !== undefined ? questionMarksMap[q.questionId] : 0;
+                                      return (
+                                        <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                                          <span className="text-[11px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
+                                          <input
+                                            ref={el => { inputRefs.current[inputIdx] = el; }}
+                                            type="number"
+                                            min={0}
+                                            max={qMax}
+                                            step={0.5}
+                                            value={currentVal}
+                                            placeholder="0"
+                                            onFocus={e => e.target.select()}
+                                            onChange={e => handleMarkChange(q.questionId, e.target.value, qMax, 'question')}
+                                            onBlur={() => handleMarkBlur(q.questionId, qMax, 'question')}
+                                            onKeyDown={e => handleKeyDown(e, inputIdx, q.questionId, qMax, 'question')}
+                                            className="w-16 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-[#5B4BFF]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] shadow-sm transition"
+                                          />
+                                          <span className="text-[11px] text-[#7B8794] font-bold">/ {qMax}</span>
+                                        </div>
+                                      );
+                                    })()}
                                   </div>
 
                                   {/* Sub-Questions / Sub-Parts Tree */}
@@ -1258,6 +1520,8 @@ export default function FacultyMarksPage() {
                                           const sqMax = totalRaw > 0
                                             ? Number(((Number(sq.marks || 1) / totalRaw) * qMax).toFixed(2))
                                             : Number((qMax / (q.subQuestions?.length || 1)).toFixed(2));
+                                          const inputIdx = inputIndexMap[`sq_${sq.id}`] ?? 0;
+                                          const currentVal = subPartMarksMap[sq.id] !== undefined ? subPartMarksMap[sq.id] : 0;
                                           
                                           return (
                                             <div key={sq.id} className="flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
@@ -1268,14 +1532,18 @@ export default function FacultyMarksPage() {
                                               <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
                                                 <span className="text-[10px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
                                                 <input
+                                                  ref={el => { inputRefs.current[inputIdx] = el; }}
                                                   type="number"
                                                   min={0}
                                                   max={sqMax}
                                                   step={0.5}
-                                                  value={subPartMarksMap[sq.id] !== undefined ? subPartMarksMap[sq.id] : ''}
+                                                  value={currentVal}
                                                   placeholder="0"
-                                                  onChange={e => handleUpdateSubMark(sq.id, Number(e.target.value))}
-                                                  className="w-16 px-2 py-1 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#00C48C] shadow-sm"
+                                                  onFocus={e => e.target.select()}
+                                                  onChange={e => handleMarkChange(sq.id, e.target.value, sqMax, 'sub')}
+                                                  onBlur={() => handleMarkBlur(sq.id, sqMax, 'sub')}
+                                                  onKeyDown={e => handleKeyDown(e, inputIdx, sq.id, sqMax, 'sub')}
+                                                  className="w-16 px-2 py-1 rounded-xl bg-white dark:bg-slate-900 border-2 border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#00C48C] shadow-sm transition"
                                                 />
                                                 <span className="text-[10px] text-[#7B8794] font-bold">/ {sqMax}</span>
                                               </div>
@@ -1336,9 +1604,11 @@ export default function FacultyMarksPage() {
                 <div>
                   <h3 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-[#00C48C] text-white flex items-center justify-center text-[10px] font-black">4</span>
-                    📈 CBME COMPETENCY PERFORMANCE MATRIX &amp; RESULTS
+                    📈 {isNonMed ? 'COURSE OUTCOME & LEARNING PERFORMANCE MATRIX' : 'CBME COMPETENCY PERFORMANCE MATRIX'} &amp; RESULTS
                   </h3>
-                  <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">Competency-wise breakdown and outcome matrix per student</p>
+                  <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
+                    {isNonMed ? 'Outcome and module-wise breakdown per student' : 'Competency-wise breakdown and outcome matrix per student'}
+                  </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-black text-[#4E5969] dark:text-slate-400 uppercase">PAPER:</span>

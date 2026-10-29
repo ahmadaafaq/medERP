@@ -37,11 +37,10 @@ const COURSE_MAP: Record<string, string> = {
 /**
  * Formats numeric or raw course code into proper academic title (e.g. 13 -> BCA, 4 -> MBA, 3 -> MCA, 1 -> B.Tech)
  */
-export function formatCourseName(courseCd?: string | number | null, courseName?: string | null): string {
+export function formatCourseName(courseCd?: string | number | null, courseName?: string | null, tenantSlug?: string | null): string {
   if (courseName && courseName.trim()) {
     const rawName = courseName.trim();
     const upperName = rawName.toUpperCase();
-    if (COURSE_MAP[upperName]) return COURSE_MAP[upperName];
     if (upperName === 'B.TECH.' || upperName === 'B.TECH') return 'B.Tech';
     if (upperName === 'B.PHARM.' || upperName === 'B.PHARM') return 'B.Pharm';
     if (upperName === 'M.TECH.' || upperName === 'M.TECH') return 'M.Tech';
@@ -50,7 +49,29 @@ export function formatCourseName(courseCd?: string | number | null, courseName?:
   }
 
   const rawCd = String(courseCd || '').trim().toUpperCase();
-  if (COURSE_MAP[rawCd]) return COURSE_MAP[rawCd];
+  if (!rawCd) return '';
+
+  // Determine if active tenant is SRMS
+  let slug = (tenantSlug || '').toLowerCase();
+  if (!slug && typeof window !== 'undefined') {
+    slug = (
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('tenant') ||
+      ''
+    ).toLowerCase();
+  }
+  const isSrms = slug.includes('srms');
+
+  // Only map numeric codes to B.Tech, MCA etc. if tenant is SRMS
+  if (isSrms && COURSE_MAP[rawCd]) {
+    return COURSE_MAP[rawCd];
+  }
+
+  // Non-numeric standard names (e.g. BBA, BCA, MBA) can still be returned
+  if (!/^\d+$/.test(rawCd) && COURSE_MAP[rawCd]) {
+    return COURSE_MAP[rawCd];
+  }
 
   return rawCd ? `Course ${rawCd}` : '';
 }

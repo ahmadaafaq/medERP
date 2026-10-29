@@ -6,6 +6,8 @@ import Header from '../../../../components/Header';
 import FacultyAcademicCascadingDropdown, {
   AcademicCascadingState,
 } from '../../../../components/faculty/FacultyAcademicCascadingDropdown';
+import QuestionPaperReviewModal from '../../../../components/exam/QuestionPaperReviewModal';
+import ImagePreviewModal from '../../../../components/exam/ImagePreviewModal';
 
 interface SubQuestion {
   id: string;
@@ -272,6 +274,9 @@ export default function FacultyAssessmentMasterPage() {
   // Tenant from session — no manual college selection
   const [tenantName, setTenantName] = useState<string>('');
 
+  // Image Preview Modal State
+  const [viewingImageModal, setViewingImageModal] = useState<{ src: string; title?: string } | null>(null);
+
   // Faculty Context Profile State
   const [facultyDeptName, setFacultyDeptName] = useState<string>('');
 
@@ -316,10 +321,24 @@ export default function FacultyAssessmentMasterPage() {
     if (state.college) {
       setTenantName(state.college.colg_name);
     }
-    if (state.branch) {
+    const branchCd = state.branch?.branch_cd || '';
+    const courseCd = state.course?.course_cd || '';
+    const courseName = (state.course?.course_name || '').toLowerCase();
+
+    // Match department accurately from loaded departments
+    const matchedDept = departments.find(d => 
+      (branchCd && (d.code === String(branchCd) || d.name.toLowerCase() === String(branchCd).toLowerCase())) ||
+      (courseCd && (d.code === String(courseCd) || d.name.toLowerCase() === String(courseCd).toLowerCase())) ||
+      (courseName.includes('bba') && (d.code === '2' || d.name.toLowerCase().includes('bba')))
+    );
+    if (matchedDept) {
+      setSelectedDept(matchedDept.id);
+      setFacultyDeptName(matchedDept.name);
+    } else if (state.branch) {
       setSelectedDept(state.branch.branch_cd);
       setFacultyDeptName(state.branch.branch_name);
     }
+
     if (state.subject) {
       setSelectedSubject(state.subject.code || state.subject.id);
     }
@@ -377,13 +396,17 @@ export default function FacultyAssessmentMasterPage() {
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Tab 2 & 3 States
-  const [paperTitle, setPaperTitle] = useState('MBBS Physiology Sessional Exam');
-  const [paperCode, setPaperCode] = useState('MED-2025-PHY-T1');
-  const [paperDuration, setPaperDuration] = useState(180);
-  const [paperTotalMarks, setPaperTotalMarks] = useState(100);
+  const [paperTitle, setPaperTitle] = useState('');
+  const [paperCode, setPaperCode] = useState('');
+  const [paperDuration, setPaperDuration] = useState(60);
+  const [paperTotalMarks, setPaperTotalMarks] = useState(40);
   const [paperSet, setPaperSet] = useState<string>('Set A');
   const [targetSections, setTargetSections] = useState<string[]>(['All']);
   const [designedPapers, setDesignedPapers] = useState<any[]>([]);
+
+  // Pending custom marks and subquestion marks in question bank drawer before adding
+  const [pickerTotalMarks, setPickerTotalMarks] = useState<Record<string, number>>({});
+  const [pickerSubMarks, setPickerSubMarks] = useState<Record<string, Record<string, number>>>({});
 
   // Dynamic Paper Sections State
   const [paperSections, setPaperSections] = useState<any[]>([
@@ -415,7 +438,7 @@ export default function FacultyAssessmentMasterPage() {
   const [secQuestionPick, setSecQuestionPick] = useState<{ [secId: string]: string }>({});
 
   const [selectedPaperToPublish, setSelectedPaperToPublish] = useState<string>('');
-  const [publishTargetBatch, setPublishTargetBatch] = useState('2025-MBBS');
+  const [publishTargetBatch, setPublishTargetBatch] = useState('2026');
   const [publishDate, setPublishDate] = useState('2026-08-25');
   const [publishStartTime, setPublishStartTime] = useState('09:00');
   const [publishEndTime, setPublishEndTime] = useState('12:00');
@@ -425,12 +448,36 @@ export default function FacultyAssessmentMasterPage() {
   const [createdPapersList, setCreatedPapersList] = useState<any[]>([]);
   const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
   const [showPaperEditor, setShowPaperEditor] = useState<boolean>(false);
+  const [previewModalPaper, setPreviewModalPaper] = useState<any | null>(null);
+
+  const renderPaperStatusBadge = (status: string) => {
+    switch (status) {
+      case 'PENDING_DQAC_APPROVAL':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">🔍 PENDING DQAC AUDIT</span>;
+      case 'DQAC_APPROVED':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">✨ DQAC APPROVED</span>;
+      case 'PENDING_HOD_APPROVAL':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">⏳ PENDING HOD</span>;
+      case 'HOD_APPROVED':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">✓ HOD APPROVED</span>;
+      case 'CHANGES_REQUESTED':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#FEECEB] text-[#F04438] border border-[#F04438]/30">⚠️ CHANGES REQUESTED</span>;
+      case 'POSTPONED':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">⏸️ POSTPONED</span>;
+      case 'PUBLISHED':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">🚀 PUBLISHED</span>;
+      case 'DRAFT':
+      default:
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#F1F4F9] text-[#4E5969] border border-[#E7EAF3]">📝 DRAFT</span>;
+    }
+  };
 
   const fetchCreatedPapersList = async () => {
     const slug = getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug };
     try {
+      let matchedDept: any = null;
       let u: any = {};
       try {
         u = JSON.parse(localStorage.getItem('user') || '{}');
@@ -452,8 +499,17 @@ export default function FacultyAssessmentMasterPage() {
         // STRICT CONFIDENTIALITY: Faculty can ONLY view question papers that they prepared.
         // Other faculties from the same department cannot view it.
         const isFaculty = !userRole || userRole === 'FACULTY' || userRole === 'TEACHER' || userRole === 'INSTRUCTOR';
-        const filtered = (isFaculty && userId)
-          ? list.filter((p: any) => p.created_by && String(p.created_by) === String(userId))
+        const userIds = [u.id, u.sub, u.faculty_id, u.emp_id, typeof window !== 'undefined' ? localStorage.getItem('empid') : null, typeof window !== 'undefined' ? localStorage.getItem('userId') : null]
+          .filter(Boolean)
+          .map(x => String(x).toLowerCase());
+
+        const filtered = isFaculty
+          ? (userIds.length > 0
+              ? list.filter((p: any) => {
+                  const pCreated = String(p.created_by || p.faculty_id || '').toLowerCase();
+                  return userIds.includes(pCreated);
+                })
+              : [])
           : list;
         setCreatedPapersList(filtered);
       }
@@ -463,10 +519,9 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   useEffect(() => {
-    if (activeTab === 'design' || activeTab === 'publish') {
-      fetchCreatedPapersList();
-    }
-  }, [activeTab, selectedSubject]);
+    fetchCreatedPapersList();
+    fetchDesignedPapers();
+  }, [activeTab, selectedSubject, academicCascade?.subject?.code, academicCascade?.subject?.id]);
 
   const handleCreateNewPaper = () => {
     setEditingPaperId(null);
@@ -511,6 +566,13 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   const handleEditExistingPaper = (paper: any) => {
+    if (paper.status === 'DQAC_APPROVED' || paper.status === 'HOD_APPROVED' || paper.status === 'PENDING_HOD_APPROVAL') {
+      setAlert({
+        type: 'error',
+        message: '🔒 This question paper has been approved by DQAC / is locked against direct edits. You can clone it as a new set (which must be re-approved).'
+      });
+      return;
+    }
     setEditingPaperId(paper.id);
     setPaperTitle(paper.name || 'MBBS Sessional Examination');
     setPaperCode(paper.code || 'MED-EXAM-01');
@@ -557,7 +619,8 @@ export default function FacultyAssessmentMasterPage() {
           optionD: q.option_d || q.optionD,
           correctOption: q.correct_option || q.correctOption,
           subQuestions: Array.isArray(q.sub_questions) ? q.sub_questions : (Array.isArray(q.subQuestions) ? q.subQuestions : []),
-          imageUrl: q.image_url || q.imageUrl || null,
+          imageUrl: q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url || null,
+          image_url: q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url || null,
         }));
 
         return {
@@ -640,7 +703,7 @@ export default function FacultyAssessmentMasterPage() {
       setPaperSections(JSON.parse(JSON.stringify(rawSections)));
     }
     setShowPaperEditor(true);
-    setAlert({ type: 'success', message: `Duplicated paper into new draft ${nextSet}! You can now shuffle questions or target a specific section.` });
+    setAlert({ type: 'success', message: `📋 Cloned paper into new draft ${nextSet}! Note: This cloned paper is in DRAFT state and MUST be re-submitted for DQAC Quality Audit approval before use.` });
     setTimeout(() => {
       document.getElementById('paper-editor-container')?.scrollIntoView({ behavior: 'smooth' });
     }, 100);
@@ -736,6 +799,33 @@ export default function FacultyAssessmentMasterPage() {
     });
   };
 
+  const handlePickerTotalMarksChange = (qId: string, marks: number, subQuestions?: any[]) => {
+    setPickerTotalMarks(prev => ({ ...prev, [qId]: marks }));
+    if (Array.isArray(subQuestions) && subQuestions.length > 0) {
+      const oldTotalRaw = subQuestions.reduce((sum: number, s: any) => sum + Number(s.marks || 1), 0) || 1;
+      const newSubMap: Record<string, number> = {};
+      subQuestions.forEach((sq: any) => {
+        const subKey = sq.id || sq.label;
+        newSubMap[subKey] = Number(((Number(sq.marks || 1) / oldTotalRaw) * marks).toFixed(2));
+      });
+      setPickerSubMarks(prev => ({ ...prev, [qId]: newSubMap }));
+    }
+  };
+
+  const handlePickerSubMarkChange = (qId: string, subKey: string, markVal: number, subQuestions: any[]) => {
+    const currentSubs = { ...(pickerSubMarks[qId] || {}) };
+    currentSubs[subKey] = markVal;
+    subQuestions.forEach((sq: any) => {
+      const k = sq.id || sq.label;
+      if (currentSubs[k] === undefined) {
+        currentSubs[k] = Number(sq.marks || 1);
+      }
+    });
+    const newTot = Object.values(currentSubs).reduce((a, b) => a + Number(b || 0), 0);
+    setPickerSubMarks(prev => ({ ...prev, [qId]: currentSubs }));
+    setPickerTotalMarks(prev => ({ ...prev, [qId]: newTot }));
+  };
+
   const handleBatchAddQuestionsToSection = (secId: string) => {
     const checkedIds = secCheckedQIds[secId] || [];
     if (checkedIds.length === 0) return;
@@ -747,22 +837,36 @@ export default function FacultyAssessmentMasterPage() {
       const existingIds = sec.questions.map((q: any) => q.questionId);
       const newItems = targetQuestions
         .filter(tq => !existingIds.includes(tq.id))
-        .map(tq => ({
-          questionId: tq.id,
-          questionText: tq.question_text,
-          mode: tq.mode,
-          topic: tq.topic,
-          competencyCode: tq.competency_code,
-          defaultMarks: Number(tq.max_marks || 2),
-          customMarks: Number(tq.max_marks || 2),
-          optionA: tq.option_a,
-          optionB: tq.option_b,
-          optionC: tq.option_c,
-          optionD: tq.option_d,
-          correctOption: tq.correct_option,
-          subQuestions: tq.sub_questions,
-          imageUrl: tq.image_url || tq.imageUrl || null,
-        }));
+        .map(tq => {
+          const chosenMarks = pickerTotalMarks[tq.id] !== undefined ? pickerTotalMarks[tq.id] : Number(tq.max_marks || 2);
+          let chosenSubs = tq.sub_questions || (tq as any).subQuestions;
+          if (Array.isArray(chosenSubs) && pickerSubMarks[tq.id]) {
+            chosenSubs = chosenSubs.map((sq: any) => {
+              const k = sq.id || sq.label;
+              return {
+                ...sq,
+                marks: pickerSubMarks[tq.id]?.[k] !== undefined ? pickerSubMarks[tq.id][k] : Number(sq.marks || 1)
+              };
+            });
+          }
+          return {
+            questionId: tq.id,
+            questionText: tq.question_text,
+            mode: tq.mode,
+            topic: tq.topic,
+            competencyCode: tq.competency_code,
+            defaultMarks: Number(tq.max_marks || 2),
+            customMarks: chosenMarks,
+            optionA: tq.option_a,
+            optionB: tq.option_b,
+            optionC: tq.option_c,
+            optionD: tq.option_d,
+            correctOption: tq.correct_option,
+            subQuestions: chosenSubs,
+            imageUrl: tq.image_url || tq.imageUrl || (tq as any).image || (tq as any).diagramUrl || (tq as any).diagram_url || null,
+            image_url: tq.image_url || tq.imageUrl || (tq as any).image || (tq as any).diagramUrl || (tq as any).diagram_url || null,
+          };
+        });
       return {
         ...sec,
         questions: [...sec.questions, ...newItems]
@@ -776,6 +880,17 @@ export default function FacultyAssessmentMasterPage() {
     setPaperSections(prev => prev.map(sec => {
       if (sec.id !== secId) return sec;
       if (sec.questions.some((q: any) => q.questionId === targetQ.id)) return sec;
+      const chosenMarks = pickerTotalMarks[targetQ.id] !== undefined ? pickerTotalMarks[targetQ.id] : Number(targetQ.max_marks || 2);
+      let chosenSubs = targetQ.sub_questions || (targetQ as any).subQuestions;
+      if (Array.isArray(chosenSubs) && pickerSubMarks[targetQ.id]) {
+        chosenSubs = chosenSubs.map((sq: any) => {
+          const k = sq.id || sq.label;
+          return {
+            ...sq,
+            marks: pickerSubMarks[targetQ.id]?.[k] !== undefined ? pickerSubMarks[targetQ.id][k] : Number(sq.marks || 1)
+          };
+        });
+      }
       return {
         ...sec,
         questions: [
@@ -787,14 +902,15 @@ export default function FacultyAssessmentMasterPage() {
             topic: targetQ.topic,
             competencyCode: targetQ.competency_code,
             defaultMarks: Number(targetQ.max_marks || 2),
-            customMarks: Number(targetQ.max_marks || 2),
+            customMarks: chosenMarks,
             optionA: targetQ.option_a,
             optionB: targetQ.option_b,
             optionC: targetQ.option_c,
             optionD: targetQ.option_d,
             correctOption: targetQ.correct_option,
-            subQuestions: targetQ.sub_questions,
-            imageUrl: targetQ.image_url || targetQ.imageUrl || null,
+            subQuestions: chosenSubs,
+            imageUrl: targetQ.image_url || targetQ.imageUrl || (targetQ as any).image || (targetQ as any).diagramUrl || (targetQ as any).diagram_url || null,
+            image_url: targetQ.image_url || targetQ.imageUrl || (targetQ as any).image || (targetQ as any).diagramUrl || (targetQ as any).diagram_url || null,
           }
         ]
       };
@@ -853,6 +969,8 @@ export default function FacultyAssessmentMasterPage() {
   useEffect(() => {
     setTenantName(getTenantName());
     fetchMetadataAndUserContext();
+    fetchCreatedPapersList();
+    fetchDesignedPapers();
   }, []);
 
   const fetchMetadataAndUserContext = async () => {
@@ -1581,8 +1699,17 @@ export default function FacultyAssessmentMasterPage() {
         const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
         // STRICT CONFIDENTIALITY: Faculty can ONLY view question papers that they prepared.
         const isFaculty = !userRole || userRole === 'FACULTY' || userRole === 'TEACHER' || userRole === 'INSTRUCTOR';
-        const filtered = (isFaculty && userId)
-          ? list.filter((p: any) => p.created_by && String(p.created_by) === String(userId))
+        const userIds = [u.id, u.sub, u.faculty_id, u.emp_id, typeof window !== 'undefined' ? localStorage.getItem('empid') : null, typeof window !== 'undefined' ? localStorage.getItem('userId') : null]
+          .filter(Boolean)
+          .map(x => String(x).toLowerCase());
+
+        const filtered = isFaculty
+          ? (userIds.length > 0
+              ? list.filter((p: any) => {
+                  const pCreated = String(p.created_by || p.faculty_id || '').toLowerCase();
+                  return userIds.includes(pCreated);
+                })
+              : [])
           : list;
         // Map to UI shape
         const mapped = filtered.map((p: any) => ({
@@ -1591,13 +1718,14 @@ export default function FacultyAssessmentMasterPage() {
           name: p.name,
           duration: p.duration_minutes || p.duration || 180,
           maxMarks: p.max_marks || 100,
-          status: p.is_active ? 'Published' : 'Ready for Publishing',
+          status: p.is_active ? 'Published' : (p.status || 'Ready for Publishing'),
           subject_name: p.subject_name || '',
           paper_set: p.paper_set || p.paperSet || 'Set A',
           target_sections: p.target_sections || p.targetSections || ['All'],
           sections: p.sections || [],
         }));
         setDesignedPapers(mapped);
+        setCreatedPapersList(filtered);
       }
     } catch {
       // silently fail — keep existing list
@@ -1662,12 +1790,12 @@ export default function FacultyAssessmentMasterPage() {
       competencyCode: cleanCompCode,
       subTopicId: selectedCompetencyId || null,
       subTopicCode: cleanCompCode,
-      colgCd: academicCascade?.college?.colg_cd || (slug.toLowerCase().includes('srms') ? '1' : null),
-      courseCd: academicCascade?.course?.course_cd || null,
-      branchCd: academicCascade?.branch?.branch_cd || null,
-      batchCd: academicCascade?.batch?.batch_cd || null,
-      semester: academicCascade?.semester?.sem_cd || null,
-      section: academicCascade?.section || null,
+      colgCd: academicCascade?.college?.colg_cd ? String(academicCascade.college.colg_cd) : (slug.toLowerCase().includes('srms') ? '1' : null),
+      courseCd: academicCascade?.course?.course_cd ? String(academicCascade.course.course_cd) : null,
+      branchCd: academicCascade?.branch?.branch_cd ? String(academicCascade.branch.branch_cd) : null,
+      batchCd: academicCascade?.batch?.batch_cd ? String(academicCascade.batch.batch_cd) : null,
+      semester: academicCascade?.semester?.sem_cd ? String(academicCascade.semester.sem_cd) : null,
+      section: academicCascade?.section ? String(academicCascade.section) : null,
       mode: 'MCQ',
       questionText: mcqQuestionText.trim(),
       optionA: optionA.trim(),
@@ -1692,12 +1820,12 @@ export default function FacultyAssessmentMasterPage() {
       competencyCode: cleanCompCode,
       subTopicId: selectedCompetencyId || null,
       subTopicCode: cleanCompCode,
-      colgCd: academicCascade?.college?.colg_cd || (slug.toLowerCase().includes('srms') ? '1' : null),
-      courseCd: academicCascade?.course?.course_cd || null,
-      branchCd: academicCascade?.branch?.branch_cd || null,
-      batchCd: academicCascade?.batch?.batch_cd || null,
-      semester: academicCascade?.semester?.sem_cd || null,
-      section: academicCascade?.section || null,
+      colgCd: academicCascade?.college?.colg_cd ? String(academicCascade.college.colg_cd) : (slug.toLowerCase().includes('srms') ? '1' : null),
+      courseCd: academicCascade?.course?.course_cd ? String(academicCascade.course.course_cd) : null,
+      branchCd: academicCascade?.branch?.branch_cd ? String(academicCascade.branch.branch_cd) : null,
+      batchCd: academicCascade?.batch?.batch_cd ? String(academicCascade.batch.batch_cd) : null,
+      semester: academicCascade?.semester?.sem_cd ? String(academicCascade.semester.sem_cd) : null,
+      section: academicCascade?.section ? String(academicCascade.section) : null,
       mode: 'DESC',
       questionText: descQuestionText.trim(),
       hasSubQuestions,
@@ -1720,7 +1848,8 @@ export default function FacultyAssessmentMasterPage() {
 
       if (res.ok) {
         const json = await res.json();
-        setQuestions([json, ...questions]);
+        const savedQ = json?.data || json;
+        setQuestions([savedQ, ...questions]);
         setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
         resetForm();
       } else {
@@ -1762,8 +1891,28 @@ export default function FacultyAssessmentMasterPage() {
     setQuestions(questions.filter(q => q.id !== id));
   };
 
-  const handleSavePaperDesign = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmitPaperForDqacApproval = async (paperId: string) => {
+    const slug = getTenantSlug();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug, 'Content-Type': 'application/json' };
+    try {
+      const res = await fetch(`${API_BASE}/exams/papers`, {
+        method: 'POST',
+        headers: h,
+        body: JSON.stringify({ id: paperId, status: 'PENDING_DQAC_APPROVAL' }),
+      });
+      if (res.ok) {
+        setAlert({ type: 'success', message: 'Question paper submitted for DQAC Quality Audit successfully!' });
+        await fetchCreatedPapersList();
+        await fetchDesignedPapers();
+      }
+    } catch (err) {
+      console.error('Submit for DQAC failed', err);
+    }
+  };
+
+  const handleSavePaperDesign = async (e?: React.FormEvent, targetStatus?: string) => {
+    if (e) e.preventDefault();
     const slug = getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug, 'Content-Type': 'application/json' };
@@ -1773,6 +1922,20 @@ export default function FacultyAssessmentMasterPage() {
         u = JSON.parse(localStorage.getItem('user') || '{}');
       } catch {}
       const userId = u.id || u.sub || u.faculty_id || null;
+
+      const currentPaper = editingPaperId ? createdPapersList.find(p => p.id === editingPaperId) : null;
+      const statusToSave = targetStatus || currentPaper?.status || 'DRAFT';
+
+      // Resolve Department dynamically matching the selected course/branch
+      const courseCd = academicCascade?.course?.course_cd || '';
+      const branchCd = academicCascade?.branch?.branch_cd || '';
+      const courseName = (academicCascade?.course?.course_name || '').toLowerCase();
+      const matchedDept = departments.find(d => 
+        (branchCd && (d.code === String(branchCd) || d.name.toLowerCase() === String(branchCd).toLowerCase())) ||
+        (courseCd && (d.code === String(courseCd) || d.name.toLowerCase() === String(courseCd).toLowerCase())) ||
+        (courseName.includes('bba') && (d.code === '2' || d.name.toLowerCase().includes('bba')))
+      );
+      const resolvedDeptId = matchedDept?.id || (selectedDept && selectedDept.length > 10 ? selectedDept : null);
 
       const payload = {
         id: editingPaperId || undefined,
@@ -1788,13 +1951,14 @@ export default function FacultyAssessmentMasterPage() {
         durationMinutes: paperDuration,
         type: 'THEORY',
         sections: paperSections,
-        departmentId: selectedDept || academicCascade?.branch?.branch_cd || null,
-        colgCd: academicCascade?.college?.colg_cd || '1',
-        courseCd: academicCascade?.course?.course_cd || null,
-        branchCd: academicCascade?.branch?.branch_cd || null,
-        batchCd: academicCascade?.batch?.batch_cd || null,
-        semester: academicCascade?.semester?.sem_cd || null,
-        section: academicCascade?.section || null,
+        status: statusToSave,
+        departmentId: resolvedDeptId,
+        colgCd: academicCascade?.college?.colg_cd ? String(academicCascade.college.colg_cd) : (slug.toLowerCase().includes('srms') ? '1' : null),
+        courseCd: academicCascade?.course?.course_cd ? String(academicCascade.course.course_cd) : null,
+        branchCd: academicCascade?.branch?.branch_cd ? String(academicCascade.branch.branch_cd) : null,
+        batchCd: academicCascade?.batch?.batch_cd ? String(academicCascade.batch.batch_cd) : null,
+        semester: academicCascade?.semester?.sem_cd ? String(academicCascade.semester.sem_cd) : null,
+        section: academicCascade?.section ? String(academicCascade.section) : null,
         createdBy: userId,
         facultyId: userId,
       };
@@ -1804,8 +1968,12 @@ export default function FacultyAssessmentMasterPage() {
         body: JSON.stringify(payload),
       });
       if (res.ok) {
-        setAlert({ type: 'success', message: `Paper '${paperTitle}' (${paperCode}) saved and updated successfully!` });
+        const msg = statusToSave === 'PENDING_DQAC_APPROVAL'
+          ? `Paper '${paperTitle}' (${paperCode}) submitted for DQAC Quality Audit & HOD approval!`
+          : `Paper '${paperTitle}' (${paperCode}) saved as draft successfully!`;
+        setAlert({ type: 'success', message: msg });
         await fetchCreatedPapersList();
+        await fetchDesignedPapers();
         setShowPaperEditor(false);
         setEditingPaperId(null);
         return;
@@ -1822,8 +1990,10 @@ export default function FacultyAssessmentMasterPage() {
       duration_minutes: paperDuration,
       max_marks: paperTotalMarks,
       sections: paperSections,
-      subject_name: 'PHYSIOLOGY',
-      batch_code: '2025'
+      subject_name: academicCascade?.subject?.name || selectedSubject || '',
+      batch_code: academicCascade?.batch?.batch_cd || '2026',
+      course_name: academicCascade?.course?.course_name || '',
+      department_name: academicCascade?.branch?.branch_name || 'BBA',
     };
     setCreatedPapersList(prev => {
       const idx = prev.findIndex(p => p.id === newPaper.id);
@@ -2368,17 +2538,28 @@ export default function FacultyAssessmentMasterPage() {
                                 <p className="font-black text-[#1B1E28] dark:text-white text-sm leading-relaxed">{q.question_text}</p>
 
                                 {/* Attached Diagram Image in Ledger */}
-                                {(q.image_url || q.imageUrl) && (
-                                  <div className="flex items-center gap-2 mt-1">
+                                {(q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url) && (
+                                  <div className="flex items-center gap-2.5 mt-1.5">
                                     <img
-                                      src={q.image_url || q.imageUrl}
+                                      src={q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url}
                                       alt="Question Diagram"
                                       className="h-14 w-20 object-contain rounded-lg border border-slate-200 dark:border-slate-700 bg-white shadow-sm cursor-pointer hover:scale-105 transition-transform"
-                                      onClick={() => window.open(q.image_url || q.imageUrl, '_blank')}
+                                      onClick={() => setViewingImageModal({
+                                        src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
+                                        title: q.question_text,
+                                      })}
                                     />
-                                    <span className="text-[10px] font-bold text-slate-500">
-                                      📷 Diagram Attached (Click to enlarge)
-                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingImageModal({
+                                        src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
+                                        title: q.question_text,
+                                      })}
+                                      className="px-2.5 py-1 rounded-lg bg-[#EEF2FF] hover:bg-[#5B4BFF] text-[#5B4BFF] hover:text-white border border-[#5B4BFF]/20 text-[11px] font-black transition-all flex items-center gap-1.5 shadow-xs cursor-pointer"
+                                    >
+                                      <span>📷</span>
+                                      <span>Diagram Attached (Click to enlarge)</span>
+                                    </button>
                                   </div>
                                 )}
 
@@ -2570,9 +2751,7 @@ export default function FacultyAssessmentMasterPage() {
                                 ✏️ EDITING NOW
                               </span>
                             ) : (
-                              <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C]">
-                                ✓ ACTIVE PAPER
-                              </span>
+                              renderPaperStatusBadge(paper.status)
                             )}
                           </div>
 
@@ -2581,10 +2760,10 @@ export default function FacultyAssessmentMasterPage() {
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <h4 className="text-sm font-black text-[#1B1E28] dark:text-white uppercase leading-snug">
-                                  {paper.name || 'MBBS Sessional Examination'}
+                                  {paper.name || 'Examination Paper'}
                                 </h4>
                                 <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400 block mt-0.5">
-                                  {paper.subject_name || 'PHYSIOLOGY'} • {paper.batch_code || 'Batch 2025'}
+                                  {paper.subject_name || academicCascade?.subject?.name || paper.code?.split('-')[0] || 'Subject'} • {paper.batch_name || (paper.batch_code ? (paper.batch_code.startsWith('Batch') ? paper.batch_code : `Batch ${paper.batch_code}`) : (academicCascade?.batch?.batch_name || 'Current Batch'))}
                                 </span>
                               </div>
                             </div>
@@ -2597,6 +2776,37 @@ export default function FacultyAssessmentMasterPage() {
                                 🎯 {Array.isArray(paper.target_sections) ? (paper.target_sections.includes('All') ? 'Common: All Sections' : paper.target_sections.join(', ')) : (paper.target_sections || 'Common (All Sections)')}
                               </span>
                             </div>
+
+                            {/* DQAC Quality Audit Directives Box */}
+                            {paper.status === 'CHANGES_REQUESTED' && (
+                              <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 text-xs space-y-1">
+                                <div className="flex items-center gap-1.5 font-black text-amber-800 dark:text-amber-200">
+                                  <span>⚠️</span>
+                                  <span>DQAC Quality Audit Directives</span>
+                                </div>
+                                <p className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                                  {paper.dqac_remarks || paper.hod_remarks || 'The quality audit team has requested revisions on this question paper.'}
+                                </p>
+                                {paper.question_remarks && Object.keys(typeof paper.question_remarks === 'string' ? JSON.parse(paper.question_remarks || '{}') : paper.question_remarks).length > 0 && (
+                                  <div className="text-[11px] text-amber-700 dark:text-amber-300 font-bold pt-0.5">
+                                    📌 Flagged Questions: {Object.keys(typeof paper.question_remarks === 'string' ? JSON.parse(paper.question_remarks || '{}') : paper.question_remarks).length} question(s) flagged for replacement or mark adjustments.
+                                  </div>
+                                )}
+                              </div>
+                            )}
+
+                            {/* DQAC Postponed Exam Paper Directives Box */}
+                            {paper.status === 'POSTPONED' && (
+                              <div className="p-3 rounded-xl bg-[#FFF4EC] dark:bg-amber-950/30 border border-[#F36C21]/40 text-xs space-y-1">
+                                <div className="flex items-center gap-1.5 font-black text-[#F36C21]">
+                                  <span>⏸️</span>
+                                  <span>Examination Postponed by DQAC</span>
+                                </div>
+                                <p className="text-slate-700 dark:text-slate-300 font-medium leading-relaxed">
+                                  {paper.dqac_remarks || paper.hod_remarks || 'This examination paper has been postponed by the DQAC Quality team. You may edit or clone as needed.'}
+                                </p>
+                              </div>
+                            )}
 
                             <div className="flex items-center justify-between pt-2 border-t border-[#E7EAF3] dark:border-slate-800 text-xs">
                               <span className="font-mono font-black text-[#F36C21]">
@@ -2613,35 +2823,74 @@ export default function FacultyAssessmentMasterPage() {
 
                           {/* Card Footer Actions */}
                           <div className="px-5 py-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-2 bg-[#F8FAFC]/70 dark:bg-slate-800/40">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {/* 1. After DQAC approved, do not show edit option; show locked indicator */}
+                              {(!paper.status || paper.status === 'DRAFT' || paper.status === 'CHANGES_REQUESTED' || paper.status === 'POSTPONED') ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleEditExistingPaper(paper)}
+                                  className="px-3 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                                  title="Edit Question Paper"
+                                >
+                                  <span>✏️</span>
+                                  <span>Edit Paper</span>
+                                </button>
+                              ) : (
+                                <span
+                                  className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs font-bold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700/60 select-none cursor-not-allowed"
+                                  title="Paper is approved / locked against direct edits. Clone to create an editable new set."
+                                >
+                                  <span>🔒</span>
+                                  <span>Edit Locked</span>
+                                </span>
+                              )}
+
+                              {/* 2. Faculty can view but cannot print (locked) */}
                               <button
                                 type="button"
-                                onClick={() => handleEditExistingPaper(paper)}
-                                className="px-3 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5"
+                                onClick={() => setPreviewModalPaper(paper)}
+                                className="px-3 py-2 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                                title="View Question Paper (Printing is restricted to Exam Dept)"
                               >
-                                <span>✏️</span>
-                                <span>Edit Paper</span>
+                                <span>👁️</span>
+                                <span>View Paper</span>
+                                <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold">🔒 No Print</span>
                               </button>
 
+                              {/* 3. Clone set can be done, but cloned set must be re-approved */}
                               <button
                                 type="button"
                                 onClick={() => handleDuplicateAsNextSet(paper)}
-                                className="px-3 py-2 rounded-xl bg-[#EEF2FF] dark:bg-slate-800 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white text-xs font-black border border-[#5B4BFF]/30 transition-all flex items-center gap-1.5 shadow-sm"
-                                title="Duplicate paper to next set (e.g. Set B or Set C) for another section or rotation"
+                                className="px-3 py-2 rounded-xl bg-[#EEF2FF] dark:bg-slate-800 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white text-xs font-black border border-[#5B4BFF]/30 transition-all flex items-center gap-1.5 shadow-sm cursor-pointer"
+                                title="Duplicate paper to next set (e.g. Set B). Cloned sets start as DRAFT and require DQAC re-approval."
                               >
                                 <span>📑</span>
-                                <span>Clone as Next Set</span>
+                                <span>Clone Set</span>
                               </button>
+
+                              {(!paper.status || paper.status === 'DRAFT' || paper.status === 'CHANGES_REQUESTED' || paper.status === 'POSTPONED') && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleSubmitPaperForDqacApproval(paper.id)}
+                                  className="px-3 py-2 rounded-xl bg-[#F36C21] hover:bg-[#E05B10] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                                  title="Submit paper for DQAC Quality Audit"
+                                >
+                                  <span>📤</span>
+                                  <span>Submit DQAC</span>
+                                </button>
+                              )}
                             </div>
 
-                            <button
-                              type="button"
-                              onClick={() => handleDeleteCreatedPaper(paper.id)}
-                              className="p-2 rounded-xl bg-[#FEECEB] hover:bg-rose-100 text-[#F04438] text-xs font-bold transition-all"
-                              title="Delete Paper"
-                            >
-                              🗑️
-                            </button>
+                            {(!paper.status || paper.status === 'DRAFT' || paper.status === 'CHANGES_REQUESTED' || paper.status === 'POSTPONED') && (
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteCreatedPaper(paper.id)}
+                                className="p-2 rounded-xl bg-[#FEECEB] hover:bg-rose-100 text-[#F04438] text-xs font-bold transition-all shrink-0 cursor-pointer"
+                                title="Delete Paper"
+                              >
+                                🗑️
+                              </button>
+                            )}
                           </div>
                         </div>
                       );
@@ -2679,6 +2928,34 @@ export default function FacultyAssessmentMasterPage() {
                           }, 0)} Marks
                         </div>
                       </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const currentDraft = {
+                            id: editingPaperId || 'preview-draft',
+                            code: paperCode || 'DRAFT-PAPER',
+                            name: paperTitle || 'Examination Paper',
+                            paper_set: paperSet || 'Set A',
+                            target_sections: targetSections,
+                            duration_minutes: paperDuration || 60,
+                            max_marks: paperTotalMarks || 40,
+                            passing_marks: Math.round((paperTotalMarks || 40) * 0.4),
+                            subject_name: academicCascade?.subject?.name || selectedSubject || 'Subject',
+                            course_name: academicCascade?.course?.course_name,
+                            semester: academicCascade?.semester?.sem_cd || null,
+                            section: academicCascade?.section || null,
+                            sections: paperSections,
+                            status: 'DRAFT',
+                          };
+                          setPreviewModalPaper(currentDraft);
+                        }}
+                        className="px-3.5 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-black shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                        title="Live preview how questions and diagrams appear on paper"
+                      >
+                        <span>👁️</span>
+                        <span>Live Preview Paper</span>
+                      </button>
 
                       <button
                         type="button"
@@ -3103,13 +3380,28 @@ export default function FacultyAssessmentMasterPage() {
                                               />
                                               <div className="space-y-1.5 flex-1">
                                                 <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-relaxed">{q.question_text}</p>
-                                                {(q.image_url || q.imageUrl) && (
-                                                  <div className="mt-1">
+                                                {(q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url) && (
+                                                  <div className="mt-1.5 flex items-center gap-2">
                                                     <img
-                                                      src={q.image_url || q.imageUrl}
+                                                      src={q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url}
                                                       alt="Diagram"
-                                                      className="max-h-24 max-w-xs object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs"
+                                                      className="h-14 w-20 object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-0.5 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+                                                      onClick={() => setViewingImageModal({
+                                                        src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
+                                                        title: q.question_text || '',
+                                                      })}
                                                     />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setViewingImageModal({
+                                                        src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
+                                                        title: q.question_text || '',
+                                                      })}
+                                                      className="text-[10px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
+                                                    >
+                                                      <span>📷</span>
+                                                      <span>View Diagram</span>
+                                                    </button>
                                                   </div>
                                                 )}
                                                 <div className="flex flex-wrap items-center gap-2 text-[10px]">
@@ -3131,24 +3423,78 @@ export default function FacultyAssessmentMasterPage() {
                                                       📚 {q.topic}
                                                     </span>
                                                   )}
-                                                  <span className="font-black text-[#5B4BFF]">({Number(q.max_marks || 2).toFixed(2)} Marks)</span>
+                                                  </div>
+
+                                                  {/* Subquestions breakdown tree in picker before adding */}
+                                                  {(() => {
+                                                    const qSubs = q.sub_questions || (q as any).subQuestions;
+                                                    const curMarks = pickerTotalMarks[q.id] !== undefined ? pickerTotalMarks[q.id] : Number(q.max_marks || 2);
+                                                    if (!Array.isArray(qSubs) || qSubs.length === 0) return null;
+                                                    return (
+                                                      <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700/60 space-y-1.5">
+                                                        <span className="text-[10px] font-black uppercase text-[#5B4BFF] tracking-wider block">
+                                                          Sub-Questions Marks (Sum: {Number(curMarks).toFixed(1)} Marks):
+                                                        </span>
+                                                        {qSubs.map((sq: any) => {
+                                                          const sqKey = sq.id || sq.label;
+                                                          const curSubMark = pickerSubMarks[q.id]?.[sqKey] !== undefined ? pickerSubMarks[q.id][sqKey] : Number(sq.marks || 1);
+                                                          return (
+                                                            <div key={sqKey} className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 dark:bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                                                              <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                                <span className="font-mono font-black text-[#5B4BFF] text-[10px]">{sq.label || '•'}</span>
+                                                                <span className="text-slate-700 dark:text-slate-300 truncate text-[11px]">{sq.questionText}</span>
+                                                              </div>
+                                                              <div className="flex items-center gap-1 shrink-0">
+                                                                <span className="text-[9px] font-bold text-slate-500">Marks:</span>
+                                                                <input
+                                                                  type="number"
+                                                                  min={0.5}
+                                                                  step={0.5}
+                                                                  disabled={isAlreadyInSec}
+                                                                  value={curSubMark}
+                                                                  onChange={(e) => handlePickerSubMarkChange(q.id, sqKey, Number(e.target.value), qSubs)}
+                                                                  className="w-12 px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#00C48C]/50 text-[#00C48C] font-black text-[11px] text-center"
+                                                                />
+                                                              </div>
+                                                            </div>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    );
+                                                  })()}
                                                 </div>
                                               </div>
-                                            </div>
 
-                                            {isAlreadyInSec ? (
-                                              <span className="text-[10px] font-black text-[#00C48C] bg-[#E6F9F3] px-2.5 py-1 rounded-full border border-[#00C48C]/30 whitespace-nowrap">
-                                                ✓ Added
-                                              </span>
-                                            ) : (
-                                              <button
-                                                type="button"
-                                                onClick={() => handleSingleAddQuestionToSection(sec.id, q)}
-                                                className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all whitespace-nowrap"
-                                              >
-                                                + Add
-                                              </button>
-                                            )}
+                                              <div className="flex items-center gap-2 shrink-0">
+                                                {/* Editable Total Marks before adding */}
+                                                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                                                  <span className="text-[10px] font-bold text-slate-500">Marks:</span>
+                                                  <input
+                                                    type="number"
+                                                    min={0.5}
+                                                    step={0.5}
+                                                    disabled={isAlreadyInSec}
+                                                    value={pickerTotalMarks[q.id] !== undefined ? pickerTotalMarks[q.id] : Number(q.max_marks || 2)}
+                                                    onChange={(e) => handlePickerTotalMarksChange(q.id, Number(e.target.value), q.sub_questions || (q as any).subQuestions)}
+                                                    className="w-14 px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
+                                                    title="Change total question marks before adding"
+                                                  />
+                                                </div>
+
+                                                {isAlreadyInSec ? (
+                                                  <span className="text-[10px] font-black text-[#00C48C] bg-[#E6F9F3] px-2.5 py-1 rounded-full border border-[#00C48C]/30 whitespace-nowrap">
+                                                    ✓ Added
+                                                  </span>
+                                                ) : (
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => handleSingleAddQuestionToSection(sec.id, q)}
+                                                    className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all whitespace-nowrap"
+                                                  >
+                                                    + Add
+                                                  </button>
+                                                )}
+                                              </div>
                                           </div>
                                         );
                                       })}
@@ -3173,13 +3519,28 @@ export default function FacultyAssessmentMasterPage() {
                                       <span className="font-mono text-[#5B4BFF] font-black text-sm">{qIdx + 1}.</span>
                                       <div className="space-y-1 flex-1">
                                         <p className="font-black text-[#1B1E28] dark:text-white leading-relaxed text-xs">{q.questionText}</p>
-                                        {(q.imageUrl || q.image_url) && (
-                                          <div className="mt-1.5">
+                                        {(q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url) && (
+                                          <div className="mt-2 flex items-center gap-2">
                                             <img
-                                              src={q.imageUrl || q.image_url}
+                                              src={q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url}
                                               alt="Diagram"
-                                              className="max-h-28 max-w-xs object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs"
+                                              className="h-16 w-24 object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+                                              onClick={() => setViewingImageModal({
+                                                src: q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url,
+                                                title: `Q${qIdx + 1}: ${q.questionText || ''}`,
+                                              })}
                                             />
+                                            <button
+                                              type="button"
+                                              onClick={() => setViewingImageModal({
+                                                src: q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url,
+                                                title: `Q${qIdx + 1}: ${q.questionText || ''}`,
+                                              })}
+                                              className="text-[11px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <span>📷</span>
+                                              <span>Diagram Attached (Click to enlarge)</span>
+                                            </button>
                                           </div>
                                         )}
                                         <div className="flex items-center gap-2 text-[10px]">
@@ -3187,10 +3548,10 @@ export default function FacultyAssessmentMasterPage() {
                                             {q.mode}
                                           </span>
                                           <span className="px-2 py-0.5 rounded-full bg-[#E6F9F3] text-[#00C48C] font-black border border-[#00C48C]/20">
-                                            🎯 {q.competencyCode || 'PY1.1'}
+                                            🎯 {q.competencyCode || 'CO1'}
                                           </span>
                                           <span className="px-2 py-0.5 rounded-full bg-[#FFF4EC] text-[#F36C21] font-bold border border-[#F36C21]/20">
-                                            📚 {q.topic || 'General Physiology'}
+                                            📚 {q.topic || 'General Accounting / Concepts'}
                                           </span>
                                         </div>
                                       </div>
@@ -3254,16 +3615,27 @@ export default function FacultyAssessmentMasterPage() {
                   </div>
 
                   {/* Save Action Bar */}
-                  <div className="flex items-center justify-between pt-4 border-t border-[#E7EAF3] dark:border-slate-800">
+                  <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-4 border-t border-[#E7EAF3] dark:border-slate-800">
                     <p className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">
-                      Saving paper design commits sections to PostgreSQL database with status <strong className="text-[#00C48C]">Approved</strong>.
+                      Save as draft to edit anytime, or submit to <strong className="text-[#5B4BFF]">DQAC &amp; HOD</strong> for syllabus quality audit and section set approval.
                     </p>
-                    <button
-                      type="submit"
-                      className="px-8 py-3 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow-md transition-all"
-                    >
-                      💾 Generate &amp; Save Paper Design
-                    </button>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => handleSavePaperDesign(undefined, 'DRAFT')}
+                        className="px-5 py-2.5 rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 hover:bg-[#F8FAFC] text-[#1B1E28] dark:text-white font-bold text-xs shadow-sm transition-all"
+                      >
+                        💾 Save as Draft
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSavePaperDesign(undefined, 'PENDING_DQAC_APPROVAL')}
+                        className="px-6 py-2.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5"
+                      >
+                        <span>📤</span>
+                        <span>Submit for DQAC Audit</span>
+                      </button>
+                    </div>
                   </div>
                 </form>
               </div>
@@ -3435,7 +3807,8 @@ export default function FacultyAssessmentMasterPage() {
                           <th className="py-3.5 px-4 rounded-l-xl">Paper Details</th>
                           <th className="py-3.5 px-4">Paper Code</th>
                           <th className="py-3.5 px-4 text-center">Duration &amp; Marks</th>
-                          <th className="py-3.5 px-4 text-center rounded-r-xl">Approval Status</th>
+                          <th className="py-3.5 px-4 text-center">Approval Status</th>
+                          <th className="py-3.5 px-4 text-right rounded-r-xl">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800">
@@ -3466,9 +3839,19 @@ export default function FacultyAssessmentMasterPage() {
                               <span className="text-[11px] font-black text-[#00C48C]">{dp.max_marks || dp.maxMarks || 100} Marks</span>
                             </td>
                             <td className="py-4 px-4 align-top text-center">
-                              <span className="px-3 py-1 rounded-full bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30 text-[10px] font-black uppercase tracking-wider inline-block">
-                                ✓ Approved in MCQs &amp; DESC Mode
-                              </span>
+                              {renderPaperStatusBadge(dp.status)}
+                            </td>
+                            <td className="py-4 px-4 align-top text-right">
+                              <button
+                                type="button"
+                                onClick={() => setPreviewModalPaper(dp)}
+                                className="px-3 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white text-xs font-black shadow-sm transition-all inline-flex items-center gap-1 cursor-pointer"
+                                title="View Question Paper (Printing is restricted to Exam Dept)"
+                              >
+                                <span>👁️</span>
+                                <span>View</span>
+                                <span className="text-[9px] bg-black/20 px-1.5 py-0.5 rounded font-mono font-bold">🔒 No Print</span>
+                              </button>
                             </td>
                           </tr>
                         ))}
@@ -3482,6 +3865,27 @@ export default function FacultyAssessmentMasterPage() {
 
         </main>
       </div>
+
+      {/* Printable Exam Paper Review Modal */}
+      {previewModalPaper && (
+        <QuestionPaperReviewModal
+          paper={previewModalPaper}
+          isOpen={!!previewModalPaper}
+          onClose={() => setPreviewModalPaper(null)}
+          mode="preview"
+          userRole="FACULTY"
+        />
+      )}
+
+      {/* Enlarged Image Preview Modal */}
+      {viewingImageModal && (
+        <ImagePreviewModal
+          src={viewingImageModal.src}
+          title={viewingImageModal.title}
+          isOpen={!!viewingImageModal}
+          onClose={() => setViewingImageModal(null)}
+        />
+      )}
     </div>
   );
 }

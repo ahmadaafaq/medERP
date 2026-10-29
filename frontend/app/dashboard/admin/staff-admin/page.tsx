@@ -59,23 +59,30 @@ const AVAILABLE_STAFF_ROLES = [
     description: 'Department leadership, syllabus & approval rights',
   },
   {
+    id: 'DQAC',
+    label: 'DQAC',
+    number: '3',
+    icon: '🔍',
+    description: 'Quality assurance cell, question paper audit & syllabus vetting',
+  },
+  {
     id: 'COLLEGE_ADMIN',
     label: 'ADMIN',
-    number: '3',
+    number: '4',
     icon: '🛡️',
     description: 'Full institutional ERP management & configuration',
   },
   {
     id: 'CLERK',
     label: 'CLERK',
-    number: '4',
+    number: '5',
     icon: '📝',
     description: 'Attendance entry, student files & marks processing',
   },
   {
     id: 'WARDEN',
     label: 'WARDEN',
-    number: '5',
+    number: '6',
     icon: '🏢',
     description: 'Hostel rooms, student resident tracking & night gate passes',
   },
@@ -98,6 +105,9 @@ const getStaffAssignedRoles = (fac: Faculty): string[] => {
     roles.push('FACULTY');
   } else if (r === 'HOD') {
     roles.push('HOD');
+    roles.push('FACULTY');
+  } else if (r === 'DQAC') {
+    roles.push('DQAC');
     roles.push('FACULTY');
   } else if (r === 'CLERK') {
     roles.push('CLERK');
@@ -983,6 +993,8 @@ export default function StaffAdminPage() {
                                         ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30'
                                         : roleMeta.id === 'HOD'
                                         ? 'bg-purple-500/10 text-purple-700 dark:text-purple-300 border-purple-500/25'
+                                        : roleMeta.id === 'DQAC'
+                                        ? 'bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border-indigo-500/30'
                                         : roleMeta.id === 'CLERK'
                                         ? 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25'
                                         : roleMeta.id === 'WARDEN'
@@ -1049,11 +1061,11 @@ export default function StaffAdminPage() {
                                       </p>
                                     </div>
                                     <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-950/60 text-[#5B4BFF] border border-purple-200 dark:border-purple-800">
-                                      {staffRoles.length}/5 Active
+                                      {staffRoles.length}/{AVAILABLE_STAFF_ROLES.length} Active
                                     </span>
                                   </div>
 
-                                  {/* 5 Cascading Checkpoint Rows */}
+                                  {/* Cascading Checkpoint Rows */}
                                   <div className="space-y-1">
                                     {AVAILABLE_STAFF_ROLES.map((roleDef) => {
                                       const isChecked = staffRoles.includes(roleDef.id);

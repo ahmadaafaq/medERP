@@ -1,8 +1,11 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import Sidebar from '@/components/Sidebar';
 import Header from '@/components/Header';
+import FacultyAcademicCascadingDropdown, {
+  AcademicCascadingState,
+} from '@/components/faculty/FacultyAcademicCascadingDropdown';
 
 interface DropdownItem {
   id: string;
@@ -47,6 +50,7 @@ interface StudentItem {
   stud_name: string;
   stud_reg_no: string;
   rollno: string;
+  photo_url?: string;
   status: 'PRESENT' | 'ABSENT' | 'LATE';
   remarks?: string;
   record_id?: string;
@@ -54,7 +58,8 @@ interface StudentItem {
   original_status?: 'PRESENT' | 'ABSENT' | 'LATE';
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
+// Always route through Next.js relative /api/v1 proxy so client requests hit local backend
+const API_BASE = '/api/v1';
 
 const DAYS_OF_WEEK = [
   { day: 1, name: 'Monday', short: 'Mon' },
@@ -86,6 +91,14 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSem, setSelectedSem] = useState('1');
   const [selectedSection, setSelectedSection] = useState('all');
+
+  // Faculty Linked Subject & Cascading State (course_subject_link_Faculty.md)
+  const [cascadeState, setCascadeState] = useState<AcademicCascadingState | null>(null);
+  const [selectedSubject, setSelectedSubject] = useState<string>('');
+  const [selectedSubjectName, setSelectedSubjectName] = useState<string>('');
+  const [selectedSubjectCode, setSelectedSubjectCode] = useState<string>('');
+  const [isManualSession, setIsManualSession] = useState<boolean>(false);
+  const [manualDate, setManualDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
 
   // Filter Modes: 'DATE_WISE' | 'DAY_WISE' | 'MONTH_WISE'
   const [filterMode, setFilterMode] = useState<'DATE_WISE' | 'DAY_WISE' | 'MONTH_WISE'>('DATE_WISE');
@@ -252,6 +265,41 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
     setSectionsList(list);
   };
 
+  const handleGetScheduledRef = useRef<any>(null);
+
+  // Handle live cascading changes from FacultyAcademicCascadingDropdown
+  const handleAcademicCascadeChange = useCallback((state: AcademicCascadingState) => {
+    setCascadeState(state);
+    const crs = state.course?.course_cd ? String(state.course.course_cd) : '';
+    const br = state.branch?.branch_cd ? String(state.branch.branch_cd) : '';
+    const bat = state.batch?.batch_cd ? String(state.batch.batch_cd) : '';
+    const sem = state.semester?.sem_cd ? String(state.semester.sem_cd) : '';
+    const sec = state.section ? String(state.section) : 'all';
+
+    if (state.college?.colg_cd) setSelectedCollege(String(state.college.colg_cd));
+    if (crs) setSelectedCourse(crs);
+    if (br) setSelectedBranch(br);
+    if (bat) setSelectedBatch(bat);
+    if (sem) setSelectedSem(sem);
+    setSelectedSection(sec);
+
+    const sub = state.subject;
+    if (sub) {
+      setSelectedSubject(sub.id || sub.code || sub.sub_cd || '');
+      setSelectedSubjectName(sub.name || sub.sub_name || sub.mst_sub_name || '');
+      setSelectedSubjectCode(sub.code || sub.sub_cd || sub.sub_addinfo || '');
+    } else {
+      setSelectedSubject('');
+      setSelectedSubjectName('');
+      setSelectedSubjectCode('');
+    }
+
+    // Live Downstream Synchronization: auto-load schedule once Course, Branch & Batch are resolved
+    if (crs && br && bat && handleGetScheduledRef.current) {
+      handleGetScheduledRef.current(crs, br, bat, sem, sec);
+    }
+  }, []);
+
   const fetchAcademicMetadata = async () => {
     try {
       const slug = typeof window !== 'undefined' ? localStorage.getItem('tenantSlug') || 'srms-cet-bareilly' : 'srms-cet-bareilly';
@@ -417,12 +465,24 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
   };
 
   // ── 1. GET SCHEDULED TIMETABLE LECTURES ─────────────────────────────────────
-  const handleGetScheduled = async (customCourse?: string, customFacId?: string) => {
+  const handleGetScheduled = async (
+    customCourse?: string,
+    customBranch?: string,
+    customBatch?: string,
+    customSem?: string,
+    customSec?: string,
+    customFacId?: string,
+  ) => {
     // Guard: ensure cascading selection is complete
     const targetCourse = customCourse !== undefined ? customCourse : selectedCourse;
+    const targetBranch = customBranch !== undefined ? customBranch : selectedBranch;
+    const targetBatch = customBatch !== undefined ? customBatch : selectedBatch;
+    const targetSem = customSem !== undefined ? customSem : selectedSem;
+    const targetSec = customSec !== undefined ? customSec : selectedSection;
+
     if (!targetCourse) { showAlert('error', 'Please select a Course first.'); return; }
-    if (!selectedBranch) { showAlert('error', 'Please select a Branch / Department first.'); return; }
-    if (!selectedBatch) { showAlert('error', 'Please select a Batch first.'); return; }
+    if (!targetBranch) { showAlert('error', 'Please select a Branch / Department first.'); return; }
+    if (!targetBatch) { showAlert('error', 'Please select a Batch first.'); return; }
 
     setLoadingSchedule(true);
     setSelectedSlot(null);
@@ -433,10 +493,10 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
       params.append('tenant', tenantSlug);
 
       if (targetCourse && targetCourse !== 'all') params.append('courseCd', targetCourse);
-      if (selectedBranch && selectedBranch !== 'all') params.append('branchCd', selectedBranch);
-      if (selectedBatch && selectedBatch !== 'all') params.append('batchCd', selectedBatch);
-      if (selectedSem && selectedSem !== 'all') params.append('semester', selectedSem);
-      if (selectedSection && selectedSection !== 'all') params.append('section', selectedSection);
+      if (targetBranch && targetBranch !== 'all') params.append('branchCd', targetBranch);
+      if (targetBatch && targetBatch !== 'all') params.append('batchCd', targetBatch);
+      if (targetSem && targetSem !== 'all') params.append('semester', targetSem);
+      if (targetSec && targetSec !== 'all') params.append('section', targetSec);
 
       if (userRole === 'FACULTY') {
         const fid = customFacId || facultyId || facultyEmpId || facultyName;
@@ -477,6 +537,10 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
       setLoadingSchedule(false);
     }
   };
+
+  useEffect(() => {
+    handleGetScheduledRef.current = handleGetScheduled;
+  });
 
   const isUUID = (val?: string | null) => !!val && /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(val);
   const isCourseName = (val?: string | null) => {
@@ -542,11 +606,12 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
   // ── 2. CLICK LECTURE CARD: LOAD STUDENTS AND ATTENDANCE STATUS ────────────
   const handleSelectSlot = async (slot: TimetableSlot) => {
     setSelectedSlot(slot);
+    setIsManualSession(false);
     setLoadingStudents(true);
     setTopicCovered(slot.topic || (slot.description ? slot.description.replace(/\([^)]*\)/g, '').trim() : ''));
     setSessionType(slot.slot_type?.toUpperCase() || 'THEORY');
 
-    const targetDateStr = getSlotDate(slot);
+    const targetDateStr = slot.computed_date || getSlotDate(slot);
     setSelectedSlotDate(targetDateStr);
 
     try {
@@ -571,7 +636,8 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
 
       if (studRes && studRes.ok) {
         const sJson = await studRes.json();
-        fetchedStudents = Array.isArray(sJson.students) ? sJson.students : [];
+        const payload = sJson.data || sJson;
+        fetchedStudents = Array.isArray(payload.students) ? payload.students : (Array.isArray(payload) ? payload : []);
       }
 
       // Fallback: try student-master with batchId UUID if slot.batch_id exists
@@ -677,6 +743,7 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
           stud_name: s.name || s.stud_name || 'Student',
           stud_reg_no: reg,
           rollno: roll,
+          photo_url: s.photo_url || s.photoUrl || s.avatar || s.profile_photo || '',
           status: existing ? existing.status : 'PRESENT',
           remarks: existing?.remarks || '',
           record_id: existing?.record_id,
@@ -716,10 +783,150 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
     showAlert('info', `Marked all ${students.length} students as ${status}.`);
   };
 
-  // ── 4. COMMIT ATTENDANCE SESSION TO POSTGRESQL ─────────────────────────────
+  // ── 4. MANUAL SUBJECT ATTENDANCE SESSION (WITHOUT TIMETABLE SLOT) ────────
+  const handleStartManualSession = async (customDate?: string) => {
+    if (!selectedCourse) {
+      showAlert('error', 'Please select a Course first.');
+      return;
+    }
+    if (!selectedBatch) {
+      showAlert('error', 'Please select a Batch first.');
+      return;
+    }
+
+    const targetDate = customDate || manualDate || fromDate || new Date().toISOString().split('T')[0];
+    setManualDate(targetDate);
+    setSelectedSlotDate(targetDate);
+    setSelectedSlot(null);
+    setIsManualSession(true);
+    setLoadingStudents(true);
+    setTopicCovered(selectedSubjectName ? `${selectedSubjectName} - Lecture` : 'Regular Lecture');
+    setSessionType('THEORY');
+
+    try {
+      const token = getEffectiveToken();
+
+      // 1. Fetch Students using active course, branch, batch, semester, section
+      const studentParams = new URLSearchParams({
+        tenant: tenantSlug,
+      });
+      if (selectedBatch) studentParams.append('batchId', selectedBatch);
+      if (selectedCourse && selectedCourse !== 'all') studentParams.append('courseCd', selectedCourse);
+      if (selectedBranch && selectedBranch !== 'all') studentParams.append('branchCd', selectedBranch);
+      if (selectedSem && selectedSem !== 'all') studentParams.append('semester', selectedSem);
+      if (selectedSection && selectedSection !== 'all') studentParams.append('section', selectedSection);
+
+      const studRes = await fetch(`${API_BASE}/attendance/students-for-slot?${studentParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': tenantSlug },
+      }).catch(() => null);
+
+      let fetchedStudents: any[] = [];
+      if (studRes && studRes.ok) {
+        const sJson = await studRes.json();
+        const payload = sJson.data || sJson;
+        fetchedStudents = Array.isArray(payload.students) ? payload.students : (Array.isArray(payload) ? payload : []);
+      }
+
+      // Fallback: try student-master with batchId UUID if batch exists
+      if (fetchedStudents.length === 0 && selectedBatch) {
+        const altRes = await fetch(
+          `${API_BASE}/student-master?tenant=${tenantSlug}&batchId=${selectedBatch}&limit=200`,
+          { headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': tenantSlug } }
+        ).catch(() => null);
+        if (altRes && altRes.ok) {
+          const aJson = await altRes.json();
+          fetchedStudents = Array.isArray(aJson.data) ? aJson.data : Array.isArray(aJson) ? aJson : [];
+        }
+      }
+
+      // 2. Fetch existing session & marks for this subject + batch + date
+      let existingRecordsMap = new Map<string, { status: 'PRESENT' | 'ABSENT' | 'LATE'; remarks?: string; record_id?: string }>();
+
+      const activeParams = new URLSearchParams({
+        tenant: tenantSlug,
+        sessionDate: targetDate,
+      });
+      if (selectedSubject && isUUID(selectedSubject)) activeParams.append('subjectId', selectedSubject);
+      if (selectedSubjectCode) activeParams.append('subjectCd', selectedSubjectCode);
+      if (selectedBatch) activeParams.append('batchId', selectedBatch);
+
+      const activeRes = await fetch(`${API_BASE}/attendance/active-session?${activeParams.toString()}`, {
+        headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': tenantSlug },
+      }).catch(() => null);
+
+      if (activeRes && activeRes.ok) {
+        const aJson = await activeRes.json();
+        const sessionData = aJson?.data || aJson;
+        const sessionId = sessionData?.id || sessionData?.sessionId;
+
+        if (sessionData && (sessionId || sessionData.found)) {
+          if (sessionData.topicCovered || sessionData.topic_covered) {
+            setTopicCovered(sessionData.topicCovered || sessionData.topic_covered);
+          }
+          if (sessionData.sessionType || sessionData.session_type) {
+            setSessionType(sessionData.sessionType || sessionData.session_type);
+          }
+
+          const records = sessionData.records || [];
+          records.forEach((r: any) => {
+            const sid = String(r.student_id || r.studentId || '').trim();
+            const reg = String(r.registration_no || '').trim();
+            const roll = String(r.rollno || '').trim();
+            const entry = {
+              status: r.status as 'PRESENT' | 'ABSENT' | 'LATE',
+              remarks: r.remarks || '',
+              record_id: r.id,
+            };
+            if (sid) existingRecordsMap.set(sid, entry);
+            if (reg) existingRecordsMap.set(reg, entry);
+            if (roll) existingRecordsMap.set(roll, entry);
+          });
+        }
+      }
+
+      // 3. Map students into unified roster
+      const mapped: StudentItem[] = fetchedStudents.map((s: any) => {
+        const sid = String(s.id);
+        const reg = String(s.registration_no || s.registrationNo || s.reg_no || '').trim();
+        const roll = String(s.rollno || s.roll_no || '').trim();
+
+        const existing = existingRecordsMap.get(sid)
+          || (reg ? existingRecordsMap.get(reg) : undefined)
+          || (roll ? existingRecordsMap.get(roll) : undefined);
+
+        return {
+          id: sid,
+          stud_name: s.name || s.stud_name || 'Student',
+          stud_reg_no: reg,
+          rollno: roll,
+          photo_url: s.photo_url || s.photoUrl || s.avatar || s.profile_photo || '',
+          status: existing ? existing.status : 'PRESENT',
+          remarks: existing?.remarks || '',
+          record_id: existing?.record_id,
+          is_saved_in_db: !!existing,
+          original_status: existing ? existing.status : undefined,
+        };
+      });
+
+      setStudents(mapped);
+
+      if (mapped.length === 0) {
+        showAlert('info', `No students found for this course/batch selection.`);
+      } else {
+        showAlert('success', `Loaded ${mapped.length} student(s) for manual attendance marking.`);
+      }
+    } catch (err: any) {
+      console.error('Error starting manual session:', err);
+      showAlert('error', 'Error loading students for manual attendance.');
+    } finally {
+      setLoadingStudents(false);
+    }
+  };
+
+  // ── 5. COMMIT ATTENDANCE SESSION TO POSTGRESQL ─────────────────────────────
   const handleCommitAttendance = async () => {
-    if (!selectedSlot) {
-      showAlert('error', 'Please select a scheduled lecture card first.');
+    if (!selectedSlot && !isManualSession) {
+      showAlert('error', 'Please select a scheduled lecture card or start a manual session.');
       return;
     }
     if (students.length === 0) {
@@ -737,14 +944,13 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
     setCommitting(true);
     try {
       // batchId: prefer UUID from slot, fallback to batch_cd from selected batch
-      const batchIdToSend = selectedSlot.batch_id || selectedBatch || '';
+      const batchIdToSend = selectedSlot?.batch_id || selectedBatch || '';
 
       const payload: any = {
         batchId: batchIdToSend,
         sessionDate: selectedSlotDate,
         sessionType: sessionType || 'THEORY',
-        topicCovered: topicCovered || selectedSlot.topic || selectedSlot.description || 'Regular Lecture',
-        timetableSlotId: selectedSlot.id,
+        topicCovered: topicCovered || (selectedSlot ? (selectedSlot.topic || selectedSlot.description) : selectedSubjectName) || 'Regular Lecture',
         records: students.map((s) => ({
           studentId: s.id,
           status: s.status,
@@ -752,19 +958,39 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
         })),
       };
 
-      // Extract clean numeric/lecture subject code (e.g., "85717", "KCS-302", "88535")
-      const rawSubCd = selectedSlot.subject_code || (selectedSlot as any).subject_cd || (selectedSlot as any).sub_cd || (selectedSlot as any).linkcd || (selectedSlot as any).subject_paper_code;
-      const cleanSubjectCd = rawSubCd && !isCourseName(rawSubCd) ? String(rawSubCd).trim() : '';
+      if (selectedSlot?.id) {
+        payload.timetableSlotId = selectedSlot.id;
+      }
 
-      // Only pass subjectId if it is a valid UUID — never send course title strings like "B.Tech"
-      if (selectedSlot.subject_id && isUUID(selectedSlot.subject_id)) {
-        payload.subjectId = selectedSlot.subject_id;
-      }
-      if (cleanSubjectCd) {
-        payload.subjectCd = cleanSubjectCd;
-      }
-      if (selectedSlot.batch_cd) {
-        payload.batchCd = selectedSlot.batch_cd;
+      // Extract clean numeric/lecture subject code (e.g., "85717", "KCS-302", "88535")
+      if (selectedSlot) {
+        const rawSubCd = selectedSlot.subject_code || (selectedSlot as any).subject_cd || (selectedSlot as any).sub_cd || (selectedSlot as any).linkcd || (selectedSlot as any).subject_paper_code;
+        const cleanSubjectCd = rawSubCd && !isCourseName(rawSubCd) ? String(rawSubCd).trim() : '';
+
+        if (selectedSlot.subject_id && isUUID(selectedSlot.subject_id)) {
+          payload.subjectId = selectedSlot.subject_id;
+        } else if (selectedSubject && isUUID(selectedSubject)) {
+          payload.subjectId = selectedSubject;
+        }
+        if (cleanSubjectCd) {
+          payload.subjectCd = cleanSubjectCd;
+        } else if (selectedSubjectCode) {
+          payload.subjectCd = selectedSubjectCode;
+        }
+        if (selectedSlot.batch_cd) {
+          payload.batchCd = selectedSlot.batch_cd;
+        }
+      } else {
+        // Manual session without timetable slot
+        if (selectedSubject && isUUID(selectedSubject)) {
+          payload.subjectId = selectedSubject;
+        }
+        if (selectedSubjectCode) {
+          payload.subjectCd = selectedSubjectCode;
+        }
+        if (selectedBatch) {
+          payload.batchCd = selectedBatch;
+        }
       }
 
       let activeToken = token;
@@ -811,25 +1037,27 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
             : `✅ Attendance committed! ${presCount} Present · ${absCount} Absent · ${lateCount} Late — saved to database.`
         );
 
-        const sessionId = json?.data?.id || json?.sessionId || json?.data?.sessionId || selectedSlot.session_id;
+        const sessionId = json?.data?.id || json?.sessionId || json?.data?.sessionId || selectedSlot?.session_id;
 
-        // Mark slot as completed in both selectedSlot and slots list
-        const updatedSlot: TimetableSlot = {
-          ...selectedSlot,
-          is_attendance_marked: true,
-          session_id: sessionId,
-          present_count: presCount,
-          absent_count: absCount,
-          late_count: lateCount,
-          total_students_marked: students.length,
-        };
-        setSelectedSlot(updatedSlot);
+        // If a scheduled slot is selected, mark it as completed
+        if (selectedSlot) {
+          const updatedSlot: TimetableSlot = {
+            ...selectedSlot,
+            is_attendance_marked: true,
+            session_id: sessionId,
+            present_count: presCount,
+            absent_count: absCount,
+            late_count: lateCount,
+            total_students_marked: students.length,
+          };
+          setSelectedSlot(updatedSlot);
 
-        setSlots((prev) =>
-          prev.map((s) =>
-            s.id === selectedSlot.id ? updatedSlot : s
-          )
-        );
+          setSlots((prev) =>
+            prev.map((s) =>
+              s.id === selectedSlot.id ? updatedSlot : s
+            )
+          );
+        }
 
         // Update all students so their baseline is updated to the newly committed status
         setStudents((prev) =>
@@ -859,27 +1087,115 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
     }
   };
 
-  // Filter slots based on active filter mode & deduplicate repeated lectures
+  // In DATE_WISE mode, expand slots for every matching calendar date within fromDate..toDate range
+  const calendarExpandedSlots = useMemo(() => {
+    if (filterMode !== 'DATE_WISE') {
+      return slots.map((s) => ({
+        ...s,
+        computed_date: getSlotDate(s),
+      }));
+    }
+
+    if (!fromDate || !toDate) {
+      return slots.map((s) => ({ ...s, computed_date: fromDate || getSlotDate(s) }));
+    }
+
+    const [sY, sM, sD] = fromDate.split('-').map(Number);
+    const [eY, eM, eD] = toDate.split('-').map(Number);
+    if (!sY || !eY) return slots;
+
+    // Use midday local time to eliminate UTC boundary drift
+    const cur = new Date(sY, sM - 1, sD, 12, 0, 0);
+    const end = new Date(eY, eM - 1, eD, 12, 0, 0);
+    if (cur > end) return [];
+
+    const result: TimetableSlot[] = [];
+    let guard = 0;
+    while (cur <= end && guard < 90) {
+      guard++;
+      const y = cur.getFullYear();
+      const m = String(cur.getMonth() + 1).padStart(2, '0');
+      const d = String(cur.getDate()).padStart(2, '0');
+      const curDateStr = `${y}-${m}-${d}`;
+
+      // 1=Mon .. 6=Sat, 7=Sun
+      const jsDay = cur.getDay(); // 0=Sun .. 6=Sat
+      const standardDayOfWeek = jsDay === 0 ? 7 : jsDay;
+
+      // Find timetable slots matching this day of week (support both 7 and 0 for Sunday)
+      const daySlots = slots.filter((s) => {
+        const slotDay = Number(s.day_of_week);
+        return slotDay === standardDayOfWeek || (standardDayOfWeek === 7 && slotDay === 0);
+      });
+
+      for (const ds of daySlots) {
+        result.push({
+          ...ds,
+          computed_date: curDateStr,
+        });
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+    return result;
+  }, [slots, filterMode, fromDate, toDate]);
+
+  // Filter slots based on active filter mode & deduplicate repeated lectures & filter by selected linked subject
   const filteredSlots = useMemo(() => {
-    let list = [...slots];
+    let list = [...calendarExpandedSlots];
     if (filterMode === 'DAY_WISE') {
       list = list.filter((s) => Number(s.day_of_week) === Number(selectedDayFilter));
     }
-    // Deduplicate slots with identical day, start time, end time, and subject
+
+    // Filter by selected linked subject if faculty has chosen a specific subject
+    if (selectedSubjectName || selectedSubjectCode || selectedSubject) {
+      const rawTargetName = (selectedSubjectName || '').toLowerCase().trim();
+      const cleanTargetName = rawTargetName.replace(/\[[^\]]*\]/g, '').trim();
+      const targetCode = (selectedSubjectCode || '').replace(/[\[\]]/g, '').toLowerCase().trim();
+      const targetId = (selectedSubject || '').toLowerCase().trim();
+
+      list = list.filter((s) => {
+        const sName = (s.subject_name || s.description || s.topic || '').toLowerCase();
+        const sCode = (s.subject_code || (s as any).subject_cd || '').toLowerCase();
+        const sId = (s.subject_id || '').toLowerCase();
+
+        const matchId = targetId && (sId === targetId || (s as any).id === targetId);
+        const matchCode = targetCode && (sCode === targetCode || sCode.includes(targetCode) || targetCode.includes(sCode));
+        const matchName = cleanTargetName && (
+          sName.includes(cleanTargetName) || 
+          cleanTargetName.includes(sName) ||
+          cleanTargetName.split(/\s+/).some((w) => w.length > 3 && sName.includes(w))
+        );
+
+        return matchId || matchCode || matchName;
+      });
+    }
+
+    // Deduplicate slots with identical computed_date, day, start time, end time, and subject
     const seen = new Set<string>();
-    return list.filter((s) => {
+    const deduped = list.filter((s) => {
+      const sDate = s.computed_date || '';
       const sTime = String(s.start_time || '').slice(0, 5);
       const eTime = String(s.end_time || '').slice(0, 5);
       const cleanSubj = String(s.subject_code || s.subject_name || s.topic || s.description || '')
         .replace(/\([^)]*\)/g, '')
         .toLowerCase()
         .trim();
-      const key = `${s.day_of_week}_${sTime}_${eTime}_${cleanSubj}_${s.course_cd || ''}_${s.semester || ''}_${s.section || ''}`;
+      const key = `${sDate}_${s.day_of_week}_${sTime}_${eTime}_${cleanSubj}_${s.course_cd || ''}_${s.semester || ''}_${s.section || ''}`;
       if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
-  }, [slots, filterMode, selectedDayFilter]);
+
+    // Sort by computed date ascending, then start_time
+    deduped.sort((a, b) => {
+      const dA = a.computed_date || '';
+      const dB = b.computed_date || '';
+      if (dA !== dB) return dA.localeCompare(dB);
+      return String(a.start_time || '').localeCompare(String(b.start_time || ''));
+    });
+
+    return deduped;
+  }, [calendarExpandedSlots, filterMode, selectedDayFilter, selectedSubject, selectedSubjectName, selectedSubjectCode]);
 
   // Filter and order students in left panel
   const displayedStudents = useMemo(() => {
@@ -980,250 +1296,406 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
           </div>
 
           {/* ─── SECTION 1: ACADEMIC HIERARCHY SELECTOR & GET SCHEDULED ───── */}
-          <div className="bg-white dark:bg-[#111827] rounded-[22px] p-5 md:p-6 shadow-soft border border-[#E7EAF3] dark:border-slate-800 space-y-5">
-            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
-              <div className="flex items-center gap-2">
-                <span className="w-7 h-7 rounded-lg bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center font-bold text-sm">
-                  1
-                </span>
-                <h2 className="text-base font-bold text-[#1B1E28] dark:text-white">
-                  Academic Scope &amp; Schedule Filter
-                </h2>
-              </div>
+          {userRole === 'FACULTY' ? (
+            <div className="space-y-4">
+              <FacultyAcademicCascadingDropdown
+                onlyLinkedSubjects={true}
+                showSection={true}
+                showSubject={true}
+                facultyId={facultyId || facultyEmpId}
+                onSelectionChange={handleAcademicCascadeChange}
+                title="🏛️ Faculty Academic Hierarchy & Linked Subjects"
+                subtitle="Select your assigned Course, Department, Batch, Semester, Section and Linked Subject to mark attendance"
+              />
 
-              {/* Filter View Selector */}
-              <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-                <button
-                  onClick={() => setFilterMode('DATE_WISE')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    filterMode === 'DATE_WISE'
-                      ? 'bg-[#5B4BFF] text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  📅 Date Wise
-                </button>
-                <button
-                  onClick={() => setFilterMode('DAY_WISE')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    filterMode === 'DAY_WISE'
-                      ? 'bg-[#5B4BFF] text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  🗓️ Day Wise
-                </button>
-                <button
-                  onClick={() => setFilterMode('MONTH_WISE')}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
-                    filterMode === 'MONTH_WISE'
-                      ? 'bg-[#5B4BFF] text-white shadow-xs'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                  }`}
-                >
-                  📆 Month Wise
-                </button>
-              </div>
-            </div>
-
-            {/* Cascading Controls: Course → Branch → Batch → Semester → Section */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
-              {/* STEP 1 ── Course */}
-              <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  1. Course
-                </label>
-                <select
-                  value={selectedCourse}
-                  onChange={(e) => {
-                    const newCrs = e.target.value;
-                    setSelectedCourse(newCrs);
-                    buildSemestersList(newCrs);
-                    fetchBranches(selectedCollege, newCrs);
-                  }}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                >
-                  {coursesList.length === 0 && <option value="">Loading...</option>}
-                  {coursesList.map((c) => (
-                    <option key={c.code} value={c.code}>{c.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* STEP 2 ── Branch */}
-              <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  2. Branch / Dept
-                  {loadingBranches && <span className="inline-block w-3 h-3 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />}
-                </label>
-                <select
-                  value={selectedBranch}
-                  disabled={loadingBranches || branchesList.length === 0}
-                  onChange={(e) => {
-                    const br = e.target.value;
-                    setSelectedBranch(br);
-                    fetchBatches(selectedCollege, selectedCourse, br);
-                  }}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] disabled:opacity-50"
-                >
-                  {loadingBranches && <option value="">Loading branches...</option>}
-                  {!loadingBranches && branchesList.length === 0 && <option value="">— Select Course first —</option>}
-                  {branchesList.map((b) => (
-                    <option key={b.code} value={b.code}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* STEP 3 ── Batch */}
-              <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
-                  3. Batch
-                  {loadingBatches && <span className="inline-block w-3 h-3 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />}
-                </label>
-                <select
-                  value={selectedBatch}
-                  disabled={loadingBatches || batchesList.length === 0}
-                  onChange={(e) => {
-                    setSelectedBatch(e.target.value);
-                    setSlots([]);
-                    setSelectedSlot(null);
-                    setStudents([]);
-                  }}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] disabled:opacity-50"
-                >
-                  {loadingBatches && <option value="">Loading batches...</option>}
-                  {!loadingBatches && batchesList.length === 0 && <option value="">— Select Branch first —</option>}
-                  {batchesList.map((b) => (
-                    <option key={b.code} value={b.code}>{b.name}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* STEP 4 ── Semester */}
-              <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  4. Semester
-                </label>
-                <select
-                  value={selectedSem}
-                  onChange={(e) => {
-                    setSelectedSem(e.target.value);
-                    setSlots([]);
-                    setSelectedSlot(null);
-                    setStudents([]);
-                  }}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                >
-                  {semestersList.map((s) => (
-                    <option key={s.code} value={s.code}>{s.name}</option>
-                  ))}
-                  {semestersList.length === 0 && [1,2,3,4,5,6].map(s => (
-                    <option key={s} value={String(s)}>Semester {s}</option>
-                  ))}
-                </select>
-              </div>
-
-              {/* STEP 5 ── Section */}
-              <div>
-                <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5">
-                  5. Section
-                </label>
-                <select
-                  value={selectedSection}
-                  onChange={(e) => {
-                    setSelectedSection(e.target.value);
-                    setSlots([]);
-                    setSelectedSlot(null);
-                    setStudents([]);
-                  }}
-                  className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
-                >
-                  {sectionsList.map((s) => (
-                    <option key={s.code} value={s.code}>{s.name}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Date / Day / Month Dynamic Filter Bar */}
-            <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
-              {filterMode === 'DATE_WISE' && (
-                <div className="flex items-center gap-3 flex-wrap">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">From Date:</span>
-                    <input
-                      type="date"
-                      value={fromDate}
-                      onChange={(e) => setFromDate(e.target.value)}
-                      className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
-                    />
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">To Date:</span>
-                    <input
-                      type="date"
-                      value={toDate}
-                      onChange={(e) => setToDate(e.target.value)}
-                      className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
-                    />
-                  </div>
-                </div>
-              )}
-
-              {filterMode === 'DAY_WISE' && (
-                <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
-                  {DAYS_OF_WEEK.map((d) => (
+              {/* Schedule Date Filter & Action Buttons */}
+              <div className="bg-white dark:bg-[#111827] rounded-[22px] p-5 md:p-6 shadow-soft border border-[#E7EAF3] dark:border-slate-800">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  {/* Filter View Selector */}
+                  <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
                     <button
-                      key={d.day}
-                      onClick={() => setSelectedDayFilter(d.day)}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                        selectedDayFilter === d.day
+                      onClick={() => setFilterMode('DATE_WISE')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        filterMode === 'DATE_WISE'
                           ? 'bg-[#5B4BFF] text-white shadow-xs'
-                          : 'bg-[#F6F8FC] dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
                       }`}
                     >
-                      {d.name}
+                      📅 Date Wise
                     </button>
-                  ))}
-                </div>
-              )}
+                    <button
+                      onClick={() => setFilterMode('DAY_WISE')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        filterMode === 'DAY_WISE'
+                          ? 'bg-[#5B4BFF] text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      🗓️ Day Wise
+                    </button>
+                    <button
+                      onClick={() => setFilterMode('MONTH_WISE')}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                        filterMode === 'MONTH_WISE'
+                          ? 'bg-[#5B4BFF] text-white shadow-xs'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      📆 Month Wise
+                    </button>
+                  </div>
 
-              {filterMode === 'MONTH_WISE' && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">Select Month:</span>
-                  <input
-                    type="month"
-                    value={selectedMonth}
-                    onChange={(e) => setSelectedMonth(e.target.value)}
-                    className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
-                  />
-                </div>
-              )}
+                  {/* Date Mode Inputs */}
+                  {filterMode === 'DATE_WISE' && (
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">From Date:</span>
+                        <input
+                          type="date"
+                          value={fromDate}
+                          onChange={(e) => setFromDate(e.target.value)}
+                          className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
+                        />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">To Date:</span>
+                        <input
+                          type="date"
+                          value={toDate}
+                          onChange={(e) => setToDate(e.target.value)}
+                          className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
+                        />
+                      </div>
+                    </div>
+                  )}
 
-              {/* ⚡ GET SCHEDULED BUTTON */}
-              <button
-                type="button"
-                onClick={() => handleGetScheduled()}
-                disabled={loadingSchedule}
-                className="bg-[#5B4BFF] hover:bg-[#4838DF] disabled:opacity-50 text-white font-black px-6 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm uppercase tracking-wider ml-auto"
-              >
-                {loadingSchedule ? (
-                  <>
-                    <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-                    </svg>
-                    <span>Loading Schedule...</span>
-                  </>
-                ) : (
-                  <>
-                    <span>⚡</span>
-                    <span>Get Scheduled</span>
-                  </>
-                )}
-              </button>
+                  {filterMode === 'DAY_WISE' && (
+                    <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                      {DAYS_OF_WEEK.map((d) => (
+                        <button
+                          key={d.day}
+                          onClick={() => setSelectedDayFilter(d.day)}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                            selectedDayFilter === d.day
+                              ? 'bg-[#5B4BFF] text-white shadow-xs'
+                              : 'bg-[#F6F8FC] dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                          }`}
+                        >
+                          {d.name}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {filterMode === 'MONTH_WISE' && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">Select Month:</span>
+                      <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
+                      />
+                    </div>
+                  )}
+
+                  {/* Action Buttons: ⚡ Get Scheduled & ✍️ Mark Manually */}
+                  <div className="flex items-center gap-3 ml-auto flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleGetScheduled()}
+                      disabled={loadingSchedule}
+                      className="bg-[#5B4BFF] hover:bg-[#4838DF] disabled:opacity-50 text-white font-black px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm uppercase tracking-wider cursor-pointer"
+                    >
+                      {loadingSchedule ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                          </svg>
+                          <span>Loading Schedule...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>⚡</span>
+                          <span>Get Scheduled Lectures</span>
+                        </>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleStartManualSession()}
+                      disabled={loadingStudents}
+                      className="bg-[#00C48C] hover:bg-[#00A876] disabled:opacity-50 text-white font-black px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm uppercase tracking-wider cursor-pointer"
+                      title="Mark attendance manually for selected subject & date"
+                    >
+                      <span>✍️</span>
+                      <span>Mark Subject Attendance Manually</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-white dark:bg-[#111827] rounded-[22px] p-5 md:p-6 shadow-soft border border-[#E7EAF3] dark:border-slate-800 space-y-5">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+                <div className="flex items-center gap-2">
+                  <span className="w-7 h-7 rounded-lg bg-[#5B4BFF]/10 text-[#5B4BFF] flex items-center justify-center font-bold text-sm">
+                    1
+                  </span>
+                  <h2 className="text-base font-bold text-[#1B1E28] dark:text-white">
+                    Academic Scope &amp; Schedule Filter
+                  </h2>
+                </div>
+
+                {/* Filter View Selector */}
+                <div className="flex items-center gap-1 bg-[#F6F8FC] dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                  <button
+                    onClick={() => setFilterMode('DATE_WISE')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      filterMode === 'DATE_WISE'
+                        ? 'bg-[#5B4BFF] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    📅 Date Wise
+                  </button>
+                  <button
+                    onClick={() => setFilterMode('DAY_WISE')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      filterMode === 'DAY_WISE'
+                        ? 'bg-[#5B4BFF] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    🗓️ Day Wise
+                  </button>
+                  <button
+                    onClick={() => setFilterMode('MONTH_WISE')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                      filterMode === 'MONTH_WISE'
+                        ? 'bg-[#5B4BFF] text-white shadow-xs'
+                        : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    }`}
+                  >
+                    📆 Month Wise
+                  </button>
+                </div>
+              </div>
+
+              {/* Cascading Controls: Course → Branch → Batch → Semester → Section */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3.5">
+                {/* STEP 1 ── Course */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                    1. Course
+                  </label>
+                  <select
+                    value={selectedCourse}
+                    onChange={(e) => {
+                      const newCrs = e.target.value;
+                      setSelectedCourse(newCrs);
+                      buildSemestersList(newCrs);
+                      fetchBranches(selectedCollege, newCrs);
+                    }}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                  >
+                    {coursesList.length === 0 && <option value="">Loading...</option>}
+                    {coursesList.map((c) => (
+                      <option key={c.code} value={c.code}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* STEP 2 ── Branch */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    2. Branch / Dept
+                    {loadingBranches && <span className="inline-block w-3 h-3 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />}
+                  </label>
+                  <select
+                    value={selectedBranch}
+                    disabled={loadingBranches || branchesList.length === 0}
+                    onChange={(e) => {
+                      const br = e.target.value;
+                      setSelectedBranch(br);
+                      fetchBatches(selectedCollege, selectedCourse, br);
+                    }}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] disabled:opacity-50"
+                  >
+                    {loadingBranches && <option value="">Loading branches...</option>}
+                    {!loadingBranches && branchesList.length === 0 && <option value="">— Select Course first —</option>}
+                    {branchesList.map((b) => (
+                      <option key={b.code} value={b.code}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* STEP 3 ── Batch */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-1">
+                    3. Batch
+                    {loadingBatches && <span className="inline-block w-3 h-3 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />}
+                  </label>
+                  <select
+                    value={selectedBatch}
+                    disabled={loadingBatches || batchesList.length === 0}
+                    onChange={(e) => {
+                      setSelectedBatch(e.target.value);
+                      setSlots([]);
+                      setSelectedSlot(null);
+                      setStudents([]);
+                    }}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] disabled:opacity-50"
+                  >
+                    {loadingBatches && <option value="">Loading batches...</option>}
+                    {!loadingBatches && batchesList.length === 0 && <option value="">— Select Branch first —</option>}
+                    {batchesList.map((b) => (
+                      <option key={b.code} value={b.code}>{b.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* STEP 4 ── Semester */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                    4. Semester
+                  </label>
+                  <select
+                    value={selectedSem}
+                    onChange={(e) => {
+                      setSelectedSem(e.target.value);
+                      setSlots([]);
+                      setSelectedSlot(null);
+                      setStudents([]);
+                    }}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                  >
+                    {semestersList.map((s) => (
+                      <option key={s.code} value={s.code}>{s.name}</option>
+                    ))}
+                    {semestersList.length === 0 && [1,2,3,4,5,6].map(s => (
+                      <option key={s} value={String(s)}>Semester {s}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* STEP 5 ── Section */}
+                <div>
+                  <label className="block text-[11px] font-bold text-[#4E5969] dark:text-slate-400 uppercase tracking-wider mb-1.5">
+                    5. Section
+                  </label>
+                  <select
+                    value={selectedSection}
+                    onChange={(e) => {
+                      setSelectedSection(e.target.value);
+                      setSlots([]);
+                      setSelectedSlot(null);
+                      setStudents([]);
+                    }}
+                    className="w-full bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-[#1B1E28] dark:text-white focus:outline-none focus:ring-2 focus:ring-[#5B4BFF]"
+                  >
+                    {sectionsList.map((s) => (
+                      <option key={s.code} value={s.code}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Date / Day / Month Dynamic Filter Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-4 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {filterMode === 'DATE_WISE' && (
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">From Date:</span>
+                      <input
+                        type="date"
+                        value={fromDate}
+                        onChange={(e) => setFromDate(e.target.value)}
+                        className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">To Date:</span>
+                      <input
+                        type="date"
+                        value={toDate}
+                        onChange={(e) => setToDate(e.target.value)}
+                        className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {filterMode === 'DAY_WISE' && (
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 max-w-full">
+                    {DAYS_OF_WEEK.map((d) => (
+                      <button
+                        key={d.day}
+                        onClick={() => setSelectedDayFilter(d.day)}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
+                          selectedDayFilter === d.day
+                            ? 'bg-[#5B4BFF] text-white shadow-xs'
+                            : 'bg-[#F6F8FC] dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-200'
+                        }`}
+                      >
+                        {d.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {filterMode === 'MONTH_WISE' && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">Select Month:</span>
+                    <input
+                      type="month"
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl px-3 py-1.5 text-xs font-semibold text-[#1B1E28] dark:text-white"
+                    />
+                  </div>
+                )}
+
+                {/* ⚡ GET SCHEDULED & ✍️ MARK MANUALLY BUTTONS */}
+                <div className="flex items-center gap-3 ml-auto flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handleGetScheduled()}
+                    disabled={loadingSchedule}
+                    className="bg-[#5B4BFF] hover:bg-[#4838DF] disabled:opacity-50 text-white font-black px-6 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm uppercase tracking-wider cursor-pointer"
+                  >
+                    {loadingSchedule ? (
+                      <>
+                        <svg className="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span>Loading Schedule...</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>⚡</span>
+                        <span>Get Scheduled</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleStartManualSession()}
+                    disabled={loadingStudents}
+                    className="bg-[#00C48C] hover:bg-[#00A876] disabled:opacity-50 text-white font-black px-5 py-2.5 rounded-xl shadow-md hover:shadow-lg transition-all flex items-center gap-2 text-xs md:text-sm uppercase tracking-wider cursor-pointer"
+                    title="Mark attendance manually for selected subject & date"
+                  >
+                    <span>✍️</span>
+                    <span>Mark Subject Attendance Manually</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* ─── SECTION 2: SCHEDULED LECTURES CARDS DISPLAY ──────────────── */}
           <div className="space-y-3">
@@ -1248,22 +1720,36 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                 ))}
               </div>
             ) : filteredSlots.length === 0 ? (
-              <div className="bg-white dark:bg-slate-900/60 rounded-[22px] p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 space-y-2">
+              <div className="bg-white dark:bg-slate-900/60 rounded-[22px] p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 space-y-3">
                 <span className="text-3xl">📅</span>
-                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">No Scheduled Lectures Loaded</h3>
+                <h3 className="text-sm font-bold text-slate-700 dark:text-slate-300">
+                  {selectedSubjectName
+                    ? `No Scheduled Lectures Found for "${selectedSubjectName}"`
+                    : 'No Scheduled Lectures Loaded'}
+                </h3>
                 <p className="text-xs text-[#4E5969] dark:text-slate-400 max-w-md mx-auto">
-                  Select your Course, Branch, Batch, Semester &amp; Section above and click{' '}
-                  <strong className="text-[#5B4BFF]">"⚡ Get Scheduled"</strong> to fetch scheduled lecture sessions.
+                  {selectedSubjectName
+                    ? 'No timetable slots were found for this subject in the selected date range. You can mark attendance directly using the button below.'
+                    : 'Select your Course, Branch, Batch, Semester & Section above and click "⚡ Get Scheduled Lectures" or mark manually below.'}
                 </p>
+                <button
+                  type="button"
+                  onClick={() => handleStartManualSession()}
+                  disabled={loadingStudents}
+                  className="inline-flex items-center gap-2 bg-[#00C48C] hover:bg-[#00A876] text-white font-bold px-4 py-2 rounded-xl text-xs shadow-sm cursor-pointer transition-all"
+                >
+                  <span>✍️</span>
+                  <span>Mark Subject Attendance Manually</span>
+                </button>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5">
                 {filteredSlots.map((slot) => {
-                  const isSelected = selectedSlot?.id === slot.id;
+                  const slotDateStr = slot.computed_date || getSlotDate(slot);
+                  const isSelected = selectedSlot?.id === slot.id && selectedSlotDate === slotDateStr;
                   const isMarked = slot.is_attendance_marked;
                   const dayObj = DAYS_OF_WEEK.find((d) => d.day === Number(slot.day_of_week));
                   const dayName = dayObj?.name || `Day ${slot.day_of_week}`;
-                  const slotDateStr = getSlotDate(slot);
                   const formattedDate = formatDisplayDate(slotDateStr);
                   const facultyDisplay =
                     slot.faculty_name ||
@@ -1363,7 +1849,7 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
           </div>
 
           {/* ─── SECTION 3: TWO-PANEL LAYOUT (STUDENT ROSTER & MARKED LIST) ─── */}
-          {selectedSlot && (
+          {(selectedSlot || isManualSession) && (
             <div className="space-y-4 pt-2">
               <div className="flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-2">
                 <div className="flex items-center gap-2">
@@ -1371,9 +1857,9 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                     3
                   </span>
                   <h2 className="text-base font-bold text-[#1B1E28] dark:text-white flex items-center gap-2">
-                    <span>Attendance Session Workspace</span>
+                    <span>{isManualSession ? '✍️ Manual Attendance Session' : 'Attendance Session Workspace'}</span>
                     <span className="text-xs font-normal text-[#4E5969] dark:text-slate-400">
-                      ({selectedSlot.subject_name || 'Subject'} on {selectedSlotDate})
+                      ({(selectedSlot ? selectedSlot.subject_name : selectedSubjectName) || 'Subject'} on {selectedSlotDate})
                     </span>
                   </h2>
                 </div>
@@ -1502,30 +1988,55 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                       displayedStudents.map((s) => (
                         <div
                           key={s.id}
-                          className="py-2.5 flex items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-2 rounded-xl transition-colors"
+                          className="py-2.5 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/40 px-3 rounded-2xl transition-colors border border-transparent hover:border-slate-100 dark:hover:border-slate-800/60"
                         >
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-1.5 flex-wrap">
-                              <span className="w-5 h-5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 text-[10px] font-bold flex items-center justify-center shrink-0">
-                                {s.rollno || '#'}
-                              </span>
-                              <h5 className="text-xs font-bold text-[#1B1E28] dark:text-white truncate">
-                                {s.stud_name}
-                              </h5>
-                              {s.is_saved_in_db && s.status !== s.original_status && (
-                                <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
-                                  ✎ Modified
-                                </span>
-                              )}
-                              {s.is_saved_in_db && s.status === s.original_status && (
-                                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
-                                  ✓ Saved
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            {/* Student Avatar / Profile Photo */}
+                            <div className="relative w-10 h-10 rounded-full shrink-0 overflow-hidden bg-gradient-to-br from-[#5B4BFF]/15 to-[#F36C21]/15 border border-slate-200 dark:border-slate-700 flex items-center justify-center shadow-xs">
+                              {s.photo_url ? (
+                                <img
+                                  src={s.photo_url}
+                                  alt={s.stud_name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.display = 'none';
+                                  }}
+                                />
+                              ) : (
+                                <span className="text-xs font-black text-[#5B4BFF] uppercase">
+                                  {s.stud_name.trim().split(/\s+/).slice(0, 2).map((n) => n[0]).join('') || '#'}
                                 </span>
                               )}
                             </div>
-                            <p className="text-[10px] text-slate-400 font-mono pl-7 truncate">
-                              {s.stud_reg_no || `ID: ${s.id.slice(0, 8)}`}
-                            </p>
+
+                            {/* Student Name & Registration No */}
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <h5 className="text-xs font-bold text-[#1B1E28] dark:text-white truncate">
+                                  {s.stud_name}
+                                </h5>
+                                {s.is_saved_in_db && s.status !== s.original_status && (
+                                  <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-300 shrink-0">
+                                    ✎ Modified
+                                  </span>
+                                )}
+                                {s.is_saved_in_db && s.status === s.original_status && (
+                                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 shrink-0">
+                                    ✓ Saved
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                                <span className="font-mono font-medium">
+                                  Reg: {s.stud_reg_no || s.rollno || `ID: ${s.id.slice(0, 8)}`}
+                                </span>
+                                {s.rollno && s.rollno !== s.stud_reg_no && (
+                                  <span className="text-[10px] text-slate-400">
+                                    • Roll: {s.rollno}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           </div>
 
                           {/* Quick P / A / L Action Pills */}
@@ -1581,21 +2092,49 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-black text-[#5B4BFF]">
-                            {selectedSlot.subject_code && !isCourseName(selectedSlot.subject_code) ? selectedSlot.subject_code : (selectedSlot.subject_name || 'LECTURE')}
+                            {selectedSlot
+                              ? (selectedSlot.subject_code && !isCourseName(selectedSlot.subject_code) ? selectedSlot.subject_code : (selectedSlot.subject_name || 'LECTURE'))
+                              : (selectedSubjectCode || selectedSubjectName || 'MANUAL')}
                           </span>
                           <span className="text-xs text-slate-400">•</span>
                           <h3 className="text-sm font-black text-[#1B1E28] dark:text-white">
-                            {selectedSlot.subject_name || 'Subject Session'}
+                            {(selectedSlot ? selectedSlot.subject_name : selectedSubjectName) || 'Subject Session'}
                           </h3>
+                          {isManualSession && (
+                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/20">
+                              Manual Mode
+                            </span>
+                          )}
                         </div>
-                        <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
-                          📅 {selectedSlotDate} • ⏰ {selectedSlot.start_time?.slice(0, 5)} - {selectedSlot.end_time?.slice(0, 5)}
-                          {selectedSlot.faculty_name ? ` • 👨‍🏫 ${selectedSlot.faculty_name}` : ''}
-                        </p>
+                        {selectedSlot ? (
+                          <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
+                            📅 {selectedSlotDate} • ⏰ {selectedSlot.start_time?.slice(0, 5)} - {selectedSlot.end_time?.slice(0, 5)}
+                            {selectedSlot.faculty_name ? ` • 👨‍🏫 ${selectedSlot.faculty_name}` : ''}
+                          </p>
+                        ) : (
+                          <div className="flex items-center gap-2 mt-1">
+                            <span className="text-xs font-bold text-[#4E5969] dark:text-slate-400">📅 Session Date:</span>
+                            <input
+                              type="date"
+                              value={selectedSlotDate}
+                              onChange={(e) => {
+                                setSelectedSlotDate(e.target.value);
+                                setManualDate(e.target.value);
+                                handleStartManualSession(e.target.value);
+                              }}
+                              className="bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg px-2 py-0.5 text-xs font-bold text-slate-800 dark:text-white"
+                            />
+                            {selectedBatch && (
+                              <span className="text-[11px] font-semibold text-slate-500">
+                                • Batch {batchesList.find(b => b.code === selectedBatch)?.name || selectedBatch}
+                              </span>
+                            )}
+                          </div>
+                        )}
                       </div>
 
                       {/* Status Indicator Pill */}
-                      {selectedSlot.is_attendance_marked ? (
+                      {(selectedSlot?.is_attendance_marked || metrics.savedInDb > 0) ? (
                         <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-200 text-xs font-black">
                           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
                           <span>Attempted (Editable)</span>
@@ -1699,10 +2238,26 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                           {displayedStudents.map((s) => (
                             <tr key={s.id} className="hover:bg-slate-50/80 dark:hover:bg-slate-800/30">
                               <td className="py-2 px-3 font-bold text-slate-600 dark:text-slate-400">
-                                {s.rollno || '-'}
+                                {s.rollno || s.stud_reg_no || '-'}
                               </td>
                               <td className="py-2 px-3 font-semibold text-[#1B1E28] dark:text-white">
-                                {s.stud_name}
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-full overflow-hidden bg-gradient-to-br from-[#5B4BFF]/15 to-[#F36C21]/15 border border-slate-200 dark:border-slate-700 shrink-0 flex items-center justify-center">
+                                    {s.photo_url ? (
+                                      <img src={s.photo_url} alt="" className="w-full h-full object-cover" />
+                                    ) : (
+                                      <span className="text-[10px] font-black text-[#5B4BFF]">
+                                        {s.stud_name.trim().split(/\s+/).slice(0, 2).map((n) => n[0]).join('') || '#'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="min-w-0">
+                                    <span className="block truncate">{s.stud_name}</span>
+                                    <span className="block text-[10px] text-slate-400 font-mono">
+                                      {s.stud_reg_no || s.rollno}
+                                    </span>
+                                  </div>
+                                </div>
                               </td>
                               <td className="py-2 px-3">
                                 <button
@@ -1759,7 +2314,7 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                   {/* ─── COMMIT / SAVE BUTTON BAR ─── */}
                   <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
                     <div className="text-xs text-[#4E5969] dark:text-slate-400">
-                      <span>{selectedSlot.is_attendance_marked ? 'Ready to update: ' : 'Ready to commit: '}</span>
+                      <span>{(selectedSlot?.is_attendance_marked || metrics.savedInDb > 0) ? 'Ready to update: ' : 'Ready to commit: '}</span>
                       <strong className="text-emerald-600 font-bold">{metrics.present} Present</strong>,{' '}
                       <strong className="text-rose-600 font-bold">{metrics.absent} Absent</strong>
                       {metrics.late > 0 && <>, <strong className="text-amber-600 font-bold">{metrics.late} Late</strong></>}
@@ -1782,12 +2337,12 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
                           </svg>
-                          <span>{selectedSlot.is_attendance_marked ? 'Updating Attendance...' : 'Saving Attendance...'}</span>
+                          <span>{(selectedSlot?.is_attendance_marked || metrics.savedInDb > 0) ? 'Updating Attendance...' : 'Saving Attendance...'}</span>
                         </>
                       ) : (
                         <>
-                          <span>{selectedSlot.is_attendance_marked ? '🔄' : '💾'}</span>
-                          <span>{selectedSlot.is_attendance_marked ? 'Update & Save Attendance' : 'Save & Commit Attendance'}</span>
+                          <span>{(selectedSlot?.is_attendance_marked || metrics.savedInDb > 0) ? '🔄' : '💾'}</span>
+                          <span>{(selectedSlot?.is_attendance_marked || metrics.savedInDb > 0) ? 'Update & Save Attendance' : 'Save & Commit Attendance'}</span>
                         </>
                       )}
                     </button>
