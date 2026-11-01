@@ -256,16 +256,22 @@ export class ObeService {
       FROM examination_papers p
       WHERE (p.subject_id::text IN (
           SELECT id::text FROM subjects WHERE code = $1 UNION SELECT $1
-        ) OR p.code ILIKE $1 OR p.name ILIKE '%' || $1 || '%')
+        ) OR p.code ILIKE '%' || $1 || '%' OR p.name ILIKE '%' || $1 || '%')
     `;
     const paperParams: any[] = [opts.subject_code];
     if (opts.semester) {
       paperParams.push(opts.semester);
       paperQuery += ` AND (p.semester = $${paperParams.length} OR p.semester ILIKE '%' || $${paperParams.length} || '%' OR p.semester IS NULL)`;
     }
-    if (opts.course_cd) { paperParams.push(opts.course_cd); paperQuery += ` AND (p.course_cd = $${paperParams.length} OR p.course_cd IS NULL)`; }
-    if (opts.branch_cd) { paperParams.push(opts.branch_cd); paperQuery += ` AND (p.branch_cd = $${paperParams.length} OR p.branch_cd IS NULL)`; }
-    paperQuery += ` AND (p.status = 'APPROVED' OR p.status = 'PUBLISHED' OR p.status = 'DRAFT' OR p.status IS NULL) ORDER BY p.created_at`;
+    if (opts.course_cd) {
+      paperParams.push(opts.course_cd);
+      paperQuery += ` AND (p.course_cd = $${paperParams.length} OR p.course_cd IN (SELECT course_cd FROM courses WHERE code ILIKE $${paperParams.length} OR name ILIKE '%' || $${paperParams.length} || '%') OR p.course_cd IS NULL)`;
+    }
+    if (opts.branch_cd) {
+      paperParams.push(opts.branch_cd);
+      paperQuery += ` AND (p.branch_cd = $${paperParams.length} OR p.branch_cd IS NULL)`;
+    }
+    paperQuery += ` AND (p.status = 'APPROVED' OR p.status = 'PUBLISHED' OR p.status = 'DRAFT' OR p.status = 'DQAC_APPROVED' OR p.status = 'EVALUATED' OR p.status = 'SUBMITTED' OR p.status IS NULL) ORDER BY p.created_at`;
 
     const papers = await this.tenantSchemaService.queryInTenant(slug, paperQuery, paperParams).catch(() => []);
 
@@ -349,6 +355,7 @@ export class ObeService {
       const sections: any[] = paper.sections || [];
       const allQuestions = sections.flatMap((s: any) => s.questions || []);
       const coUpper = coCode.toUpperCase();
+      const coNum = coUpper.replace(/\D/g, ''); // e.g. "1" from "CO1"
       const coQuestions = allQuestions.filter((q: any) => {
         const cCode = String(q.competencyCode || q.competency_code || '').toUpperCase();
         const topic = String(q.topic || '').toUpperCase();
@@ -357,6 +364,19 @@ export class ObeService {
           cCode.startsWith(coUpper + '.') ||
           cCode.startsWith(coUpper + '-') ||
           cCode.startsWith(coUpper + '_') ||
+          (coNum && (
+            cCode.includes(`ST${coNum}`) ||
+            cCode.includes(`ST0${coNum}`) ||
+            cCode.includes(`UNIT${coNum}`) ||
+            cCode.includes(`UNIT0${coNum}`) ||
+            cCode.includes(`CO${coNum}`) ||
+            cCode.endsWith(`-${coNum}`) ||
+            cCode.endsWith(`.${coNum}`) ||
+            topic.includes(`UNIT ${coNum}`) ||
+            topic.includes(`UNIT-${coNum}`) ||
+            topic.includes(`CO ${coNum}`) ||
+            topic.includes(`CO-${coNum}`)
+          )) ||
           topic === coUpper ||
           topic.startsWith(coUpper + '.') ||
           topic.startsWith(coUpper + '-')
