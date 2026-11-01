@@ -48,6 +48,10 @@ const getFacultyId = (): string => {
   return '';
 };
 
+const isUUID = (val?: string | null): boolean =>
+  typeof val === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(val);
+
+
 const getHeaders = (): Record<string, string> => {
   const t = getTenant();
   return {
@@ -277,17 +281,18 @@ export default function FacultyObePage() {
   // Save CO target
   const saveTarget = async (subjectCode: string, unitCode: string, targetLevel: number) => {
     try {
-      const body = {
-        faculty_id: facultyId || undefined,
+      const body: Record<string, any> = {
         subject_code: subjectCode,
         unit_code: unitCode,
         target_level: targetLevel,
-        semester: semester || undefined,
-        section: selectedSection !== 'all' ? selectedSection : undefined,
-        course_cd: academicCascade?.course?.course_cd || undefined,
-        branch_cd: academicCascade?.branch?.branch_cd || undefined,
-        batch_year: getBatchYearNum(),
       };
+      if (facultyId && isUUID(facultyId)) body.faculty_id = facultyId;
+      if (semester) body.semester = semester;
+      if (academicCascade?.course?.course_cd) body.course_cd = academicCascade.course.course_cd;
+      if (academicCascade?.branch?.branch_cd) body.branch_cd = academicCascade.branch.branch_cd;
+      const bYear = getBatchYearNum();
+      if (bYear !== undefined) body.batch_year = bYear;
+
       const res = await fetch(`${API_BASE}/obe/targets?tenant=${getTenant()}`, {
         method: 'POST', headers: getHeaders(), body: JSON.stringify(body),
       });
@@ -296,7 +301,8 @@ export default function FacultyObePage() {
         showToast(`Target Level ${targetLevel} saved for ${unitCode} ✓`);
         await loadDashboard();
       } else {
-        showToast(json.message || 'Save failed', 'error');
+        const errMsg = Array.isArray(json.errors) ? json.errors.join(', ') : (json.message || 'Save failed');
+        showToast(errMsg, 'error');
       }
     } catch { showToast('Network error', 'error'); }
   };
@@ -304,26 +310,38 @@ export default function FacultyObePage() {
   // 1-Click batch declare default targets
   const batchDeclareTargets = async (subjectCode: string, defaultLevel: number = 2) => {
     try {
+      setLoading(true);
+      const bYear = getBatchYearNum();
       for (const co of ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']) {
-        await fetch(`${API_BASE}/obe/targets?tenant=${getTenant()}`, {
+        const body: Record<string, any> = {
+          subject_code: subjectCode,
+          unit_code: co,
+          target_level: defaultLevel,
+        };
+        if (facultyId && isUUID(facultyId)) body.faculty_id = facultyId;
+        if (semester) body.semester = semester;
+        if (academicCascade?.course?.course_cd) body.course_cd = academicCascade.course.course_cd;
+        if (academicCascade?.branch?.branch_cd) body.branch_cd = academicCascade.branch.branch_cd;
+        if (bYear !== undefined) body.batch_year = bYear;
+
+        const res = await fetch(`${API_BASE}/obe/targets?tenant=${getTenant()}`, {
           method: 'POST', headers: getHeaders(),
-          body: JSON.stringify({
-            faculty_id: facultyId || undefined,
-            subject_code: subjectCode,
-            unit_code: co,
-            target_level: defaultLevel,
-            semester: semester || undefined,
-            section: selectedSection !== 'all' ? selectedSection : undefined,
-            course_cd: academicCascade?.course?.course_cd || undefined,
-            branch_cd: academicCascade?.branch?.branch_cd || undefined,
-            batch_year: getBatchYearNum(),
-          }),
+          body: JSON.stringify(body),
         });
+        const json = await res.json();
+        if (!json.success) {
+          const errMsg = Array.isArray(json.errors) ? json.errors.join(', ') : (json.message || `Failed to declare target for ${co}`);
+          showToast(errMsg, 'error');
+          setLoading(false);
+          return;
+        }
       }
       showToast(`Default targets (Level ${defaultLevel}) declared for ${subjectCode} ✓`);
       await loadDashboard();
     } catch {
       showToast('Network error', 'error');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -335,6 +353,10 @@ export default function FacultyObePage() {
       });
       const json = await res.json();
       if (json.success) { showToast('Corrective action saved ✓'); setEditingAction(null); await loadDashboard(); }
+      else {
+        const errMsg = Array.isArray(json.errors) ? json.errors.join(', ') : (json.message || 'Save failed');
+        showToast(errMsg, 'error');
+      }
     } catch { showToast('Network error', 'error'); }
   };
 
@@ -342,20 +364,27 @@ export default function FacultyObePage() {
   const publishSurvey = async () => {
     if (!selectedSubject) return showToast('Select a subject first', 'error');
     try {
+      const body: Record<string, any> = {
+        subject_code: selectedSubject,
+      };
+      if (facultyId && isUUID(facultyId)) body.faculty_id = facultyId;
+      if (semester) body.semester = semester;
+      if (academicCascade?.course?.course_cd) body.course_cd = academicCascade.course.course_cd;
+      const bYear = getBatchYearNum();
+      if (bYear !== undefined) body.batch_year = bYear;
+
       const res = await fetch(`${API_BASE}/obe/surveys?tenant=${getTenant()}`, {
         method: 'POST', headers: getHeaders(),
-        body: JSON.stringify({
-          subject_code: selectedSubject,
-          faculty_id: facultyId || undefined,
-          semester: semester || undefined,
-          section: selectedSection !== 'all' ? selectedSection : undefined,
-          course_cd: academicCascade?.course?.course_cd || undefined,
-          branch_cd: academicCascade?.branch?.branch_cd || undefined,
-          batch_year: getBatchYearNum(),
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json();
-      if (json.success) { showToast('Survey published ✓'); setSurveys(prev => [json.data, ...prev]); }
+      if (json.success) {
+        showToast('Survey published ✓');
+        setSurveys(prev => [json.data, ...prev]);
+      } else {
+        const errMsg = Array.isArray(json.errors) ? json.errors.join(', ') : (json.message || 'Survey publish failed');
+        showToast(errMsg, 'error');
+      }
     } catch { showToast('Network error', 'error'); }
   };
 
@@ -514,13 +543,16 @@ export default function FacultyObePage() {
                   {selectedSubject && (
                     <button
                       onClick={() => batchDeclareTargets(selectedSubject, 2)}
+                      disabled={loading}
                       style={{
                         padding: '10px 24px', borderRadius: 12, background: '#5B4BFF', color: '#fff',
-                        fontWeight: 600, fontSize: 13, border: 'none', cursor: 'pointer',
+                        fontWeight: 600, fontSize: 13, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                        opacity: loading ? 0.7 : 1,
                         display: 'inline-flex', alignItems: 'center', gap: 8, boxShadow: '0 2px 8px rgba(91,75,255,0.25)'
                       }}
                     >
-                      <Sparkles size={16} /> Initialize Baseline Targets (Level 2) for {selectedSubject}
+                      {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
+                      Initialize Baseline Targets (Level 2) for {selectedSubject}
                     </button>
                   )}
                 </div>
@@ -609,9 +641,23 @@ export default function FacultyObePage() {
               {/* Quick Target Set Panel */}
               {selectedSubject && (
                 <div style={{ padding: '20px 24px', borderTop: '1px solid #E7EAF3', background: '#F6F8FC' }}>
-                  <div style={{ fontWeight: 600, fontSize: 14, color: '#1B1E28', marginBottom: 12 }}>
-                    <Target size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
-                    Set Targets for <span style={{ color: '#5B4BFF' }}>{selectedSubject}</span>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 10 }}>
+                    <div style={{ fontWeight: 600, fontSize: 14, color: '#1B1E28' }}>
+                      <Target size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} />
+                      Option B: Custom Target per CO (Granular) for <span style={{ color: '#5B4BFF' }}>{selectedSubject}</span>
+                    </div>
+                    <button
+                      onClick={() => batchDeclareTargets(selectedSubject, 2)}
+                      disabled={loading}
+                      style={{
+                        padding: '6px 14px', borderRadius: 8, background: '#5B4BFF', color: '#fff',
+                        fontWeight: 600, fontSize: 12, border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                        display: 'inline-flex', alignItems: 'center', gap: 6, opacity: loading ? 0.7 : 1
+                      }}
+                    >
+                      {loading ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                      Set All to Level 2
+                    </button>
                   </div>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                     {['CO1', 'CO2', 'CO3', 'CO4', 'CO5'].map(co => (
@@ -620,9 +666,10 @@ export default function FacultyObePage() {
                         <span style={{ fontSize: 12, color: '#6b7280' }}>Target Level:</span>
                         {[1, 2, 3].map(lvl => (
                           <button key={lvl} onClick={() => saveTarget(selectedSubject, co, lvl)}
-                            style={{ width: 30, height: 30, borderRadius: 8, border: '1.5px solid #E7EAF3', background: '#fff', color: '#4E5969', fontWeight: 700, fontSize: 13, cursor: 'pointer', transition: 'all 0.15s' }}
-                            onMouseEnter={e => { (e.target as any).style.background = '#5B4BFF'; (e.target as any).style.color = '#fff'; }}
-                            onMouseLeave={e => { (e.target as any).style.background = '#fff'; (e.target as any).style.color = '#4E5969'; }}>
+                            disabled={loading}
+                            style={{ width: 30, height: 30, borderRadius: 8, border: '1.5px solid #E7EAF3', background: '#fff', color: '#4E5969', fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
+                            onMouseEnter={e => { if (!loading) { (e.target as any).style.background = '#5B4BFF'; (e.target as any).style.color = '#fff'; } }}
+                            onMouseLeave={e => { if (!loading) { (e.target as any).style.background = '#fff'; (e.target as any).style.color = '#4E5969'; } }}>
                             {lvl}
                           </button>
                         ))}

@@ -4,11 +4,12 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 // ─── TARGETS ─────────────────────────────────────────────────────────────────
 
 export class SaveObeTargetDto {
-  @ApiPropertyOptional() @IsOptional() @IsUUID() faculty_id?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() faculty_id?: string;
   @ApiProperty() @IsString() subject_code: string;
   @ApiProperty() @IsString() unit_code: string; // CO code e.g. "CO1"
 
   @ApiPropertyOptional() @IsOptional() @IsString() semester?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() section?: string;
   @ApiPropertyOptional() @IsOptional() @IsNumber() batch_year?: number;
   @ApiPropertyOptional() @IsOptional() @IsString() course_cd?: string;
   @ApiPropertyOptional() @IsOptional() @IsString() branch_cd?: string;

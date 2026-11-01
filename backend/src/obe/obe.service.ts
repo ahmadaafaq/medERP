@@ -130,13 +130,16 @@ export class ObeService {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
 
+    const isUUID = typeof dto.faculty_id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(dto.faculty_id);
+    const facultyUuid = isUUID ? dto.faculty_id : null;
+
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM obe_targets
-       WHERE faculty_id = $1 AND subject_code = $2 AND unit_code = $3
+       WHERE (faculty_id = $1 OR (faculty_id IS NULL AND $1 IS NULL)) AND subject_code = $2 AND unit_code = $3
          AND COALESCE(semester,'') = COALESCE($4,'') AND COALESCE(batch_year::text,'') = COALESCE($5::text,'')
        LIMIT 1`,
-      [dto.faculty_id || null, dto.subject_code, dto.unit_code, dto.semester || null, dto.batch_year || null],
+      [facultyUuid, dto.subject_code, dto.unit_code, dto.semester || null, dto.batch_year || null],
     ).catch(() => []);
 
     if (existing?.length > 0) {
@@ -168,7 +171,7 @@ export class ObeService {
           exam_type, mark_threshold_pct, student_pass_pct_target, target_level)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
       [
-        dto.faculty_id || null, dto.subject_code, dto.unit_code,
+        facultyUuid, dto.subject_code, dto.unit_code,
         dto.semester || null, dto.batch_year || null, dto.course_cd || null, dto.branch_cd || null,
         dto.exam_type || 'COMBINED', dto.mark_threshold_pct ?? 40,
         dto.student_pass_pct_target ?? 60, dto.target_level ?? 2,
