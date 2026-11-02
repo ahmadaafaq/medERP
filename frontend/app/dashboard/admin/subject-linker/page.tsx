@@ -99,6 +99,8 @@ interface FacultySubjectLink {
   faculty_designation?: string;
   faculty_department_name?: string;
   faculty_department_code?: string;
+  faculty_photo_url?: string;
+  photo_url?: string;
   subject_name: string;
   subject_code: string;
   subject_department_name?: string;
@@ -108,6 +110,7 @@ interface FacultySubjectLink {
   branch_cd?: string;
   branch_name?: string;
   batch_cd?: string;
+  batch_name?: string;
   sem_cd?: string;
   section?: string;
   resolved_course_cd?: string;
@@ -115,6 +118,7 @@ interface FacultySubjectLink {
   resolved_branch_cd?: string;
   resolved_branch_name?: string;
   resolved_batch_cd?: string;
+  resolved_batch_name?: string;
   resolved_sem_cd?: string;
   college_id?: string;
   college_name?: string;
@@ -1403,9 +1407,18 @@ export default function SubjectLinkerPage() {
                     {activeFaculty && (
                       <div className="flex items-center justify-between p-2.5 rounded-xl bg-gradient-to-r from-[#5B4BFF]/10 to-indigo-500/10 border border-[#5B4BFF]/30 mb-2 shadow-sm">
                         <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm">
+                          <div className="w-8 h-8 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-xs shrink-0 shadow-sm overflow-hidden">
                             {activeFaculty.photo_url ? (
-                              <img src={activeFaculty.photo_url} alt={activeFaculty.name} className="w-full h-full object-cover rounded-full" />
+                              <img
+                                src={activeFaculty.photo_url}
+                                alt={activeFaculty.name}
+                                referrerPolicy="no-referrer"
+                                onError={(e: any) => {
+                                  e.target.onerror = null;
+                                  e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(activeFaculty.name || 'Faculty')}&background=5B4BFF&color=fff&bold=true`;
+                                }}
+                                className="w-full h-full object-cover rounded-full"
+                              />
                             ) : (
                               activeFaculty.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
                             )}
@@ -1504,9 +1517,18 @@ export default function SubjectLinkerPage() {
                                   }`}
                                 >
                                   <div className="flex items-center gap-2.5 min-w-0">
-                                    <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-[#5B4BFF] flex items-center justify-center font-black text-[10px] shrink-0">
+                                    <div className="w-7 h-7 rounded-full bg-slate-200 dark:bg-slate-700 text-[#5B4BFF] flex items-center justify-center font-black text-[10px] shrink-0 overflow-hidden">
                                       {fac.photo_url ? (
-                                        <img src={fac.photo_url} alt={fac.name} className="w-full h-full object-cover rounded-full" />
+                                        <img
+                                          src={fac.photo_url}
+                                          alt={fac.name}
+                                          referrerPolicy="no-referrer"
+                                          onError={(e: any) => {
+                                            e.target.onerror = null;
+                                            e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(fac.name || 'Faculty')}&background=5B4BFF&color=fff&bold=true`;
+                                          }}
+                                          className="w-full h-full object-cover rounded-full"
+                                        />
                                       ) : (
                                         fac.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()
                                       )}
@@ -1556,7 +1578,16 @@ export default function SubjectLinkerPage() {
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-[#5B4BFF]/30 flex items-center justify-center overflow-hidden shrink-0 shadow-sm p-0.5">
                           {activeFaculty.photo_url ? (
-                            <img src={activeFaculty.photo_url} alt={activeFaculty.name} className="w-full h-full object-cover rounded-full" />
+                            <img
+                              src={activeFaculty.photo_url}
+                              alt={activeFaculty.name}
+                              referrerPolicy="no-referrer"
+                              onError={(e: any) => {
+                                e.target.onerror = null;
+                                e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(activeFaculty.name || 'Faculty')}&background=5B4BFF&color=fff&bold=true`;
+                              }}
+                              className="w-full h-full object-cover rounded-full"
+                            />
                           ) : (
                             <span className="font-black text-[#5B4BFF] text-xs">
                               {activeFaculty.name.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -1750,12 +1781,21 @@ export default function SubjectLinkerPage() {
                           const displayBranchName = matchedDept?.name || link.resolved_branch_name || link.branch_name || link.faculty_department_name || (rawBranchCd ? `Branch ${rawBranchCd}` : 'All Branches');
 
                           const rawBatchCd = link.batch_cd || link.resolved_batch_cd;
-                          const matchedBatch = batches.find(b =>
+                          const matchedBatch = batches.find(b => {
+                            const isMatch = String(b.code) === String(rawBatchCd) ||
+                              String(b.batch_cd) === String(rawBatchCd) ||
+                              String(b.year) === String(rawBatchCd);
+                            if (!isMatch) return false;
+                            if (rawCourseCd && b.course_cd) {
+                              return String(b.course_cd) === String(rawCourseCd);
+                            }
+                            return true;
+                          }) || batches.find(b =>
                             String(b.code) === String(rawBatchCd) ||
                             String(b.batch_cd) === String(rawBatchCd) ||
                             String(b.year) === String(rawBatchCd)
                           );
-                          const displayBatchName = matchedBatch?.name || (rawBatchCd ? (String(rawBatchCd).length === 4 ? `Batch ${rawBatchCd}` : `Batch ${rawBatchCd}`) : 'All Batches');
+                          const displayBatchName = link.resolved_batch_name || link.batch_name || matchedBatch?.name || (rawBatchCd ? (String(rawBatchCd).length === 4 ? `Batch ${rawBatchCd}` : `Batch ${rawBatchCd}`) : 'All Batches');
 
                           const rawSemCd = link.sem_cd || link.resolved_sem_cd;
                           const displaySemName = rawSemCd ? `Sem ${String(rawSemCd).replace(/\D/g, '') || rawSemCd}` : 'All Sems';
@@ -1764,11 +1804,31 @@ export default function SubjectLinkerPage() {
                           return (
                             <tr key={link.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all group">
                               <td className="pl-6 py-4">
-                                <div>
-                                  <p className="font-extrabold text-slate-900 dark:text-white text-sm">{link.faculty_name}</p>
-                                  <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-                                    <span className="font-mono font-bold">{link.faculty_code}</span> | {link.faculty_designation || 'Faculty Member'}
-                                  </p>
+                                <div className="flex items-center gap-3">
+                                  <div className="w-9 h-9 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+                                    {(link.faculty_photo_url || link.photo_url) ? (
+                                      <img
+                                        src={link.faculty_photo_url || link.photo_url}
+                                        alt={link.faculty_name}
+                                        referrerPolicy="no-referrer"
+                                        onError={(e: any) => {
+                                          e.target.onerror = null;
+                                          e.target.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(link.faculty_name || 'Faculty')}&background=5B4BFF&color=fff&bold=true`;
+                                        }}
+                                        className="w-full h-full object-cover rounded-full"
+                                      />
+                                    ) : (
+                                      <span className="font-extrabold text-[#5B4BFF] text-xs">
+                                        {link.faculty_name ? link.faculty_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2).toUpperCase() : 'FC'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <p className="font-extrabold text-slate-900 dark:text-white text-sm">{link.faculty_name}</p>
+                                    <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                                      <span className="font-mono font-bold">{link.faculty_code}</span> | {link.faculty_designation || 'Faculty Member'}
+                                    </p>
+                                  </div>
                                 </div>
                               </td>
 

@@ -1045,13 +1045,19 @@ export default function TheoryResultReportPage() {
 
   // ─── Open Student Analysis Modal ───────────────────────────────────────────
   const handleOpenStudentAnalysis = (st: StudentTheoryReport) => {
-    setActiveStudent(st);
-    const expMap: { [c: string]: boolean } = {};
-    activePaperSubTopics.forEach(stSummary => { expMap[stSummary.code] = true; });
-    setExpandedSubTopics(expMap);
-    setModalTab('subtopics');
-    setHoveredSlice(null);
-    setModalOpen(true);
+    try {
+      setActiveStudent(st);
+      const expMap: { [c: string]: boolean } = {};
+      (activePaperSubTopics || []).forEach(stSummary => {
+        if (stSummary?.code) expMap[stSummary.code] = true;
+      });
+      setExpandedSubTopics(expMap);
+      setModalTab('subtopics');
+      setHoveredSlice(null);
+      setModalOpen(true);
+    } catch (err) {
+      console.error('[TheoryResult] handleOpenStudentAnalysis error:', err);
+    }
   };
 
   const toggleSubTopicAccordion = (code: string) => {
@@ -1066,7 +1072,7 @@ export default function TheoryResultReportPage() {
 
   // ─── SVG Pie Slices Calculation with Radial Leader Lines & Labels ──────────
   const pieChartSlices = useMemo(() => {
-    if (!activeStudent || activePaperSubTopics.length === 0) return [];
+    if (!activeStudent || !activePaperSubTopics || activePaperSubTopics.length === 0) return [];
     
     const cx = 275;
     const cy = 180;
@@ -1074,17 +1080,17 @@ export default function TheoryResultReportPage() {
 
     const dataItems = activePaperSubTopics.map((stObj, idx) => {
       const stRes = activeStudent.subTopicResults ? activeStudent.subTopicResults[stObj.code] : null;
-      const scored = stRes ? stRes.scored : 0;
-      const totalMax = stRes ? stRes.totalMax : stObj.totalMaxMarks;
-      const pct = stRes ? stRes.pct : 0;
+      const scored = stRes ? (Number(stRes.scored) || 0) : 0;
+      const totalMax = stRes ? (Number(stRes.totalMax) || Number(stObj.totalMaxMarks) || 10) : (Number(stObj.totalMaxMarks) || 10);
+      const pct = stRes ? (Number(stRes.pct) || 0) : 0;
       return {
         code: stObj.code,
-        desc: stObj.desc,
+        desc: stObj.desc || '',
         scored,
         totalMax,
         pct,
         val: Math.max(0.5, scored),
-        color: CHART_COLORS[idx % CHART_COLORS.length],
+        color: CHART_COLORS[idx % (CHART_COLORS.length || 1)] || '#5B4BFF',
       };
     });
 
@@ -1602,26 +1608,26 @@ export default function TheoryResultReportPage() {
                         })}
 
                         <td className="py-3.5 px-3 text-center font-bold text-slate-800 dark:text-slate-200">
-                          {st.evaluated ? `${Math.max(0, (st.marksObtained || 0) - (st.practicalMarks || 0)).toFixed(2)}` : '—'}
+                          {st.evaluated ? `${Math.max(0, (Number(st.marksObtained) || 0) - (Number(st.practicalMarks) || 0)).toFixed(2)}` : '—'}
                         </td>
                         <td className="py-3.5 px-3 text-center font-bold text-[#F36C21]">
-                          {st.evaluated && (st.practicalMarks || 0) > 0 ? `${(st.practicalMarks || 0).toFixed(2)}` : '0.00'}
+                          {st.evaluated && (Number(st.practicalMarks) || 0) > 0 ? `${(Number(st.practicalMarks) || 0).toFixed(2)}` : '0.00'}
                         </td>
                         <td className="py-3.5 px-3 text-center font-black text-slate-900 dark:text-white">
-                          {st.evaluated ? `${(st.marksObtained || 0).toFixed(2)} / ${st.maxMarks || 80}` : '—'}
+                          {st.evaluated ? `${(Number(st.marksObtained) || 0).toFixed(2)} / ${st.maxMarks || 80}` : '—'}
                         </td>
 
                         {/* Complete Percentage Column */}
                         <td className="py-3.5 px-3 text-center">
                           {st.evaluated ? (
                             <span className={`px-2.5 py-1 rounded-lg font-mono font-black text-[11px] border print-badge ${
-                              (st.percentage || 0) >= 75
+                              (Number(st.percentage) || 0) >= 75
                                 ? 'bg-emerald-50 dark:bg-emerald-950/60 text-[#00C48C] border-emerald-200 dark:border-emerald-800/40'
-                                : (st.percentage || 0) >= 50
+                                : (Number(st.percentage) || 0) >= 50
                                 ? 'bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF] border-indigo-200 dark:border-indigo-800/40'
                                 : 'bg-rose-50 dark:bg-rose-950/60 text-[#F04438] border-rose-200 dark:border-rose-800/40'
                             }`}>
-                              {(st.percentage || 0).toFixed(2)}%
+                              {(Number(st.percentage) || 0).toFixed(2)}%
                             </span>
                           ) : (
                             <span className="text-slate-400 font-mono">—</span>
@@ -1642,8 +1648,11 @@ export default function TheoryResultReportPage() {
                         <td className="py-3.5 px-3 text-right no-print">
                           <button
                             type="button"
-                            onClick={() => handleOpenStudentAnalysis(st)}
-                            className="px-3.5 py-1.5 bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-bold rounded-xl text-xs transition shadow-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenStudentAnalysis(st);
+                            }}
+                            className="px-3.5 py-1.5 bg-[#5B4BFF] hover:bg-[#4938DF] text-white font-bold rounded-xl text-xs transition shadow-sm cursor-pointer active:scale-95"
                           >
                             View Analysis →
                           </button>
@@ -1660,8 +1669,14 @@ export default function TheoryResultReportPage() {
           {/* STUDENT ANALYSIS MODAL (4 TABS: SubTopics | Tracking | Practical | Chart) */}
           {/* ═══════════════════════════════════════════════════════════════════════ */}
           {modalOpen && activeStudent && (
-            <div className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 w-screen h-screen min-h-screen overflow-y-auto no-print">
-              <div className="bg-white dark:bg-[#1B1E28] rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-scaleUp">
+            <div
+              className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto no-print"
+              onClick={() => setModalOpen(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-[#1B1E28] rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-scaleUp"
+              >
                 
                 {/* 1. Modal Top Bar */}
                 <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-900 flex items-center justify-between">
@@ -1682,7 +1697,7 @@ export default function TheoryResultReportPage() {
                       </div>
                       <h3 className="text-base font-black text-slate-900 dark:text-white">{activeStudent.name}</h3>
                       <p className="text-[11px] text-slate-500">
-                        {curCourseObj?.name || 'BCA'} • Batch: {selectedBatchCd} • Total Score: <strong>{(activeStudent.marksObtained || 0).toFixed(2)} / {activeStudent.maxMarks || 80} ({(activeStudent.percentage || 0).toFixed(2)}%)</strong>
+                        {curCourseObj?.name || 'BCA'} • Batch: {selectedBatchCd} • Total Score: <strong>{(Number(activeStudent.marksObtained) || 0).toFixed(2)} / {activeStudent.maxMarks || 80} ({(Number(activeStudent.percentage) || 0).toFixed(2)}%)</strong>
                       </p>
                     </div>
                   </div>
@@ -1947,13 +1962,13 @@ export default function TheoryResultReportPage() {
                             </span>
                           </div>
                           <h4 className="text-base font-black text-white mt-1">
-                            Practical Score: {(activeStudent.practicalMarks || 0).toFixed(2)} / {activeStudent.practicalMax || 40}.00 Marks ({(activeStudent.practicalPercentage || 0).toFixed(2)}%)
+                            Practical Score: {(Number(activeStudent.practicalMarks) || 0).toFixed(2)} / {activeStudent.practicalMax || 40}.00 Marks ({(Number(activeStudent.practicalPercentage) || 0).toFixed(2)}%)
                           </h4>
                         </div>
 
                         <div className="flex items-center gap-2">
                           <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-white text-[#F36C21] shadow-sm">
-                            {(activeStudent.practicalPercentage || 0) >= 50 ? '✓ Practical Passed' : '⚠️ Needs Improvement'}
+                            {(Number(activeStudent.practicalPercentage) || 0) >= 50 ? '✓ Practical Passed' : '⚠️ Needs Improvement'}
                           </span>
                         </div>
                       </div>
@@ -1977,7 +1992,7 @@ export default function TheoryResultReportPage() {
                                 </div>
                               </div>
                               <span className="px-2.5 py-1 rounded-lg font-mono font-black text-xs text-white" style={{ backgroundColor: cat.color }}>
-                                {(cat.scoredMarks || 0).toFixed(2)} / {cat.maxMarks}
+                                {(Number(cat.scoredMarks) || 0).toFixed(2)} / {cat.maxMarks}
                               </span>
                             </div>
 
@@ -1986,12 +2001,12 @@ export default function TheoryResultReportPage() {
                               <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
                                 <div
                                   className="h-full rounded-full transition-all duration-300"
-                                  style={{ width: `${Math.min(100, cat.percentage || 0)}%`, backgroundColor: cat.color }}
+                                  style={{ width: `${Math.min(100, Number(cat.percentage) || 0)}%`, backgroundColor: cat.color }}
                                 />
                               </div>
                               <div className="flex items-center justify-between text-[10px] font-bold text-slate-500">
                                 <span>Performance Score</span>
-                                <span>{(cat.percentage || 0).toFixed(1)}%</span>
+                                <span>{(Number(cat.percentage) || 0).toFixed(1)}%</span>
                               </div>
                             </div>
                           </div>
@@ -2011,10 +2026,10 @@ export default function TheoryResultReportPage() {
                               {(() => {
                                 let accum = 0;
                                 const cats = activeStudent.practicalCategories || [];
-                                const totalScored = cats.reduce((s, c) => s + Math.max(1, c.scoredMarks || 0), 0) || 1;
+                                const totalScored = cats.reduce((s, c) => s + Math.max(1, Number(c.scoredMarks) || 0), 0) || 1;
 
                                 return cats.map((cat) => {
-                                  const slice = (Math.max(1, cat.scoredMarks || 0) / totalScored) * 100;
+                                  const slice = (Math.max(1, Number(cat.scoredMarks) || 0) / totalScored) * 100;
                                   const dash = `${slice} ${100 - slice}`;
                                   const offset = -accum;
                                   accum += slice;
@@ -2037,7 +2052,7 @@ export default function TheoryResultReportPage() {
                             </svg>
                             <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
                               <span className="text-sm font-black text-slate-900 dark:text-white">
-                                {(activeStudent.practicalMarks || 0).toFixed(1)}
+                                {(Number(activeStudent.practicalMarks) || 0).toFixed(1)}
                               </span>
                               <span className="text-[9px] font-bold text-slate-400">/ 40.0</span>
                             </div>
@@ -2052,7 +2067,7 @@ export default function TheoryResultReportPage() {
                                   <span className="font-bold text-slate-800 dark:text-slate-200 text-[11px]">{(cat.name || '').split('&')[0]}</span>
                                 </div>
                                 <span className="font-mono font-bold text-slate-900 dark:text-white">
-                                  {(cat.scoredMarks || 0).toFixed(2)} / {cat.maxMarks}
+                                  {(Number(cat.scoredMarks) || 0).toFixed(2)} / {cat.maxMarks}
                                 </span>
                               </div>
                             ))}
@@ -2071,7 +2086,7 @@ export default function TheoryResultReportPage() {
                       {/* Header Result Display (exact red bold title from Screenshot 3) */}
                       <div>
                         <h3 className="text-xl font-black text-[#F04438] tracking-tight uppercase">
-                          SUBTOPICS RESULT : {(activeStudent.marksObtained || 0).toFixed(2)} / {activeStudent.maxMarks || 80} = {((((activeStudent.marksObtained || 0) / (activeStudent.maxMarks || 80))) * 100).toFixed(2)}%
+                          SUBTOPICS RESULT : {(Number(activeStudent.marksObtained) || 0).toFixed(2)} / {activeStudent.maxMarks || 80} = {((((Number(activeStudent.marksObtained) || 0) / (Number(activeStudent.maxMarks) || 80))) * 100).toFixed(2)}%
                         </h3>
                         <p className="text-xs text-slate-500 mt-1">
                           Visual pie distribution of student performance across question paper subtopics with leader lines and formula labels.
