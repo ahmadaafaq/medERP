@@ -53,7 +53,7 @@ export async function ensureTimetableDraftsTable(tenantSlug: string) {
     await queryDb(`
       ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'APPROVED';
       ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS draft_id UUID;
-    `).catch(() => {});
+    `).catch(() => { });
   } catch (err: any) {
     console.warn(`[ensureTimetableDraftsTable] ${schema}:`, err.message);
   }
@@ -167,7 +167,7 @@ export async function createOrUpdateTimetableDraft(tenantSlug: string, dto: any,
         ]
       );
       if (updateRes && updateRes.length > 0) {
-        dispatchTimetableScheduleNotifications(tenantSlug, updateRes[0]).catch(() => {});
+        dispatchTimetableScheduleNotifications(tenantSlug, updateRes[0]).catch(() => { });
         return updateRes[0];
       }
     }
@@ -197,7 +197,7 @@ export async function createOrUpdateTimetableDraft(tenantSlug: string, dto: any,
       ]
     );
     const saved = res[0] || { success: true };
-    dispatchTimetableScheduleNotifications(tenantSlug, saved).catch(() => {});
+    dispatchTimetableScheduleNotifications(tenantSlug, saved).catch(() => { });
     return saved;
   } catch (err: any) {
     console.error(`[createOrUpdateTimetableDraft] ${schema}:`, err.message);
@@ -214,7 +214,7 @@ export async function submitTimetableDraftForApproval(tenantSlug: string, draftI
       [draftId]
     );
     const submitted = res[0] || { success: true, message: 'Submitted for HOD approval' };
-    dispatchTimetableScheduleNotifications(tenantSlug, submitted).catch(() => {});
+    dispatchTimetableScheduleNotifications(tenantSlug, submitted).catch(() => { });
     return submitted;
   } catch (err: any) {
     console.error(`[submitTimetableDraftForApproval] ${schema}:`, err.message);
@@ -222,17 +222,58 @@ export async function submitTimetableDraftForApproval(tenantSlug: string, draftI
   }
 }
 
-export async function getPendingTimetableForHod(tenantSlug: string, departmentId?: string) {
+import { resolveHodScope } from './hod-scope';
+
+export async function getPendingTimetableForHod(
+  tenantSlug: string,
+  departmentId?: string,
+  userContext?: { userId?: string; empId?: string; courseCd?: string; role?: string }
+) {
   const schema = resolveSchema(tenantSlug);
   await ensureTimetableDraftsTable(tenantSlug);
   try {
     const params: any[] = ['PENDING_HOD_APPROVAL'];
     let deptFilter = '';
-    if (departmentId && isUUID(departmentId)) {
+
+    if (userContext?.userId || userContext?.empId) {
+      const scope = await resolveHodScope(tenantSlug, {
+        departmentId,
+        userId: userContext.userId,
+        empId: userContext.empId,
+        courseCd: userContext.courseCd,
+        role: userContext.role,
+      });
+
+      if (scope.departmentIds.length > 0) {
+        params.push(scope.departmentIds);
+        const deptParamIdx = params.length;
+        deptFilter = `AND (
+          timetable_drafts.department_id::text = ANY($${deptParamIdx}::text[])
+          OR EXISTS (
+            SELECT 1 FROM "${schema}".departments d_scope
+            WHERE d_scope.id::text = ANY($${deptParamIdx}::text[])
+              AND (
+                (timetable_drafts.department_id::text = d_scope.id::text)
+                OR (
+                  timetable_drafts.course_cd IS NOT NULL AND d_scope.course_cd IS NOT NULL AND timetable_drafts.course_cd = d_scope.course_cd
+                  AND timetable_drafts.branch_cd IS NOT NULL AND d_scope.branch_cd IS NOT NULL AND timetable_drafts.branch_cd = d_scope.branch_cd
+                )
+              )
+          )
+          OR EXISTS (
+            SELECT 1 FROM "${schema}".faculty f_tt
+            WHERE f_tt.user_id::text = timetable_drafts.created_by::text
+              AND f_tt.department_id::text = ANY($${deptParamIdx}::text[])
+          )
+        )`;
+      } else if (scope.isRestricted) {
+        deptFilter = `AND 1 = 0`;
+      }
+    } else if (departmentId && isUUID(departmentId)) {
       deptFilter = `AND department_id::text = $2`;
       params.push(departmentId);
     }
-    return await queryDb(
+    const rows = await queryDb(
       `SELECT *, week_start::text AS week_start, week_end::text AS week_end FROM "${schema}".timetable_drafts 
        WHERE status = $1 
          AND (slots IS NOT NULL AND jsonb_array_length(slots) > 0)
@@ -240,6 +281,8 @@ export async function getPendingTimetableForHod(tenantSlug: string, departmentId
        ORDER BY updated_at DESC, created_at DESC`,
       params
     );
+    console.log(`[getPendingTimetableForHod] ${schema} returned ${rows.length} rows for user:`, userContext);
+    return rows;
 
   } catch (err: any) {
     console.error(`[getPendingTimetableForHod] ${schema}:`, err.message);
@@ -375,7 +418,7 @@ export async function hodTimetableAction(tenantSlug: string, dto: { draftId: str
         await queryDb(
           `DELETE FROM "${schema}".timetable_slots WHERE draft_id = $1::uuid`,
           [dto.draftId]
-        ).catch(() => {});
+        ).catch(() => { });
 
         for (const sl of slots) {
           try {
@@ -596,7 +639,7 @@ export async function hodTimetableAction(tenantSlug: string, dto: { draftId: str
                      section = COALESCE(section, $6) 
                  WHERE id::text = $7`,
                 [colgVal, courseVal, branchVal, batchVal, semVal, secVal, dto.draftId]
-              ).catch(() => {});
+              ).catch(() => { });
             }
           } catch (insErr: any) {
             console.warn(`[hodTimetableAction] insert slot error: ${insErr.message}`);
@@ -832,7 +875,7 @@ export async function copyDraftToNextWeek(tenantSlug: string, draftId: string, u
     ]
   );
   const created = res[0] || { success: true };
-  dispatchTimetableScheduleNotifications(tenantSlug, created).catch(() => {});
+  dispatchTimetableScheduleNotifications(tenantSlug, created).catch(() => { });
   return created;
 }
 
@@ -863,7 +906,7 @@ export async function dispatchTimetableScheduleNotifications(tenantSlug: string,
       );
       ALTER TABLE "${schema}".notifications ADD COLUMN IF NOT EXISTS category TEXT;
       ALTER TABLE "${schema}".notifications ADD COLUMN IF NOT EXISTS body TEXT;
-    `).catch(() => {});
+    `).catch(() => { });
 
     // Group slots by faculty
     const facMap = new Map<string, { facultyId: string; facultyEmpId: string; facultyName: string; slots: any[]; subjects: Set<string> }>();
@@ -923,12 +966,12 @@ export async function dispatchTimetableScheduleNotifications(tenantSlug: string,
         `INSERT INTO "${schema}".notifications (id, recipient_id, title, message, body, type, category, is_read, created_at)
          VALUES (gen_random_uuid(), 'HOD', $1, $2, $2, 'info', 'timetable', false, NOW())`,
         [hodTitle, hodMsg]
-      ).catch(() => {});
+      ).catch(() => { });
       await queryDb(
         `INSERT INTO "${schema}".notifications (id, recipient_id, title, message, body, type, category, is_read, created_at)
          VALUES (gen_random_uuid(), 'ALL_HODS', $1, $2, $2, 'info', 'timetable', false, NOW())`,
         [hodTitle, hodMsg]
-      ).catch(() => {});
+      ).catch(() => { });
     }
   } catch (err: any) {
     console.warn(`[dispatchTimetableScheduleNotifications] error:`, err?.message);

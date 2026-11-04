@@ -18,11 +18,20 @@ export async function GET(req: NextRequest) {
     url.searchParams.get('tenantSlug') ||
     req.headers.get('x-tenant-slug') ||
     'srms-cet-bareilly';
-  const departmentId = url.searchParams.get('departmentId') || undefined;
+  const departmentId = url.searchParams.get('departmentId') || req.headers.get('x-department-id') || undefined;
+  const userId = url.searchParams.get('userId') || req.headers.get('x-user-id') || undefined;
+  const empId = url.searchParams.get('empId') || req.headers.get('x-emp-id') || undefined;
+  const courseCd = url.searchParams.get('courseCd') || undefined;
+  const role = url.searchParams.get('role') || 'HOD';
 
   try {
     // Always query direct PostgreSQL with strict schema isolation
-    const drafts = await getPendingTimetableForHod(tenantSlug, departmentId);
+    const drafts = await getPendingTimetableForHod(tenantSlug, departmentId, {
+      userId,
+      empId,
+      courseCd,
+      role,
+    });
     const filtered = (drafts || []).filter((item: any) => {
       const raw = item?.slots;
       const arr = typeof raw === 'string' ? JSON.parse(raw || '[]') : (raw || []);

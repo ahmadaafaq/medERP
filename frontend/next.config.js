@@ -1,8 +1,9 @@
 /** @type {import('next').NextConfig} */
+const path = require('path');
 const publicApi = (process.env.NEXT_PUBLIC_API_URL || '').trim();
 const hasPublicIp = publicApi && !publicApi.includes('localhost') && !publicApi.includes('127.0.0.1');
 
-const backendHost = process.env.BACKEND_HOST || '127.0.0.1';
+const backendHost = process.env.BACKEND_HOST || '100.63.22.73';
 const backendPort = process.env.BACKEND_PORT || process.env.PORT || '8081';
 const defaultBase = `http://${backendHost}:${backendPort}`;
 
@@ -27,10 +28,20 @@ if (backendBase.includes('localhost:8081')) {
   backendBase = backendBase.replace('localhost:8081', '127.0.0.1:8081');
 }
 
+const isStandalone = process.env.NODE_ENV === 'production' && (process.env.NEXT_OUTPUT_STANDALONE === 'true' || process.env.STANDALONE === 'true');
+
 const nextConfig = {
-  output: 'standalone',
+  ...(isStandalone ? { output: 'standalone' } : {}),
   reactStrictMode: true,
   swcMinify: true,
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@mederp/shared$': path.resolve(__dirname, '../shared/dist/index.js'),
+      '@mederp/shared': path.resolve(__dirname, '../shared/dist/index.js'),
+    };
+    return config;
+  },
   async rewrites() {
     return [
       {

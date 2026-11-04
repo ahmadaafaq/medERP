@@ -34,6 +34,7 @@ export class StudentMasterController {
     @Query('search') search?: string,
     @Query('collegeId') collegeId?: string,
     @Query('courseId') courseId?: string,
+    @Query('courseCd') courseCd?: string,
     @Query('batchId') batchId?: string,
     @Query('branchId') branchId?: string,
     @Query('sessionId') sessionId?: string,
@@ -51,7 +52,7 @@ export class StudentMasterController {
     return this.studentMasterService.listStudents(effectiveTenant, {
       search,
       collegeId: effectiveCollegeId,
-      courseId,
+      courseId: courseId || courseCd,
       batchId,
       branchId,
       sessionId,

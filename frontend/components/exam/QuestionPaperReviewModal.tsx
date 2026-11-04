@@ -436,7 +436,7 @@ export default function QuestionPaperReviewModal({
                 <div className="text-right meta-right shrink-0">
                   <span className="text-slate-600 dark:text-slate-400 font-bold">Max Marks: </span>
                   <span className="font-bold text-black dark:text-white">{paper.max_marks || 100}</span>
-                  <span className="text-slate-500 text-[11px] ml-1.5">(Pass: {paper.passing_marks || 40})</span>
+                  <span className="text-slate-500 text-[11px] ml-1.5">(Pass: {Math.round(Number(paper.max_marks || 100) * 0.33)})</span>
                 </div>
               </div>
 
@@ -485,16 +485,85 @@ export default function QuestionPaperReviewModal({
                       .filter((q: any) => !isTheoryPaper || (q.mode !== 'PRACTICAL' && !q.is_practical && q.type !== 'PRACTICAL'));
                     const sPracticals: any[] = isTheoryPaper ? [] : (section.practicalComponents || []);
 
+                    // Calculate Section Attempt Rules and Formatted Instruction Line
+                    let reqN = section.requiredToAttempt ?? section.required_to_attempt;
+                    let targetM = section.targetQuestionsCount ?? section.target_questions_count;
+                    let rule = String((section.attemptRule ?? section.attempt_rule) || '').toUpperCase();
+
+                    // Detect choice attempt from custom description or instructions if not explicitly structured
+                    const descRaw = String(section.instructions || section.description || '').trim();
+                    const matchChoice = descRaw.match(/(?:attempt|answer)\s+any\s+(\d+|one|two|three|four|five|six|seven|eight|nine|ten)(?:\s+(?:questions?|of))?/i);
+                    if (matchChoice) {
+                      const wordToNum: Record<string, number> = {
+                        one: 1, two: 2, three: 3, four: 4, five: 5,
+                        six: 6, seven: 7, eight: 8, nine: 9, ten: 10
+                      };
+                      const parsedN = isNaN(Number(matchChoice[1])) ? wordToNum[matchChoice[1].toLowerCase()] : Number(matchChoice[1]);
+                      if (parsedN) {
+                        reqN = parsedN;
+                        rule = 'CHOICE';
+                      }
+                    }
+
+                    // Total questions pool in section
+                    const totalM = Math.max(sQuestions.length, Number(targetM) || 0, (reqN ? Number(reqN) + 1 : 0));
+                    const isChoice = rule === 'CHOICE' || (reqN && Number(reqN) < totalM);
+
+                    // Calculate marks per question across the section
+                    const questionMarksList = sQuestions.map((q: any) => {
+                      const subParts = (q.sub_questions && Array.isArray(q.sub_questions) && q.sub_questions.length > 0)
+                        ? q.sub_questions
+                        : (q.subQuestions && Array.isArray(q.subQuestions) && q.subQuestions.length > 0)
+                        ? q.subQuestions
+                        : [];
+                      if (subParts.length > 0) {
+                        return subParts.reduce((acc: number, sq: any) => acc + Number(sq.customMarks ?? sq.marks ?? sq.defaultMarks ?? sq.max_marks ?? sq.maxMarks ?? 0), 0);
+                      }
+                      return Number(q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? section.defaultMarksPerQuestion ?? section.default_marks_per_question ?? 5);
+                    });
+
+                    const rawSecDefaultMark = section.defaultMarksPerQuestion ?? section.default_marks_per_question;
+                    const defaultMark = rawSecDefaultMark !== undefined && rawSecDefaultMark !== null && rawSecDefaultMark !== '' ? Number(rawSecDefaultMark) : 0;
+                    const allEqualMarks = questionMarksList.length > 0 ? questionMarksList.every((m: number) => m === questionMarksList[0]) : (defaultMark > 0);
+                    const sampleMark = questionMarksList[0] || defaultMark;
+                    const equalClause = allEqualMarks && sampleMark > 0
+                      ? ` All questions carry equal marks (${sampleMark} Mark${sampleMark > 1 ? 's' : ''} each).`
+                      : (questionMarksList.length > 0 && !allEqualMarks ? ' (Marks indicated against each question).' : '');
+
+                    let attemptInstruction = '';
+                    if (isChoice && reqN && totalM > 0) {
+                      const nVal = Number(reqN);
+                      const mVal = Number(totalM);
+                      attemptInstruction = `Note: Attempt any ${nVal} question${nVal > 1 ? 's' : ''} out of ${mVal} questions.${equalClause}`;
+                    } else if (totalM > 0) {
+                      attemptInstruction = `Note: All questions are compulsory.${equalClause}`;
+                    }
+
+                    // Extract clean custom instructions avoiding duplicates and contradictions
+                    const isRedundantDesc = !descRaw 
+                      || /(?:attempt|answer)\s+any/i.test(descRaw)
+                      || /compulsory/i.test(descRaw)
+                      || /multiple\s+choice/i.test(descRaw)
+                      || /descriptive/i.test(descRaw)
+                      || descRaw === attemptInstruction;
+                    const cleanInstructions = isRedundantDesc ? '' : descRaw.replace(/\s*\(\d+\s*Marks?\)/gi, '').trim();
+
                   return (
                     <div key={section.id || sIdx} className="space-y-3">
                       {/* Section Title */}
                       <div className="border-b border-black/40 dark:border-slate-500 pb-1 section-heading">
                         <h3 className="font-bold text-sm sm:text-base uppercase tracking-wide">
-                          {section.title || `Section ${String.fromCharCode(65 + sIdx)}`}
+                          {section.title || section.name || `Section ${String.fromCharCode(65 + sIdx)}`}
                         </h3>
-                        {section.instructions && (
-                          <p className="text-xs text-slate-600 dark:text-slate-400 italic font-sans font-normal section-instructions">
-                            {section.instructions}
+                        {/* Printed Section Attempt Instruction Line */}
+                        {attemptInstruction && (
+                          <p className="text-xs sm:text-[13px] text-slate-800 dark:text-slate-200 font-semibold italic font-sans mt-0.5 section-instructions">
+                            {attemptInstruction}
+                          </p>
+                        )}
+                        {cleanInstructions && (
+                          <p className="text-xs text-slate-600 dark:text-slate-400 italic font-sans font-normal mt-0.5 section-instructions">
+                            {cleanInstructions}
                           </p>
                         )}
                       </div>
@@ -505,16 +574,29 @@ export default function QuestionPaperReviewModal({
                           const qId = q.questionId || q.id || `q_${sIdx}_${qIdx}`;
                           const rem = questionRemarks[qId] || { action: 'ok', remark: '' };
                           const isFlagged = rem.action && rem.action !== 'ok';
+                          const groupForQ = (section.choiceGroups || []).find((g: any) => (g.questionIds || []).includes(qId));
+                          const isFirstInGroup = groupForQ && (groupForQ.questionIds || [])[0] === qId;
 
                           return (
-                            <div
-                              key={qId}
-                              className={`p-3 rounded-lg transition-all ${
-                                isFlagged
-                                  ? 'bg-rose-50/70 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800'
-                                  : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
-                              }`}
-                            >
+                            <React.Fragment key={qId}>
+                              {isFirstInGroup && (
+                                <div className="p-2.5 rounded-lg bg-indigo-50/80 dark:bg-slate-800/80 border border-indigo-200 dark:border-indigo-800/60 my-2">
+                                  <div className="flex items-center justify-between text-xs font-bold text-[#5B4BFF] uppercase">
+                                    <span>⌥ {groupForQ.name || 'Choice Group'}: Attempt any {groupForQ.requiredToAttempt} of {groupForQ.totalQuestions || groupForQ.questionIds.length} Questions</span>
+                                    <span className="text-[10px] text-slate-500 font-normal">Policy: {groupForQ.overAttemptPolicy || 'BEST_N'}</span>
+                                  </div>
+                                  {groupForQ.instructions && (
+                                    <p className="text-[11px] text-slate-600 dark:text-slate-300 italic mt-0.5">{groupForQ.instructions}</p>
+                                  )}
+                                </div>
+                              )}
+                              <div
+                                className={`p-3 rounded-lg transition-all ${
+                                  isFlagged
+                                    ? 'bg-rose-50/70 dark:bg-rose-950/30 border border-rose-300 dark:border-rose-800'
+                                    : 'hover:bg-slate-50 dark:hover:bg-slate-800/30'
+                                }`}
+                              >
                               <div className="flex items-start justify-between gap-3 q-row">
                                 <div className="flex-1 q-text">
                                   <div className="flex items-baseline gap-2">
@@ -598,9 +680,21 @@ export default function QuestionPaperReviewModal({
                                 </div>
 
                                 <div className="text-right shrink-0 q-marks">
-                                  <span className="font-mono font-bold text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
-                                    [{q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 1} M]
-                                  </span>
+                                  {(() => {
+                                    const subQs = (q.sub_questions && Array.isArray(q.sub_questions) && q.sub_questions.length > 0)
+                                      ? q.sub_questions
+                                      : (q.subQuestions && Array.isArray(q.subQuestions) && q.subQuestions.length > 0)
+                                      ? q.subQuestions
+                                      : [];
+                                    const computedQMarks = subQs.length > 0
+                                      ? subQs.reduce((sum: number, sq: any) => sum + Number(sq.customMarks ?? sq.marks ?? sq.defaultMarks ?? sq.max_marks ?? sq.maxMarks ?? 0), 0)
+                                      : Number(q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 1);
+                                    return (
+                                      <span className="font-mono font-bold text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
+                                        [{computedQMarks} M]
+                                      </span>
+                                    );
+                                  })()}
                                 </div>
                               </div>
 
@@ -714,6 +808,7 @@ export default function QuestionPaperReviewModal({
                                 </div>
                               )}
                             </div>
+                            </React.Fragment>
                           );
                         })}
 

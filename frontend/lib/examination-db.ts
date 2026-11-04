@@ -1,4 +1,5 @@
 import { getDbPool } from './db';
+import { resolveHodScope } from './hod-scope';
 
 function resolveSchema(slug: string): string {
   const clean = (slug || 'srms-cet-bareilly').trim();
@@ -19,6 +20,7 @@ export async function getExamPapersFromDb(tenantSlug: string, filters?: {
   section?: string;
   role?: string;
   userId?: string;
+  empId?: string;
   createdBy?: string;
   facultyId?: string;
 }) {
@@ -30,12 +32,47 @@ export async function getExamPapersFromDb(tenantSlug: string, filters?: {
 
   const rawRole = (filters?.role || '').toUpperCase();
   const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL' || rawRole === 'SUPERADMIN';
-  const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
+  const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT' || Boolean(filters?.empId || filters?.userId);
   const isDqac = rawRole === 'DQAC';
   const userId = filters?.userId || filters?.createdBy || filters?.facultyId || null;
+  const empId = filters?.empId || null;
   const validUserId = userId && isUUID(userId) ? userId : null;
 
-  if (!isAdmin && rawRole) {
+  if (isHod && (userId || empId)) {
+    const scope = await resolveHodScope(tenantSlug, {
+      departmentId: filters?.departmentId,
+      userId: userId || undefined,
+      empId: empId || undefined,
+      courseCd: filters?.courseCd,
+      role: filters?.role || 'HOD',
+    });
+
+    if (scope.departmentIds.length > 0) {
+      params.push(scope.departmentIds);
+      const deptParamIdx = params.length;
+      conditions.push(`(
+        p.department_id::text = ANY($${deptParamIdx}::text[])
+        OR EXISTS (
+          SELECT 1 FROM "${schema}".departments d_scope
+          WHERE d_scope.id::text = ANY($${deptParamIdx}::text[])
+            AND (
+              (p.department_id::text = d_scope.id::text)
+              OR (
+                p.course_cd IS NOT NULL AND d_scope.course_cd IS NOT NULL AND p.course_cd = d_scope.course_cd
+                AND p.branch_cd IS NOT NULL AND d_scope.branch_cd IS NOT NULL AND p.branch_cd = d_scope.branch_cd
+              )
+            )
+        )
+        OR EXISTS (
+          SELECT 1 FROM "${schema}".faculty f2
+          WHERE f2.user_id::text = p.created_by::text
+            AND f2.department_id::text = ANY($${deptParamIdx}::text[])
+        )
+      )`);
+    } else if (scope.isRestricted) {
+      conditions.push(`1 = 0`);
+    }
+  } else if (!isAdmin && rawRole) {
     if (isHod || isDqac) {
       if (filters?.departmentId && isUUID(filters.departmentId)) {
         params.push(filters.departmentId);

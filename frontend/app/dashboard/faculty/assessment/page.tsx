@@ -8,6 +8,21 @@ import FacultyAcademicCascadingDropdown, {
 } from '../../../../components/faculty/FacultyAcademicCascadingDropdown';
 import QuestionPaperReviewModal from '../../../../components/exam/QuestionPaperReviewModal';
 import ImagePreviewModal from '../../../../components/exam/ImagePreviewModal';
+import {
+  PaperStatus,
+  QuestionType,
+  OverAttemptPolicy,
+  MarksMode,
+  ChoiceGroup,
+  PaperSnapshot,
+  QuestionDefinition,
+  computeEffectiveMax,
+  computePaperScore,
+} from '@mederp/shared';
+import ChoiceGroupManager from '../../../../components/exam/ChoiceGroupManager';
+import PaperBlueprintModal from '../../../../components/exam/PaperBlueprintModal';
+import PaperLiveScoringPreviewModal from '../../../../components/exam/PaperLiveScoringPreviewModal';
+import PaperVersionDiffModal from '../../../../components/exam/PaperVersionDiffModal';
 
 interface SubQuestion {
   id: string;
@@ -43,6 +58,7 @@ interface QuestionItem {
   has_sub_questions?: boolean;
   sub_questions?: SubQuestion[];
   max_marks?: number;
+  is_active?: boolean;
   created_at?: string;
 }
 
@@ -340,7 +356,27 @@ export default function FacultyAssessmentMasterPage() {
     }
 
     if (state.subject) {
-      setSelectedSubject(state.subject.code || state.subject.id);
+      const sub = state.subject;
+      setSelectedSubject(sub.code || sub.id);
+      // Auto-generate Paper Title and Code as per subject by default for new papers (faculty can still customize)
+      if (!editingPaperId) {
+        const subName = sub.name || sub.mst_sub_name || 'Subject';
+        const subCode = (sub.code || sub.sub_cd || (sub as any).mst_sub_cd || 'EXAM').replace(/[^a-zA-Z0-9]/g, '');
+        const currentYear = new Date().getFullYear();
+        setPaperTitle((prev) => {
+          if (!prev || prev.includes('Examination') || prev.startsWith('Subject') || prev.trim() === '') {
+            return `${subName} Examination ${currentYear}`;
+          }
+          return prev;
+        });
+        setPaperCode((prev) => {
+          if (!prev || prev.startsWith('EXAM-') || /^[A-Z0-9]+-\d{4}-T\d+$/i.test(prev) || prev.trim() === '') {
+            const paperCount = createdPapersList.length + 1;
+            return `${subCode}-${currentYear}-T${paperCount}`;
+          }
+          return prev;
+        });
+      }
     }
     if (state.semester) {
       setSelectedProfPhase(state.semester.SemName || state.semester.name);
@@ -391,15 +427,34 @@ export default function FacultyAssessmentMasterPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [filterTopic, setFilterTopic] = useState<string>('all');
   const [filterCompetency, setFilterCompetency] = useState<string>('all');
+  const [editingBankQuestionId, setEditingBankQuestionId] = useState<string | null>(null);
+  const [bankStatusFilter, setBankStatusFilter] = useState<'active' | 'archived' | 'all'>('active');
+
+  // Section Question In-place Editing State (gives faculty full rights to edit question prompt, options & weightage)
+  const [editingSectionQuestion, setEditingSectionQuestion] = useState<{
+    secId: string;
+    qId: string;
+    questionText: string;
+    customMarks: number;
+    subQuestions: any[];
+    optionA?: string;
+    optionB?: string;
+    optionC?: string;
+    optionD?: string;
+    correctOption?: string;
+    imageUrl?: string;
+    mode?: string;
+  } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Tab 2 & 3 States
+  const [paperType, setPaperType] = useState<'THEORY' | 'PRACTICAL'>('THEORY');
   const [paperTitle, setPaperTitle] = useState('');
   const [paperCode, setPaperCode] = useState('');
-  const [paperDuration, setPaperDuration] = useState(60);
-  const [paperTotalMarks, setPaperTotalMarks] = useState(40);
+  const [paperDuration, setPaperDuration] = useState<number | ''>('');
+  const [paperTotalMarks, setPaperTotalMarks] = useState<number | ''>('');
   const [paperSet, setPaperSet] = useState<string>('Set A');
   const [targetSections, setTargetSections] = useState<string[]>(['All']);
   const [designedPapers, setDesignedPapers] = useState<any[]>([]);
@@ -408,34 +463,258 @@ export default function FacultyAssessmentMasterPage() {
   const [pickerTotalMarks, setPickerTotalMarks] = useState<Record<string, number>>({});
   const [pickerSubMarks, setPickerSubMarks] = useState<Record<string, Record<string, number>>>({});
 
-  // Dynamic Paper Sections State
+  // Dynamic Paper Sections State (all inputs start blank)
   const [paperSections, setPaperSections] = useState<any[]>([
     {
       id: 'sec-1',
       name: 'Section A',
-      type: 'MCQ',
-      description: 'Multiple Choice Questions (20 Marks)',
-      questions: [],
-      practicalMarks: 0
-    },
-    {
-      id: 'sec-2',
-      name: 'Section B',
       type: 'DESC',
-      description: 'Long Descriptive & Short Notes (60 Marks)',
+      description: '',
       questions: [],
-      practicalMarks: 0
-    },
-    {
-      id: 'sec-3',
-      name: 'Section C - Practical',
-      type: 'PRACTICAL',
-      description: 'Practical Spotting, OSPE Stations & Viva Voce (20 Marks)',
-      questions: [],
-      practicalMarks: 20
+      practicalMarks: 0,
+      marksCondition: 'VARIABLE',
+      attemptRule: 'ALL',
+      targetQuestionsCount: '',
+      requiredToAttempt: '',
+      overAttemptPolicy: OverAttemptPolicy.BEST_N,
+      ruleMaxPolicy: 'EQUAL_MARKS_REQUIRED',
+      defaultMarksPerQuestion: '',
+      choiceGroups: [],
     }
   ]);
   const [secQuestionPick, setSecQuestionPick] = useState<{ [secId: string]: string }>({});
+  const [secGroupSelect, setSecGroupSelect] = useState<{ [secId: string]: string[] }>({});
+  const [blueprintModalSecId, setBlueprintModalSecId] = useState<string | null>(null);
+  const [showScoringSimulation, setShowScoringSimulation] = useState<boolean>(false);
+  const [diffModalPaper, setDiffModalPaper] = useState<{ current: any; previous: any } | null>(null);
+  const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
+
+  // Map of all questions in the paper for pure scoring engine
+  const allPaperQuestionsMap = useMemo<Record<string, QuestionDefinition>>(() => {
+    const map: Record<string, QuestionDefinition> = {};
+    paperSections.forEach(sec => {
+      (sec.questions || []).forEach((q: any) => {
+        const qId = q.questionId || q.id;
+        const subQs = q.subQuestions || q.sub_questions || [];
+        let marks = 0;
+        if (subQs.length > 0) {
+          marks = subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || 0), 0);
+        } else {
+          marks = Number(q.customMarks || q.defaultMarks || (sec.defaultMarksPerQuestion ? Number(sec.defaultMarksPerQuestion) : 5));
+        }
+        map[qId] = {
+          id: qId,
+          text: q.questionText || q.text || '',
+          type: q.mode === 'MCQ' ? QuestionType.MCQ_SINGLE : QuestionType.SHORT_ANSWER,
+          marks,
+        };
+      });
+    });
+    return map;
+  }, [paperSections]);
+
+  // Reactive Effective Max calculation (Choice N of M takes top-N, All Mandatory takes all)
+  const computedEffectiveMax = useMemo(() => {
+    let total = 0;
+    paperSections.forEach(sec => {
+      const isChoice = sec.attemptRule === 'CHOICE';
+      const secQs = sec.questions || [];
+      if (secQs.length > 0) {
+        const marksList = secQs.map((q: any) => {
+          const subQs = q.subQuestions || q.sub_questions || [];
+          if (subQs.length > 0) {
+            return subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || 0), 0);
+          }
+          return Number(q.customMarks || q.defaultMarks || (sec.defaultMarksPerQuestion ? Number(sec.defaultMarksPerQuestion) : 0));
+        });
+        marksList.sort((a: number, b: number) => b - a);
+        if (isChoice) {
+          const rawN = sec.requiredToAttempt;
+          const reqN = rawN !== '' && rawN !== undefined && rawN !== null ? Number(rawN) : (secQs.length > 1 ? secQs.length - 1 : 1);
+          const topN = marksList.slice(0, Math.min(reqN, marksList.length));
+          total += topN.reduce((sum: number, val: number) => sum + val, 0);
+        } else {
+          // All Mandatory: count all questions added
+          total += marksList.reduce((sum: number, val: number) => sum + val, 0);
+        }
+      } else {
+        // If questions are not yet added, use planned count if entered
+        const rawM = sec.targetQuestionsCount;
+        const rawN = sec.requiredToAttempt;
+        const rawDefaultMarks = sec.defaultMarksPerQuestion;
+        const m = rawM !== '' && rawM !== undefined && rawM !== null ? Number(rawM) : 0;
+        const n = rawN !== '' && rawN !== undefined && rawN !== null ? Number(rawN) : (m > 1 ? m - 1 : m);
+        const marksPerQ = rawDefaultMarks !== '' && rawDefaultMarks !== undefined && rawDefaultMarks !== null ? Number(rawDefaultMarks) : 0;
+        if (isChoice && n > 0 && marksPerQ > 0) {
+          total += n * marksPerQ;
+        } else if (!isChoice && m > 0 && marksPerQ > 0) {
+          total += m * marksPerQ;
+        }
+      }
+      if (sec.type === 'PRACTICAL' && sec.practicalMarks) {
+        total += Number(sec.practicalMarks || 0);
+      }
+    });
+    return total;
+  }, [paperSections]);
+
+  // Keep paperTotalMarks in sync with computedEffectiveMax
+  useEffect(() => {
+    if (computedEffectiveMax > 0) {
+      setPaperTotalMarks(computedEffectiveMax);
+    }
+  }, [computedEffectiveMax]);
+
+  // Choice Group handlers
+  const handleToggleSelectForGroup = (secId: string, qId: string) => {
+    setSecGroupSelect(prev => {
+      const cur = prev[secId] || [];
+      const updated = cur.includes(qId) ? cur.filter(id => id !== qId) : [...cur, qId];
+      return { ...prev, [secId]: updated };
+    });
+  };
+
+  const handleCreateChoiceGroup = (secId: string) => {
+    const selectedQIds = secGroupSelect[secId] || [];
+    if (selectedQIds.length < 2) {
+      setAlert({ type: 'error', message: 'Select at least 2 questions to wrap in a Choice Group.' });
+      return;
+    }
+
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId) return sec;
+      const currentGroups: ChoiceGroup[] = sec.choiceGroups || [];
+      const newGroup: ChoiceGroup = {
+        id: `cg-${Date.now()}`,
+        name: `Group ${currentGroups.length + 1} (Attempt any ${selectedQIds.length - 1} of ${selectedQIds.length})`,
+        sectionId: secId,
+        questionIds: selectedQIds,
+        totalQuestions: selectedQIds.length,
+        requiredToAttempt: Math.max(1, selectedQIds.length - 1),
+        overAttemptPolicy: OverAttemptPolicy.BEST_N,
+        marksMode: MarksMode.UNIFORM,
+      };
+      return {
+        ...sec,
+        choiceGroups: [...currentGroups, newGroup],
+      };
+    }));
+
+    setSecGroupSelect(prev => ({ ...prev, [secId]: [] }));
+    setAlert({ type: 'success', message: `Wrapped ${selectedQIds.length} questions in a new Choice Group.` });
+  };
+
+  const handleUpdateChoiceGroup = (secId: string, groupId: string, updates: Partial<ChoiceGroup>) => {
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId) return sec;
+      return {
+        ...sec,
+        choiceGroups: (sec.choiceGroups || []).map((g: ChoiceGroup) => g.id === groupId ? { ...g, ...updates } : g),
+      };
+    }));
+  };
+
+  const handleRemoveChoiceGroup = (secId: string, groupId: string) => {
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId) return sec;
+      return {
+        ...sec,
+        choiceGroups: (sec.choiceGroups || []).filter((g: ChoiceGroup) => g.id !== groupId),
+      };
+    }));
+    setAlert({ type: 'success', message: 'Choice group disbanded.' });
+  };
+
+  const handleRemoveQuestionFromChoiceGroup = (secId: string, groupId: string, qId: string) => {
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId) return sec;
+      return {
+        ...sec,
+        choiceGroups: (sec.choiceGroups || []).map((g: ChoiceGroup) => {
+          if (g.id !== groupId) return g;
+          const filtered = g.questionIds.filter(id => id !== qId);
+          return {
+            ...g,
+            questionIds: filtered,
+            totalQuestions: filtered.length,
+          };
+        }),
+      };
+    }));
+  };
+
+  // Section and Question reordering handlers
+  const handleMoveSectionUp = (secIdx: number) => {
+    if (secIdx <= 0) return;
+    setPaperSections(prev => {
+      const copy = [...prev];
+      const temp = copy[secIdx];
+      copy[secIdx] = copy[secIdx - 1];
+      copy[secIdx - 1] = temp;
+      return copy;
+    });
+  };
+
+  const handleMoveSectionDown = (secIdx: number) => {
+    setPaperSections(prev => {
+      if (secIdx >= prev.length - 1) return prev;
+      const copy = [...prev];
+      const temp = copy[secIdx];
+      copy[secIdx] = copy[secIdx + 1];
+      copy[secIdx + 1] = temp;
+      return copy;
+    });
+  };
+
+  const handleMoveQuestionUp = (secId: string, qIdx: number) => {
+    if (qIdx <= 0) return;
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId) return sec;
+      const qCopy = [...sec.questions];
+      const temp = qCopy[qIdx];
+      qCopy[qIdx] = qCopy[qIdx - 1];
+      qCopy[qIdx - 1] = temp;
+      return { ...sec, questions: qCopy };
+    }));
+  };
+
+  const handleMoveQuestionDown = (secId: string, qIdx: number) => {
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId || qIdx >= sec.questions.length - 1) return sec;
+      const qCopy = [...sec.questions];
+      const temp = qCopy[qIdx];
+      qCopy[qIdx] = qCopy[qIdx + 1];
+      qCopy[qIdx + 1] = temp;
+      return { ...sec, questions: qCopy };
+    }));
+  };
+
+  const handleApplyBlueprintQuestions = (questions: QuestionDefinition[]) => {
+    if (!blueprintModalSecId) return;
+    const targetSec = paperSections.find(s => s.id === blueprintModalSecId);
+    const defaultM = targetSec?.defaultMarksPerQuestion || (targetSec?.type === 'MCQ' ? 1 : 5);
+    const newItems = questions.map((q, idx) => ({
+      questionId: q.id || `bp-${Date.now()}-${idx}`,
+      questionText: q.text,
+      mode: q.type === QuestionType.MCQ_SINGLE || q.type === QuestionType.MCQ_MULTI ? 'MCQ' : 'DESC',
+      topic: q.topicName || '',
+      competencyCode: q.competencyCode || '',
+      defaultMarks: q.marks || defaultM,
+      customMarks: q.marks || defaultM,
+      options: q.options || [],
+    }));
+
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== blueprintModalSecId) return sec;
+      return {
+        ...sec,
+        questions: [...sec.questions, ...newItems],
+      };
+    }));
+
+    setAlert({ type: 'success', message: `Added ${questions.length} questions from blueprint into section!` });
+    setBlueprintModalSecId(null);
+  };
 
   const [selectedPaperToPublish, setSelectedPaperToPublish] = useState<string>('');
   const [publishTargetBatch, setPublishTargetBatch] = useState('2026');
@@ -446,7 +725,6 @@ export default function FacultyAssessmentMasterPage() {
 
   // Created Papers Registry & Editor State
   const [createdPapersList, setCreatedPapersList] = useState<any[]>([]);
-  const [editingPaperId, setEditingPaperId] = useState<string | null>(null);
   const [showPaperEditor, setShowPaperEditor] = useState<boolean>(false);
   const [previewModalPaper, setPreviewModalPaper] = useState<any | null>(null);
 
@@ -525,38 +803,33 @@ export default function FacultyAssessmentMasterPage() {
 
   const handleCreateNewPaper = () => {
     setEditingPaperId(null);
-    const subName = academicCascade?.subject?.mst_sub_name || academicCascade?.subject?.name || 'Subject';
-    const subCode = (academicCascade?.subject?.code || 'EXAM').replace(/[^a-zA-Z0-9]/g, '');
-    setPaperTitle(`${subName} Sessional Examination`);
-    setPaperCode(`${subCode}-${new Date().getFullYear()}-T${createdPapersList.length + 1}`);
+    setPaperType('THEORY');
+    const subName = academicCascade?.subject?.mst_sub_name || academicCascade?.subject?.name || selectedSubject || 'Subject';
+    const subCode = (academicCascade?.subject?.code || academicCascade?.subject?.sub_cd || (academicCascade?.subject as any)?.mst_sub_cd || 'EXAM').replace(/[^a-zA-Z0-9]/g, '');
+    const currentYear = new Date().getFullYear();
+    const paperCount = createdPapersList.length + 1;
+    setPaperTitle(`${subName} Examination ${currentYear}`);
+    setPaperCode(`${subCode}-${currentYear}-T${paperCount}`);
     setPaperDuration(60);
-    setPaperTotalMarks(40);
+    setPaperTotalMarks('');
     setPaperSet('Set A');
     setTargetSections(['All']);
     setPaperSections([
       {
         id: 'sec-1',
         name: 'Section A',
-        type: 'MCQ',
-        description: 'Multiple Choice Questions (20 Marks)',
-        questions: [],
-        practicalMarks: 0
-      },
-      {
-        id: 'sec-2',
-        name: 'Section B',
         type: 'DESC',
-        description: 'Long Descriptive & Short Notes (20 Marks)',
+        description: '',
         questions: [],
-        practicalMarks: 0
-      },
-      {
-        id: 'sec-3',
-        name: 'Section C - Practical',
-        type: 'PRACTICAL',
-        description: 'Practical Spotting, OSPE Stations & Viva Voce (20 Marks)',
-        questions: [],
-        practicalMarks: 20
+        practicalMarks: 0,
+        marksCondition: 'VARIABLE',
+        attemptRule: 'ALL',
+        targetQuestionsCount: '',
+        requiredToAttempt: '',
+        overAttemptPolicy: OverAttemptPolicy.BEST_N,
+        ruleMaxPolicy: 'EQUAL_MARKS_REQUIRED',
+        defaultMarksPerQuestion: '',
+        choiceGroups: [],
       }
     ]);
     setShowPaperEditor(true);
@@ -566,18 +839,19 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   const handleEditExistingPaper = (paper: any) => {
-    if (paper.status === 'DQAC_APPROVED' || paper.status === 'HOD_APPROVED' || paper.status === 'PENDING_HOD_APPROVAL') {
+    if (paper.status === 'HOD_APPROVED') {
       setAlert({
         type: 'error',
-        message: '🔒 This question paper has been approved by DQAC / is locked against direct edits. You can clone it as a new set (which must be re-approved).'
+        message: '🔒 This question paper has been approved by HOD and is locked against direct edits. You can clone it as a new set (which must be re-approved).'
       });
       return;
     }
     setEditingPaperId(paper.id);
-    setPaperTitle(paper.name || 'MBBS Sessional Examination');
-    setPaperCode(paper.code || 'MED-EXAM-01');
-    setPaperDuration(Number(paper.duration_minutes || paper.duration_mins || 60));
-    setPaperTotalMarks(Number(paper.max_marks || 40));
+    setPaperType((paper.type || 'THEORY').toUpperCase() === 'PRACTICAL' ? 'PRACTICAL' : 'THEORY');
+    setPaperTitle(paper.name || '');
+    setPaperCode(paper.code || '');
+    setPaperDuration(paper.duration_minutes ?? paper.duration_mins ?? '');
+    setPaperTotalMarks(paper.max_marks ?? '');
     setPaperSet(paper.paper_set || paper.paperSet || 'Set A');
 
     let targetSecs = paper.target_sections || paper.targetSections || ['All'];
@@ -623,48 +897,36 @@ export default function FacultyAssessmentMasterPage() {
           image_url: q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url || null,
         }));
 
+        const rawTargetM = sec.targetQuestionsCount ?? sec.target_questions_count;
+        const targetCount = rawTargetM !== undefined && rawTargetM !== null && rawTargetM !== '' ? Number(rawTargetM) : '';
+        const rawReqCount = sec.requiredToAttempt ?? sec.required_to_attempt;
+        const reqCount = rawReqCount !== undefined && rawReqCount !== null && rawReqCount !== '' ? Number(rawReqCount) : '';
+        const rawMarks = sec.defaultMarksPerQuestion ?? sec.default_marks_per_question;
+        const defaultMarks = rawMarks !== undefined && rawMarks !== null && rawMarks !== '' ? Number(rawMarks) : '';
+        const derivedRule = String(sec.attemptRule ?? sec.attempt_rule ?? (reqCount !== '' && targetCount !== '' && reqCount < targetCount ? 'CHOICE' : 'ALL')).toUpperCase();
+
         return {
           id: sec.id || `sec-${idx + 1}`,
           name: sec.name || sec.title || `Section ${String.fromCharCode(65 + idx)}`,
-          type: sec.type || 'MCQ',
-          description: sec.description || sec.instructions || '',
+          type: sec.type || ((paper.type || '').toUpperCase() === 'PRACTICAL' ? 'PRACTICAL' : 'DESC'),
+          description: (sec.description || sec.instructions || '').replace(/\s*\(\d+\s*Marks?\)/gi, '').trim(),
           questions: formattedQs,
-          practicalMarks: Number(sec.practicalMarks || 0)
+          practicalMarks: Number(sec.practicalMarks || 0),
+          targetQuestionsCount: targetCount,
+          requiredToAttempt: reqCount,
+          attemptRule: derivedRule,
+          marksCondition: sec.marksCondition || (defaultMarks ? 'UNIFORM' : 'VARIABLE'),
+          overAttemptPolicy: sec.overAttemptPolicy ?? sec.over_attempt_policy ?? OverAttemptPolicy.BEST_N,
+          ruleMaxPolicy: sec.ruleMaxPolicy ?? sec.rule_max_policy ?? 'EQUAL_MARKS_REQUIRED',
+          defaultMarksPerQuestion: defaultMarks,
+          choiceGroups: Array.isArray(sec.choiceGroups) ? sec.choiceGroups : (Array.isArray(sec.choice_groups) ? sec.choice_groups : []),
         };
       });
-
-      // Automatically append missing standard sections (Descriptive & Practical) if not present
-      const hasDesc = mappedSecs.some((s: any) => s.type === 'DESC' || (s.name || '').toLowerCase().includes('section b') || (s.name || '').toLowerCase().includes('descriptive'));
-      const hasPractical = mappedSecs.some((s: any) => s.type === 'PRACTICAL' || (s.name || '').toLowerCase().includes('section c') || (s.name || '').toLowerCase().includes('practical'));
-
-      if (!hasDesc) {
-        mappedSecs.push({
-          id: `sec-${Date.now()}-desc`,
-          name: 'Section B',
-          type: 'DESC',
-          description: 'Long Descriptive & Short Notes (20 Marks)',
-          questions: [],
-          practicalMarks: 0
-        });
-      }
-
-      if (!hasPractical) {
-        mappedSecs.push({
-          id: `sec-${Date.now()}-prac`,
-          name: 'Section C - Practical',
-          type: 'PRACTICAL',
-          description: 'Practical Spotting, OSPE Stations & Viva Voce (20 Marks)',
-          questions: [],
-          practicalMarks: 20
-        });
-      }
 
       setPaperSections(mappedSecs);
     } else {
       setPaperSections([
-        { id: 'sec-1', name: 'Section A', type: 'MCQ', description: 'Multiple Choice Questions (20 Marks)', questions: [], practicalMarks: 0 },
-        { id: 'sec-2', name: 'Section B', type: 'DESC', description: 'Long Descriptive & Short Notes (20 Marks)', questions: [], practicalMarks: 0 },
-        { id: 'sec-3', name: 'Section C - Practical', type: 'PRACTICAL', description: 'Practical Spotting, OSPE Stations & Viva Voce (20 Marks)', questions: [], practicalMarks: 20 }
+        { id: 'sec-1', name: 'Section A', type: (paper.type || '').toUpperCase() === 'PRACTICAL' ? 'PRACTICAL' : 'DESC', description: '', questions: [], practicalMarks: 0, marksCondition: 'VARIABLE', targetQuestionsCount: '', requiredToAttempt: '', attemptRule: 'ALL', overAttemptPolicy: OverAttemptPolicy.BEST_N, ruleMaxPolicy: 'EQUAL_MARKS_REQUIRED', defaultMarksPerQuestion: '', choiceGroups: [] }
       ]);
     }
     setShowPaperEditor(true);
@@ -730,10 +992,18 @@ export default function FacultyAssessmentMasterPage() {
       {
         id: newSecId,
         name: `Section ${nextLetter}`,
-        type: 'DESC',
-        description: `Section ${nextLetter} Description`,
+        type: paperType === 'PRACTICAL' ? 'PRACTICAL' : 'DESC',
+        description: '',
         questions: [],
-        practicalMarks: 0
+        practicalMarks: 0,
+        marksCondition: 'VARIABLE',
+        attemptRule: 'ALL',
+        targetQuestionsCount: '',
+        requiredToAttempt: '',
+        overAttemptPolicy: OverAttemptPolicy.BEST_N,
+        ruleMaxPolicy: 'EQUAL_MARKS_REQUIRED',
+        defaultMarksPerQuestion: '',
+        choiceGroups: [],
       }
     ]);
   };
@@ -963,6 +1233,64 @@ export default function FacultyAssessmentMasterPage() {
         })
       };
     }));
+  };
+
+  const handleStartEditSectionQuestion = (secId: string, q: any) => {
+    let subs: any[] = [];
+    if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
+      subs = q.subQuestions.map((s: any) => ({ ...s }));
+    } else if (Array.isArray(q.sub_questions) && q.sub_questions.length > 0) {
+      subs = q.sub_questions.map((s: any) => ({ ...s }));
+    }
+    setEditingSectionQuestion({
+      secId,
+      qId: q.questionId || q.id,
+      questionText: q.questionText || q.question_text || '',
+      customMarks: Number(q.customMarks || q.defaultMarks || q.marks || 5),
+      subQuestions: subs,
+      optionA: q.optionA || q.option_a || '',
+      optionB: q.optionB || q.option_b || '',
+      optionC: q.optionC || q.option_c || '',
+      optionD: q.optionD || q.option_d || '',
+      correctOption: q.correctOption || q.correct_option || 'option_a',
+      imageUrl: q.imageUrl || q.image_url || q.image || '',
+      mode: q.mode || 'DESC',
+    });
+  };
+
+  const handleSaveEditedSectionQuestion = () => {
+    if (!editingSectionQuestion) return;
+    const { secId, qId, questionText, customMarks, subQuestions, optionA, optionB, optionC, optionD, correctOption, imageUrl } = editingSectionQuestion;
+
+    setPaperSections(prev => prev.map(sec => {
+      if (sec.id !== secId) return sec;
+      return {
+        ...sec,
+        questions: sec.questions.map((q: any) => {
+          if ((q.questionId || q.id) !== qId) return q;
+          const finalSubs = Array.isArray(subQuestions) ? subQuestions : [];
+          let finalMarks = customMarks;
+          if (finalSubs.length > 0) {
+            finalMarks = finalSubs.reduce((sum: number, sq: any) => sum + Number(sq.marks || 0), 0);
+          }
+          return {
+            ...q,
+            questionText: questionText.trim(),
+            customMarks: finalMarks,
+            defaultMarks: finalMarks,
+            subQuestions: finalSubs,
+            optionA: optionA || q.optionA,
+            optionB: optionB || q.optionB,
+            optionC: optionC || q.optionC,
+            optionD: optionD || q.optionD,
+            correctOption: correctOption || q.correctOption,
+            imageUrl: imageUrl !== undefined ? imageUrl : q.imageUrl,
+          };
+        })
+      };
+    }));
+    setEditingSectionQuestion(null);
+    setAlert({ type: 'success', message: 'Question prompt and weightage updated successfully in exam paper section!' });
   };
 
   // ─── Load User Context & Master Data on Mount ─────────────────────
@@ -1616,10 +1944,10 @@ export default function FacultyAssessmentMasterPage() {
 
   const canEnterQuestion = !!(selectedUnitId || selectedUnitCode);
 
-  // Load questions when unit/CO, topic, competency, mode, subject change
+  // Load questions when unit/CO, topic, competency, mode, subject, or status change
   useEffect(() => {
     fetchQuestions();
-  }, [selectedUnitId, selectedUnitCode, selectedTopicId, selectedCompetencyCode, mode, selectedSubject]);
+  }, [selectedUnitId, selectedUnitCode, selectedTopicId, selectedCompetencyCode, mode, selectedSubject, bankStatusFilter]);
 
   // Load designed papers from DB on mount and when switching to publish tab
   useEffect(() => {
@@ -1638,6 +1966,7 @@ export default function FacultyAssessmentMasterPage() {
       const params = new URLSearchParams();
       if (mode) params.set('mode', mode);
       if (selectedSubject) params.set('subjectId', selectedSubject);
+      if (bankStatusFilter) params.set('status', bankStatusFilter);
 
       if (selectedUnitCode && selectedUnitCode !== 'all' && selectedUnitCode !== 'ALL') {
         params.set('unitCode', selectedUnitCode);
@@ -1836,8 +2165,13 @@ export default function FacultyAssessmentMasterPage() {
     };
 
     try {
-      const res = await fetch(`${API_BASE}/exams/question-bank?tenant=${slug}`, {
-        method: 'POST',
+      const url = editingBankQuestionId
+        ? `${API_BASE}/exams/question-bank/${editingBankQuestionId}?tenant=${slug}`
+        : `${API_BASE}/exams/question-bank?tenant=${slug}`;
+      const method = editingBankQuestionId ? 'PUT' : 'POST';
+
+      const res = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
@@ -1849,8 +2183,16 @@ export default function FacultyAssessmentMasterPage() {
       if (res.ok) {
         const json = await res.json();
         const savedQ = json?.data || json;
-        setQuestions([savedQ, ...questions]);
-        setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
+        if (editingBankQuestionId) {
+          setQuestions(prev => prev.map(q => q.id === editingBankQuestionId ? { ...q, ...savedQ } : q));
+          setMasterBankQuestions(prev => prev.map(q => q.id === editingBankQuestionId ? { ...q, ...savedQ } : q));
+          setAlert({ type: 'success', message: `Question updated successfully in Question Bank!` });
+          setEditingBankQuestionId(null);
+        } else {
+          setQuestions([savedQ, ...questions]);
+          setMasterBankQuestions([savedQ, ...masterBankQuestions]);
+          setAlert({ type: 'success', message: `${mode} Question saved under Topic '${selectedTopicName}' & Competency '${selectedCompetencyCode}'!` });
+        }
         resetForm();
       } else {
         const errJson = await res.json().catch(() => ({}));
@@ -1864,8 +2206,96 @@ export default function FacultyAssessmentMasterPage() {
     }
   };
 
+  const handleStartEditBankQuestion = (q: QuestionItem) => {
+    setEditingBankQuestionId(q.id);
+    setMode(q.mode as 'MCQ' | 'DESC');
+    setQuestionImage(q.image_url || q.imageUrl || (q as any).image || '');
+    if (q.mode === 'MCQ') {
+      setMcqQuestionText(q.question_text || '');
+      setOptionA(q.option_a || '');
+      setOptionB(q.option_b || '');
+      setOptionC(q.option_c || '');
+      setOptionD(q.option_d || '');
+      setCorrectOption((q.correct_option as any) || 'option_a');
+      setMcqDifficulty((q.difficulty_level as any) || 'Medium');
+      setMcqMaxMarks(Number(q.max_marks || 1));
+    } else {
+      setDescQuestionText(q.question_text || '');
+      setDescDifficulty((q.difficulty_level as any) || 'Medium');
+      setDescMaxMarks(Number(q.max_marks || 10));
+      let parsedSubs: SubQuestion[] = [];
+      if (q.has_sub_questions && q.sub_questions) {
+        try {
+          parsedSubs = typeof q.sub_questions === 'string' ? JSON.parse(q.sub_questions) : q.sub_questions;
+        } catch {}
+      }
+      setHasSubQuestions(parsedSubs.length > 0);
+      setSubQuestions(parsedSubs);
+    }
+    if (q.unit_code) setSelectedUnitCode(q.unit_code);
+    if (q.unit_id) setSelectedUnitId(q.unit_id);
+    if (q.topic) setSelectedTopicName(q.topic);
+    if (q.topic_id) setSelectedTopicId(q.topic_id);
+    if (q.competency_code) setSelectedCompetencyCode(q.competency_code);
+
+    document.getElementById('question-creator-form-card')?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleCancelBankEdit = () => {
+    setEditingBankQuestionId(null);
+    resetForm();
+  };
+
+  const handleResumeAllQuestions = async () => {
+    const slug = getTenantSlug();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    try {
+      const res = await fetch(`${API_BASE}/exams/question-bank/resume-all?tenant=${slug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': slug,
+        },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        setAlert({ type: 'success', message: json.message || 'All archived questions resumed successfully!' });
+        await fetchQuestions();
+        await fetchMasterBankQuestions();
+      } else {
+        setAlert({ type: 'error', message: 'Failed to resume questions.' });
+      }
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err?.message || 'Error resuming questions.' });
+    }
+  };
+
+  const handleResumeSingleQuestion = async (qId: string) => {
+    const slug = getTenantSlug();
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    try {
+      const res = await fetch(`${API_BASE}/exams/question-bank/${qId}/resume?tenant=${slug}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-tenant-slug': slug,
+        },
+      });
+      if (res.ok) {
+        setAlert({ type: 'success', message: 'Question resumed into active bank!' });
+        await fetchQuestions();
+        await fetchMasterBankQuestions();
+      }
+    } catch (err: any) {
+      setAlert({ type: 'error', message: err?.message || 'Error resuming question.' });
+    }
+  };
+
   const resetForm = () => {
     setQuestionImage('');
+    setEditingBankQuestionId(null);
     if (mode === 'MCQ') {
       setMcqQuestionText('');
       setOptionA('');
@@ -1887,8 +2317,12 @@ export default function FacultyAssessmentMasterPage() {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug },
       });
-    } catch {}
-    setQuestions(questions.filter(q => q.id !== id));
+      setAlert({ type: 'success', message: 'Question archived/removed from active bank. You can resume it anytime.' });
+      await fetchQuestions();
+      await fetchMasterBankQuestions();
+    } catch {
+      setQuestions(questions.filter(q => q.id !== id));
+    }
   };
 
   const handleSubmitPaperForDqacApproval = async (paperId: string) => {
@@ -1896,15 +2330,33 @@ export default function FacultyAssessmentMasterPage() {
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
     const h = { 'Authorization': `Bearer ${token}`, 'x-tenant-slug': slug, 'Content-Type': 'application/json' };
     try {
-      const res = await fetch(`${API_BASE}/exams/papers`, {
+      const paper = createdPapersList.find(p => p.id === paperId);
+      let res = await fetch(`${API_BASE}/exams/papers/submit-for-dqac`, {
         method: 'POST',
         headers: h,
-        body: JSON.stringify({ id: paperId, status: 'PENDING_DQAC_APPROVAL' }),
+        body: JSON.stringify({ paperId }),
       });
+      if (!res.ok) {
+        res = await fetch(`${API_BASE}/exams/papers`, {
+          method: 'POST',
+          headers: h,
+          body: JSON.stringify({
+            id: paperId,
+            status: 'PENDING_DQAC_APPROVAL',
+            code: paper?.code,
+            name: paper?.name,
+            maxMarks: paper?.max_marks || 40,
+            passingMarks: paper?.passing_marks || 16,
+          }),
+        });
+      }
       if (res.ok) {
         setAlert({ type: 'success', message: 'Question paper submitted for DQAC Quality Audit successfully!' });
         await fetchCreatedPapersList();
         await fetchDesignedPapers();
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        setAlert({ type: 'error', message: errData.message || 'Failed to submit for DQAC audit' });
       }
     } catch (err) {
       console.error('Submit for DQAC failed', err);
@@ -1946,10 +2398,10 @@ export default function FacultyAssessmentMasterPage() {
         targetSections: targetSections,
         target_sections: targetSections,
         subjectId: selectedSubject || null,
-        maxMarks: paperTotalMarks,
-        passingMarks: Math.round(paperTotalMarks * 0.4),
-        durationMinutes: paperDuration,
-        type: 'THEORY',
+        maxMarks: Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40,
+        passingMarks: Math.round((Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40) * 0.33),
+        durationMinutes: Number(paperDuration) || 60,
+        type: paperType,
         sections: paperSections,
         status: statusToSave,
         departmentId: resolvedDeptId,
@@ -1987,8 +2439,9 @@ export default function FacultyAssessmentMasterPage() {
       id: editingPaperId || Date.now().toString(),
       code: paperCode,
       name: paperTitle,
-      duration_minutes: paperDuration,
-      max_marks: paperTotalMarks,
+      type: paperType,
+      duration_minutes: Number(paperDuration) || 60,
+      max_marks: Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40,
       sections: paperSections,
       subject_name: academicCascade?.subject?.name || selectedSubject || '',
       batch_code: academicCascade?.batch?.batch_cd || '2026',
@@ -2123,11 +2576,18 @@ export default function FacultyAssessmentMasterPage() {
               />
 
               {/* Mode Switch & Question Creation Form */}
-              <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-6">
+              <div id="question-creator-form-card" className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-6">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#E7EAF3] dark:border-slate-800 pb-4">
                   <div>
-                    <h3 className="text-base font-black uppercase text-[#1B1E28] dark:text-white tracking-wider">
-                      📝 Create New Question for Department Question Bank
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase ${
+                        editingBankQuestionId ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30'
+                      }`}>
+                        {editingBankQuestionId ? '✏️ EDITING QUESTION' : '➕ CREATE QUESTION'}
+                      </span>
+                    </div>
+                    <h3 className="text-base font-black uppercase text-[#1B1E28] dark:text-white tracking-wider mt-1">
+                      {editingBankQuestionId ? '✏️ Modify Question & Weightage in Question Bank' : '📝 Create New Question for Department Question Bank'}
                     </h3>
                     <p className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">Competency-Based Medical Education Question Setup</p>
                   </div>
@@ -2461,12 +2921,21 @@ export default function FacultyAssessmentMasterPage() {
                   </div>
 
                   <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+                    {editingBankQuestionId && (
+                      <button
+                        type="button"
+                        onClick={handleCancelBankEdit}
+                        className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-extrabold text-xs transition"
+                      >
+                        ✕ Cancel Edit
+                      </button>
+                    )}
                     <button
                       type="submit"
                       disabled={saving}
                       className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-extrabold text-xs shadow-lg transition"
                     >
-                      {saving ? 'Saving...' : `💾 Save ${mode} Question to Bank`}
+                      {saving ? 'Saving...' : editingBankQuestionId ? `✓ Update ${mode} Question` : `💾 Save ${mode} Question to Bank`}
                     </button>
                   </div>
                 </form>
@@ -2481,7 +2950,43 @@ export default function FacultyAssessmentMasterPage() {
                     </h3>
                     <p className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">Authentic Competency-Based MCQs &amp; Descriptive Questions</p>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    {/* Status Filter Tabs */}
+                    <div className="flex items-center gap-1 bg-[#F8FAFC] dark:bg-slate-800 p-1 rounded-xl border border-[#E7EAF3] dark:border-slate-700 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setBankStatusFilter('active')}
+                        className={`px-3 py-1 rounded-lg font-bold text-xs transition ${bankStatusFilter === 'active' ? 'bg-[#5B4BFF] text-white shadow-xs' : 'text-[#4E5969] dark:text-slate-400'}`}
+                      >
+                        Active
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBankStatusFilter('archived')}
+                        className={`px-3 py-1 rounded-lg font-bold text-xs transition ${bankStatusFilter === 'archived' ? 'bg-amber-600 text-white shadow-xs' : 'text-[#4E5969] dark:text-slate-400'}`}
+                      >
+                        Archived
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setBankStatusFilter('all')}
+                        className={`px-3 py-1 rounded-lg font-bold text-xs transition ${bankStatusFilter === 'all' ? 'bg-slate-800 text-white shadow-xs' : 'text-[#4E5969] dark:text-slate-400'}`}
+                      >
+                        All
+                      </button>
+                    </div>
+
+                    {/* Resume All Questions Action Button */}
+                    <button
+                      type="button"
+                      onClick={handleResumeAllQuestions}
+                      className="px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-black text-xs shadow-sm transition flex items-center gap-1.5 cursor-pointer"
+                      title="Restore and un-archive all questions back into active Question Bank"
+                    >
+                      <span>🔄</span>
+                      <span>Resume All Questions</span>
+                    </button>
+
                     <input
                       type="text"
                       placeholder="🔍 Search questions..."
@@ -2636,12 +3141,39 @@ export default function FacultyAssessmentMasterPage() {
 
                               {/* Action */}
                               <td className="py-4 px-4 align-top text-right">
-                                <button
-                                  onClick={() => handleDeleteQuestion(q.id)}
-                                  className="px-3 py-1.5 rounded-xl bg-[#FEECEB] hover:bg-rose-100 text-[#F04438] border border-[#F04438]/20 text-[11px] font-extrabold shadow-sm transition"
-                                >
-                                  🗑️ Remove
-                                </button>
+                                <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                                  {q.is_active === false ? (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleResumeSingleQuestion(q.id)}
+                                      className="px-2.5 py-1 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-300 text-[11px] font-black shadow-xs transition flex items-center gap-1 cursor-pointer"
+                                      title="Resume question back to active bank"
+                                    >
+                                      <span>🔄</span>
+                                      <span>Resume</span>
+                                    </button>
+                                  ) : (
+                                    <>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditBankQuestion(q)}
+                                        className="px-2.5 py-1 rounded-xl bg-[#EEF2FF] hover:bg-[#5B4BFF] text-[#5B4BFF] hover:text-white border border-[#5B4BFF]/20 text-[11px] font-black shadow-xs transition flex items-center gap-1 cursor-pointer"
+                                        title="Edit question prompt, weightage, or options"
+                                      >
+                                        <span>✏️</span>
+                                        <span>Edit</span>
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => handleDeleteQuestion(q.id)}
+                                        className="px-2.5 py-1 rounded-xl bg-[#FEECEB] hover:bg-rose-100 text-[#F04438] border border-[#F04438]/20 text-[11px] font-extrabold shadow-xs transition cursor-pointer"
+                                        title="Archive question"
+                                      >
+                                        🗑️ Remove
+                                      </button>
+                                    </>
+                                  )}
+                                </div>
                               </td>
                             </tr>
                           );
@@ -2824,8 +3356,8 @@ export default function FacultyAssessmentMasterPage() {
                           {/* Card Footer Actions */}
                           <div className="px-5 py-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-between gap-2 bg-[#F8FAFC]/70 dark:bg-slate-800/40">
                             <div className="flex items-center gap-2 flex-wrap">
-                              {/* 1. After DQAC approved, do not show edit option; show locked indicator */}
-                              {(!paper.status || paper.status === 'DRAFT' || paper.status === 'CHANGES_REQUESTED' || paper.status === 'POSTPONED') ? (
+                              {/* 1. Before HOD approved, paper remains editable */}
+                              {paper.status !== 'HOD_APPROVED' ? (
                                 <button
                                   type="button"
                                   onClick={() => handleEditExistingPaper(paper)}
@@ -2838,7 +3370,7 @@ export default function FacultyAssessmentMasterPage() {
                               ) : (
                                 <span
                                   className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 text-xs font-bold flex items-center gap-1.5 border border-slate-200 dark:border-slate-700/60 select-none cursor-not-allowed"
-                                  title="Paper is approved / locked against direct edits. Clone to create an editable new set."
+                                  title="Paper is approved by HOD / locked against direct edits. Clone to create an editable new set."
                                 >
                                   <span>🔒</span>
                                   <span>Edit Locked</span>
@@ -2868,7 +3400,7 @@ export default function FacultyAssessmentMasterPage() {
                                 <span>Clone Set</span>
                               </button>
 
-                              {(!paper.status || paper.status === 'DRAFT' || paper.status === 'CHANGES_REQUESTED' || paper.status === 'POSTPONED') && (
+                              {paper.status !== 'HOD_APPROVED' && (
                                 <button
                                   type="button"
                                   onClick={() => handleSubmitPaperForDqacApproval(paper.id)}
@@ -2876,12 +3408,12 @@ export default function FacultyAssessmentMasterPage() {
                                   title="Submit paper for DQAC Quality Audit"
                                 >
                                   <span>📤</span>
-                                  <span>Submit DQAC</span>
+                                  <span>{paper.status === 'PENDING_DQAC_APPROVAL' ? 'Re-Submit DQAC' : 'Submit DQAC'}</span>
                                 </button>
                               )}
                             </div>
 
-                            {(!paper.status || paper.status === 'DRAFT' || paper.status === 'CHANGES_REQUESTED' || paper.status === 'POSTPONED') && (
+                            {paper.status !== 'HOD_APPROVED' && (
                               <button
                                 type="button"
                                 onClick={() => handleDeleteCreatedPaper(paper.id)}
@@ -2921,12 +3453,31 @@ export default function FacultyAssessmentMasterPage() {
                       <div>
                         <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400 block">Calculated Total Marks:</span>
                         <div className="text-xl font-black text-[#00C48C]">
-                          {paperSections.reduce((acc, sec) => {
-                            let secTot = sec.type === 'PRACTICAL' ? Number(sec.practicalMarks || 0) : 0;
-                            sec.questions.forEach((q: any) => { secTot += Number(q.customMarks || q.defaultMarks || 0); });
-                            return acc + secTot;
-                          }, 0)} Marks
+                          {computedEffectiveMax > 0 ? computedEffectiveMax : (paperTotalMarks || 0)} Marks
                         </div>
+                        {(() => {
+                          const rawPool = paperSections.reduce((acc, sec) => {
+                            let secTot = sec.type === 'PRACTICAL' ? Number(sec.practicalMarks || 0) : 0;
+                            (sec.questions || []).forEach((q: any) => {
+                              const subQs = q.subQuestions || q.sub_questions || [];
+                              if (subQs.length > 0) {
+                                secTot += subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || 0), 0);
+                              } else {
+                                secTot += Number(q.customMarks || q.defaultMarks || (sec.defaultMarksPerQuestion ? Number(sec.defaultMarksPerQuestion) : 0));
+                              }
+                            });
+                            return acc + secTot;
+                          }, 0);
+                          const eff = computedEffectiveMax > 0 ? computedEffectiveMax : Number(paperTotalMarks) || 0;
+                          if (rawPool > eff && eff > 0) {
+                            return (
+                              <span className="text-[10px] font-semibold text-slate-400 block">
+                                (Raw Pool: {rawPool} M)
+                              </span>
+                            );
+                          }
+                          return null;
+                        })()}
                       </div>
 
                       <button
@@ -2938,9 +3489,10 @@ export default function FacultyAssessmentMasterPage() {
                             name: paperTitle || 'Examination Paper',
                             paper_set: paperSet || 'Set A',
                             target_sections: targetSections,
-                            duration_minutes: paperDuration || 60,
-                            max_marks: paperTotalMarks || 40,
-                            passing_marks: Math.round((paperTotalMarks || 40) * 0.4),
+                            type: paperType,
+                            duration_minutes: Number(paperDuration) || 60,
+                            max_marks: Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40,
+                            passing_marks: Math.round((Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40) * 0.33),
                             subject_name: academicCascade?.subject?.name || selectedSubject || 'Subject',
                             course_name: academicCascade?.course?.course_name,
                             semester: academicCascade?.semester?.sem_cd || null,
@@ -2968,31 +3520,84 @@ export default function FacultyAssessmentMasterPage() {
                   </div>
 
                   <form onSubmit={handleSavePaperDesign} className="space-y-6">
+                    {/* Paper Examination Mode Selector: THEORY vs PRACTICAL */}
+                    <div className="p-4 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-lg ${
+                          paperType === 'THEORY'
+                            ? 'bg-[#5B4BFF]/10 text-[#5B4BFF]'
+                            : 'bg-[#00C48C]/10 text-[#00C48C]'
+                        }`}>
+                          {paperType === 'THEORY' ? '📖' : '🧪'}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] font-black uppercase tracking-wider text-[#5B4BFF]">
+                              EXAMINATION MODE
+                            </span>
+                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                              {paperType === 'THEORY' ? 'Written Theory Paper' : 'Practical / Clinical / OSPE'}
+                            </span>
+                          </div>
+                          <h4 className="text-sm font-extrabold text-[#1B1E28] dark:text-white mt-0.5">
+                            {paperType === 'THEORY' ? 'Theory Examination Paper (MCQs, Descriptive, Short/Long Answers)' : 'Practical Examination (Clinical Stations, Spotting, OSPE & Viva Voce)'}
+                          </h4>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 bg-[#F8FAFC] dark:bg-slate-800 p-1.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setPaperType('THEORY')}
+                          className={`px-4 py-2 rounded-lg font-black text-xs flex items-center gap-1.5 transition-all ${
+                            paperType === 'THEORY'
+                              ? 'bg-[#5B4BFF] text-white shadow-sm'
+                              : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          <span>📖</span>
+                          <span>THEORY MODE</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setPaperType('PRACTICAL')}
+                          className={`px-4 py-2 rounded-lg font-black text-xs flex items-center gap-1.5 transition-all ${
+                            paperType === 'PRACTICAL'
+                              ? 'bg-[#00C48C] text-white shadow-sm'
+                              : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                          }`}
+                        >
+                          <span>🧪</span>
+                          <span>PRACTICAL MODE</span>
+                        </button>
+                      </div>
+                    </div>
+
                     {/* Paper Header Inputs */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
                       <div className="lg:col-span-2">
                         <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">
-                          Exam Paper Title *
+                          Exam Paper Title
                         </label>
                         <input
                           type="text"
                           value={paperTitle}
                           onChange={(e) => setPaperTitle(e.target.value)}
+                          placeholder="Enter exam paper title (e.g. Sessional Exam)..."
                           className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
-                          required
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">
-                          Paper Code *
+                          Paper Code
                         </label>
                         <input
                           type="text"
                           value={paperCode}
                           onChange={(e) => setPaperCode(e.target.value)}
+                          placeholder="e.g. BCS503-2026-T1"
                           className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-mono font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
-                          required
                         />
                       </div>
 
@@ -3045,21 +3650,24 @@ export default function FacultyAssessmentMasterPage() {
                           <input
                             type="number"
                             title="Duration Minutes"
-                            value={paperDuration}
-                            onChange={(e) => setPaperDuration(Number(e.target.value))}
+                            value={paperDuration === '' ? '' : paperDuration}
+                            onChange={(e) => setPaperDuration(e.target.value === '' ? '' : Number(e.target.value))}
                             className="w-full px-2 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#F36C21] shadow-sm"
-                            placeholder="Mins"
-                            required
+                            placeholder="Mins (e.g. 60)"
                           />
-                          <input
-                            type="number"
-                            title="Total Target Marks"
-                            value={paperTotalMarks}
-                            onChange={(e) => setPaperTotalMarks(Number(e.target.value))}
-                            className="w-full px-2 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:border-[#F36C21] shadow-sm"
-                            placeholder="Marks"
-                            required
-                          />
+                          <div className="relative">
+                            <input
+                              type="number"
+                              title="Total Target Marks (Computed Effective Max)"
+                              value={computedEffectiveMax > 0 ? computedEffectiveMax : (paperTotalMarks === '' ? '' : paperTotalMarks)}
+                              onChange={(e) => setPaperTotalMarks(e.target.value === '' ? '' : Number(e.target.value))}
+                              className="w-full px-2 py-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-[#00C48C]/40 text-[#00C48C] font-black text-xs text-center shadow-sm"
+                              placeholder="Marks (Auto)"
+                            />
+                            <span className="text-[9px] font-bold text-slate-400 block text-center mt-0.5">
+                              Effective Max (Pass: {Math.round((Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 0) * 0.33)} M &bull; 33%)
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -3076,24 +3684,80 @@ export default function FacultyAssessmentMasterPage() {
                         </p>
                       </div>
 
-                      <button
-                        type="button"
-                        onClick={handleAddSection}
-                        className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap"
-                      >
-                        <span>➕</span>
-                        <span>Add New Section (A, B, C...)</span>
-                      </button>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => setShowScoringSimulation(true)}
+                          className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap"
+                          title="Simulate paper scoring and choice group rules"
+                        >
+                          <span>📊</span>
+                          <span>Live Scoring Simulation</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleAddSection}
+                          className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap"
+                        >
+                          <span>➕</span>
+                          <span>Add New Section (A, B, C...)</span>
+                        </button>
+                      </div>
                     </div>
 
                     {paperSections.map((sec, secIdx) => {
-                      const secMarks = sec.questions.reduce((acc: number, q: any) => acc + Number(q.customMarks || q.defaultMarks || 0), 0) + (sec.type === 'PRACTICAL' ? Number(sec.practicalMarks || 0) : 0);
+                      const secMarks = sec.questions.reduce((acc: number, q: any) => {
+                        const subQs = q.subQuestions || q.sub_questions || [];
+                        if (subQs.length > 0) {
+                          return acc + subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || 0), 0);
+                        }
+                        return acc + Number(q.customMarks || q.defaultMarks || 0);
+                      }, 0) + (sec.type === 'PRACTICAL' ? Number(sec.practicalMarks || 0) : 0);
+
+                      const rawTargetM = sec.targetQuestionsCount;
+                      const hasTargetM = rawTargetM !== '' && rawTargetM !== undefined && rawTargetM !== null && !isNaN(Number(rawTargetM)) && Number(rawTargetM) > 0;
+                      const targetM = hasTargetM ? Number(rawTargetM) : sec.questions.length;
+
+                      const isChoiceMode = sec.attemptRule === 'CHOICE';
+                      const rawReqN = sec.requiredToAttempt;
+                      const hasReqN = rawReqN !== '' && rawReqN !== undefined && rawReqN !== null && !isNaN(Number(rawReqN)) && Number(rawReqN) > 0;
+                      const requiredN = isChoiceMode ? (hasReqN ? Number(rawReqN) : (targetM > 1 ? targetM - 1 : 1)) : targetM;
+
+                      const rawMarksPerQ = sec.defaultMarksPerQuestion;
+                      const hasMarksPerQ = rawMarksPerQ !== '' && rawMarksPerQ !== undefined && rawMarksPerQ !== null && !isNaN(Number(rawMarksPerQ)) && Number(rawMarksPerQ) > 0;
+                      const marksPerQ = hasMarksPerQ ? Number(rawMarksPerQ) : 0;
+
+                      let effectiveSecMarks = 0;
+                      if (sec.questions.length > 0) {
+                        const marksList = sec.questions.map((q: any) => {
+                          const subQs = q.subQuestions || q.sub_questions || [];
+                          if (subQs.length > 0) {
+                            return subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || 0), 0);
+                          }
+                          return Number(q.customMarks || q.defaultMarks || marksPerQ || 0);
+                        });
+                        marksList.sort((a: number, b: number) => b - a);
+                        const countToTake = isChoiceMode && requiredN > 0 ? Math.min(requiredN, marksList.length) : marksList.length;
+                        effectiveSecMarks = marksList.slice(0, countToTake).reduce((acc: number, v: number) => acc + v, 0);
+                      } else {
+                        // If questions are not added yet, only compute planned weightage if user specifically typed planned values
+                        if (isChoiceMode && hasReqN && hasMarksPerQ) {
+                          effectiveSecMarks = requiredN * marksPerQ;
+                        } else if (!isChoiceMode && hasTargetM && hasMarksPerQ) {
+                          effectiveSecMarks = targetM * marksPerQ;
+                        } else {
+                          effectiveSecMarks = 0;
+                        }
+                      }
+                      if (sec.type === 'PRACTICAL' && sec.practicalMarks) {
+                        effectiveSecMarks += Number(sec.practicalMarks || 0);
+                      }
 
                       return (
                         <div key={sec.id} className="p-5 rounded-[22px] bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 space-y-4">
                           {/* Section Header Controls */}
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-700 pb-3">
-                            <div className="flex items-center gap-3 flex-1">
+                            <div className="flex items-center gap-3 flex-1 flex-wrap">
                               <input
                                 type="text"
                                 value={sec.name}
@@ -3105,23 +3769,69 @@ export default function FacultyAssessmentMasterPage() {
                                 onChange={(e) => handleUpdateSectionMeta(sec.id, 'type', e.target.value)}
                                 className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs focus:outline-none focus:border-[#F36C21]"
                               >
+                                <option value="DESC">Section Type: Descriptive / Theory</option>
                                 <option value="MCQ">Section Type: MCQs</option>
-                                <option value="DESC">Section Type: Descriptive</option>
                                 <option value="PRACTICAL">Section Type: Practical / OSPE</option>
                               </select>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                              <span className="text-xs font-black text-[#5B4BFF] bg-[#EEF2FF] border border-[#5B4BFF]/20 px-3 py-1 rounded-full">
-                                Section Subtotal: {secMarks} Marks
-                              </span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <button
+                                type="button"
+                                onClick={() => setBlueprintModalSecId(sec.id)}
+                                className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] hover:from-[#241d63] hover:to-[#4e3eff] text-white font-black text-xs shadow-sm flex items-center gap-1 cursor-pointer transition-all"
+                                title="Auto-generate questions from blueprint rules"
+                              >
+                                <span>✨</span>
+                                <span>Blueprint Auto-Gen</span>
+                              </button>
+
+                              <div className="flex items-center bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 rounded-xl overflow-hidden shadow-xs">
+                                <button
+                                  type="button"
+                                  disabled={secIdx === 0}
+                                  onClick={() => handleMoveSectionUp(secIdx)}
+                                  className="px-2 py-1 text-xs font-black text-[#4E5969] hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed"
+                                  title="Move Section Up"
+                                >
+                                  ▲
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={secIdx === paperSections.length - 1}
+                                  onClick={() => handleMoveSectionDown(secIdx)}
+                                  className="px-2 py-1 text-xs font-black text-[#4E5969] hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed border-l border-[#E7EAF3] dark:border-slate-700"
+                                  title="Move Section Down"
+                                >
+                                  ▼
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs font-black text-[#5B4BFF] bg-[#EEF2FF] dark:bg-indigo-950/60 border border-[#5B4BFF]/30 px-3 py-1 rounded-full flex items-center gap-1.5">
+                                  <span>Weightage:</span>
+                                  <span className="text-sm font-extrabold">
+                                    {sec.ruleMaxPolicy === 'STUDENT_WISE'
+                                      ? 'Varies per student'
+                                      : effectiveSecMarks > 0
+                                      ? `${effectiveSecMarks} Marks`
+                                      : '0 Marks (Planned)'}
+                                  </span>
+                                </span>
+                                {isChoiceMode && hasReqN && hasTargetM && (
+                                  <span className="text-[10px] font-extrabold text-[#F36C21] bg-orange-50 dark:bg-orange-950/50 border border-orange-200 dark:border-orange-800/60 px-2 py-0.5 rounded-full">
+                                    Attempt {requiredN} of {targetM}
+                                  </span>
+                                )}
+                              </div>
+
                               {paperSections.length > 1 && (
                                 <button
                                   type="button"
                                   onClick={() => handleRemoveSection(sec.id)}
                                   className="text-xs text-[#F04438] hover:text-rose-600 font-extrabold px-2.5 py-1 rounded-lg bg-[#FEECEB] border border-[#F04438]/20"
                                 >
-                                  ✕ Remove Section
+                                  ✕ Remove
                                 </button>
                               )}
                             </div>
@@ -3131,8 +3841,8 @@ export default function FacultyAssessmentMasterPage() {
                           <div>
                             <input
                               type="text"
-                              value={sec.description}
-                              placeholder="Section instructions or description..."
+                              value={sec.description || ''}
+                              placeholder="Section instructions or description (optional)..."
                               onChange={(e) => handleUpdateSectionMeta(sec.id, 'description', e.target.value)}
                               className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-slate-200 font-bold text-xs focus:outline-none focus:border-[#F36C21]"
                             />
@@ -3149,13 +3859,301 @@ export default function FacultyAssessmentMasterPage() {
                                 <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-300">Practical Marks:</span>
                                 <input
                                   type="number"
-                                  value={sec.practicalMarks || 0}
-                                  onChange={(e) => handleUpdateSectionMeta(sec.id, 'practicalMarks', Number(e.target.value))}
+                                  value={sec.practicalMarks || ''}
+                                  onChange={(e) => handleUpdateSectionMeta(sec.id, 'practicalMarks', e.target.value === '' ? '' : Number(e.target.value))}
+                                  placeholder="e.g. 20"
                                   className="w-24 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#7867FF]/50 text-[#7867FF] font-black text-xs text-center"
                                 />
                               </div>
                             </div>
                           )}
+
+                          {/* Section Question Planning & Attempt Configuration Card */}
+                          <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-xs space-y-3.5">
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7EAF3] dark:border-slate-800 pb-2.5">
+                              <span className="text-xs font-black text-[#2D2575] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                                <span>⚙️</span> Section Question Planning &amp; Attempt Rules
+                              </span>
+                              <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
+                                Questions in Section: <span className="text-[#5B4BFF] font-black">{sec.questions.length}</span>
+                                {hasTargetM ? ` / ${targetM} planned` : ' questions added'}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                              {/* Planned Question Count M */}
+                              <div>
+                                <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                  1. Questions to Add in Section (M)
+                                </label>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  max={100}
+                                  value={sec.targetQuestionsCount !== undefined && sec.targetQuestionsCount !== null ? sec.targetQuestionsCount : ''}
+                                  onChange={(e) => handleUpdateSectionMeta(sec.id, 'targetQuestionsCount', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                  className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#5B4BFF]"
+                                  placeholder="e.g. 5 (or leave blank)"
+                                />
+                                <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-medium">Planned question count (or leave blank)</span>
+                              </div>
+
+                              {/* Marks Per Question Mode (Condition-Based) */}
+                              <div>
+                                <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                  2. Marks Allocation Condition *
+                                </label>
+                                <div className="grid grid-cols-2 gap-1 p-0.5 bg-[#F8FAFC] dark:bg-slate-800 rounded-xl border border-[#E7EAF3] dark:border-slate-700 mb-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateSectionMeta(sec.id, 'marksCondition', 'UNIFORM')}
+                                    className={`py-1 px-1.5 rounded-lg text-[10px] font-black transition-all ${
+                                      sec.marksCondition !== 'VARIABLE'
+                                        ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                        : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                  >
+                                    Uniform Marks
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateSectionMeta(sec.id, 'marksCondition', 'VARIABLE')}
+                                    className={`py-1 px-1.5 rounded-lg text-[10px] font-black transition-all ${
+                                      sec.marksCondition === 'VARIABLE'
+                                        ? 'bg-[#F36C21] text-white shadow-xs'
+                                        : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                  >
+                                    Variable / Subparts
+                                  </button>
+                                </div>
+
+                                {sec.marksCondition === 'VARIABLE' ? (
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      value={sec.defaultMarksPerQuestion !== undefined && sec.defaultMarksPerQuestion !== null ? sec.defaultMarksPerQuestion : ''}
+                                      onChange={(e) => handleUpdateSectionMeta(sec.id, 'defaultMarksPerQuestion', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                      className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#5B4BFF]"
+                                      placeholder="Default pre-fill (optional)"
+                                    />
+                                    <span className="text-[9.5px] text-[#4E5969] dark:text-slate-400 font-medium block leading-tight">
+                                      Multiple parts or questions have different marks. Set on each question &amp; sub-part.
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <div className="space-y-1">
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={100}
+                                      value={sec.defaultMarksPerQuestion !== undefined && sec.defaultMarksPerQuestion !== null ? sec.defaultMarksPerQuestion : ''}
+                                      onChange={(e) => handleUpdateSectionMeta(sec.id, 'defaultMarksPerQuestion', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                      className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#5B4BFF]"
+                                      placeholder="e.g. 5"
+                                    />
+                                    <span className="text-[9.5px] text-[#4E5969] dark:text-slate-400 font-medium block leading-tight">
+                                      All questions in this section carry the same marks.
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Attempt Requirement Mode */}
+                              <div>
+                                <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                  3. Student Attempt Rule *
+                                </label>
+                                <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#F8FAFC] dark:bg-slate-800 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateSectionMeta(sec.id, 'attemptRule', 'ALL')}
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all ${
+                                      !isChoiceMode
+                                        ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                        : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                  >
+                                    All Mandatory
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleUpdateSectionMeta(sec.id, 'attemptRule', 'CHOICE')}
+                                    className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all ${
+                                      isChoiceMode
+                                        ? 'bg-[#F36C21] text-white shadow-xs'
+                                        : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                    }`}
+                                  >
+                                    Choice (N of M)
+                                  </button>
+                                </div>
+                                <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-medium">
+                                  {isChoiceMode ? 'Students attempt any N of M questions' : 'All questions mandatory'}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Choice Rule Specific Parameters (when CHOICE is active) */}
+                            {isChoiceMode && (
+                              <div className="p-3.5 rounded-xl bg-gradient-to-r from-orange-50/80 to-amber-50/50 dark:from-orange-950/20 dark:to-amber-950/10 border border-orange-200 dark:border-orange-800/50 space-y-2.5">
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                  <div>
+                                    <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
+                                      Required to Attempt (N) *
+                                    </label>
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={Math.max(1, targetM > 1 ? targetM - 1 : 99)}
+                                      value={sec.requiredToAttempt !== undefined && sec.requiredToAttempt !== null ? sec.requiredToAttempt : ''}
+                                      onChange={(e) => handleUpdateSectionMeta(sec.id, 'requiredToAttempt', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-orange-950 dark:text-orange-200 font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
+                                      placeholder="e.g. 2"
+                                    />
+                                    <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">
+                                      {sec.requiredToAttempt ? `Students only evaluated for ${sec.requiredToAttempt} questions` : 'Enter required questions'}
+                                    </span>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
+                                      Over-Attempt Policy *
+                                    </label>
+                                    <select
+                                      value={sec.overAttemptPolicy || OverAttemptPolicy.BEST_N}
+                                      onChange={(e) => handleUpdateSectionMeta(sec.id, 'overAttemptPolicy', e.target.value)}
+                                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-[#1B1E28] dark:text-white font-black text-xs focus:outline-none focus:border-[#F36C21]"
+                                    >
+                                      <option value="BEST_N">BEST_N (Score top {requiredN} highest answers)</option>
+                                      <option value="FIRST_N">FIRST_N (Score first {requiredN} in paper order)</option>
+                                      <option value="REJECT">REJECT (Block submission if &gt; {requiredN})</option>
+                                    </select>
+                                    <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">Rule if student attempts extra</span>
+                                  </div>
+
+                                  <div>
+                                    <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
+                                      Rule Max Policy *
+                                    </label>
+                                    <select
+                                      value={sec.ruleMaxPolicy || 'EQUAL_MARKS_REQUIRED'}
+                                      onChange={(e) => handleUpdateSectionMeta(sec.id, 'ruleMaxPolicy', e.target.value)}
+                                      className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-[#1B1E28] dark:text-white font-black text-xs focus:outline-none focus:border-[#F36C21]"
+                                    >
+                                      <option value="EQUAL_MARKS_REQUIRED">Equal Marks Required (Standard)</option>
+                                      <option value="TOP_N_MAX">Top-N Max Marks (Fairness Notice)</option>
+                                      <option value="STUDENT_WISE">Student-Wise Max</option>
+                                    </select>
+                                    <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">Section max calculation policy</span>
+                                  </div>
+                                </div>
+
+                                {/* Plain-language live helper line */}
+                                <div className="p-2.5 rounded-lg bg-orange-100/70 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-800 text-[11px] text-orange-900 dark:text-orange-200 font-semibold flex items-center gap-2">
+                                  <span className="text-sm shrink-0">ℹ️</span>
+                                  <span>
+                                    Students answer any <b>{requiredN}</b> of <b>{targetM}</b> questions. Marks are counted for {requiredN} questions only. Leaving the other {Math.max(0, targetM - requiredN)} unanswered will not reduce the percentage.
+                                  </span>
+                                </div>
+
+                                {/* Check for unequal marks under EQUAL_MARKS_REQUIRED */}
+                                {(() => {
+                                  const secQs = sec.questions || [];
+                                  if (secQs.length < 2 || sec.ruleMaxPolicy === 'STUDENT_WISE' || sec.ruleMaxPolicy === 'TOP_N_MAX') return null;
+                                  const marksArray = secQs.map((q: any) => {
+                                    const subQs = q.subQuestions || q.sub_questions || [];
+                                    if (subQs.length > 0) {
+                                      return subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || sq.defaultMarks || 0), 0);
+                                    }
+                                    return Number(q.customMarks || q.defaultMarks || marksPerQ);
+                                  });
+                                  const hasUnequal = marksArray.some((m: number) => m !== marksArray[0]);
+                                  if (!hasUnequal) return null;
+                                  return (
+                                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
+                                      <span>⚠️ Questions in this section have unequal marks. Equal Marks policy requires all questions to carry identical total marks.</span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setPaperSections(prev => prev.map(s => {
+                                            if (s.id !== sec.id) return s;
+                                            return {
+                                              ...s,
+                                              questions: s.questions.map((q: any) => ({
+                                                ...q,
+                                                customMarks: marksPerQ,
+                                                defaultMarks: marksPerQ,
+                                              }))
+                                            };
+                                          }));
+                                        }}
+                                        className="px-2.5 py-1 rounded bg-[#5B4BFF] text-white text-[10px] font-black hover:bg-[#4E3EFF] shrink-0 ml-2"
+                                      >
+                                        Make All Equal ({marksPerQ} Marks)
+                                      </button>
+                                    </div>
+                                  );
+                                })()}
+
+                                {/* Weightage Guarantee Banner */}
+                                <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-orange-200 dark:border-orange-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-base">🎯</span>
+                                    <div>
+                                      <span className="font-black text-[#1B1E28] dark:text-white">Section Weightage: </span>
+                                      <span className="font-extrabold text-[#5B4BFF] text-sm">
+                                        {sec.ruleMaxPolicy === 'STUDENT_WISE' ? 'Varies per student' : `${effectiveSecMarks} Marks`}
+                                      </span>
+                                      {sec.ruleMaxPolicy !== 'STUDENT_WISE' && (
+                                        <span className="text-[#4E5969] dark:text-slate-400 text-[11px] ml-1.5">
+                                          ({requiredN} required attempts × {marksPerQ} marks)
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="text-[10px] text-[#4E5969] dark:text-slate-400 italic">
+                                    💡 Note: {Math.max(0, targetM - requiredN)} optional question(s) will NEVER reduce student percentage or inflate maximum marks.
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Question Count Progress Bar */}
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs bg-[#F8FAFC] dark:bg-slate-800/60 px-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-800">
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="font-bold text-[#1B1E28] dark:text-slate-200 whitespace-nowrap">
+                                  Progress: {sec.questions.length} {hasTargetM ? `/ ${targetM} Added` : 'Questions Added'}
+                                </span>
+                                {hasTargetM && (
+                                  <div className="w-24 sm:w-36 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-gradient-to-r from-[#5B4BFF] to-[#00C48C] transition-all duration-300"
+                                      style={{ width: `${Math.min(100, (sec.questions.length / Math.max(1, targetM)) * 100)}%` }}
+                                    />
+                                  </div>
+                                )}
+                              </div>
+
+                              {hasTargetM && sec.questions.length < targetM ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setBlueprintModalSecId(sec.id)}
+                                  className="px-2.5 py-1 rounded-lg bg-[#5B4BFF]/10 hover:bg-[#5B4BFF]/20 text-[#5B4BFF] font-black text-[11px] flex items-center gap-1 transition-all w-fit"
+                                  title={`Auto-pick remaining ${targetM - sec.questions.length} questions`}
+                                >
+                                  <span>✨</span>
+                                  <span>Add Remaining {targetM - sec.questions.length} via Blueprint</span>
+                                </button>
+                              ) : hasTargetM && sec.questions.length >= targetM ? (
+                                <span className="text-[11px] font-black text-[#00C48C] flex items-center gap-1">
+                                  <span>✓</span>
+                                  <span>All {targetM} planned questions added</span>
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
 
                           {/* Step-by-Step Question Picker Card for Section */}
                           <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-sm space-y-4">
@@ -3505,6 +4503,46 @@ export default function FacultyAssessmentMasterPage() {
                             })()}
                           </div>
 
+                          {/* Choice Groups Manager within Section */}
+                          {sec.choiceGroups && sec.choiceGroups.length > 0 && (
+                            <div className="pt-2">
+                              <ChoiceGroupManager
+                                sectionId={sec.id}
+                                choiceGroups={sec.choiceGroups}
+                                questionsMap={allPaperQuestionsMap}
+                                onUpdateGroup={(gId, updates) => handleUpdateChoiceGroup(sec.id, gId, updates)}
+                                onRemoveGroup={(gId) => handleRemoveChoiceGroup(sec.id, gId)}
+                                onRemoveQuestionFromGroup={(gId, qId) => handleRemoveQuestionFromChoiceGroup(sec.id, gId, qId)}
+                              />
+                            </div>
+                          )}
+
+                          {/* Group Selection Banner */}
+                          {(secGroupSelect[sec.id] || []).length > 0 && (
+                            <div className="p-3 bg-indigo-50 dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+                              <span className="text-xs font-bold text-[#5B4BFF]">
+                                ⌥ {(secGroupSelect[sec.id] || []).length} question(s) selected for Choice Group
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <button
+                                  type="button"
+                                  disabled={(secGroupSelect[sec.id] || []).length < 2}
+                                  onClick={() => handleCreateChoiceGroup(sec.id)}
+                                  className="px-3 py-1.5 bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                >
+                                  + Wrap in Choice Group
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setSecGroupSelect(prev => ({ ...prev, [sec.id]: [] }))}
+                                  className="px-2.5 py-1 text-slate-500 hover:text-slate-800 dark:hover:text-white text-xs font-semibold"
+                                >
+                                  Clear
+                                </button>
+                              </div>
+                            </div>
+                          )}
+
                           {/* Added Questions List in Section */}
                           {sec.questions.length === 0 ? (
                             <div className="text-center py-5 text-[#4E5969] dark:text-slate-400 text-xs font-bold italic bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl">
@@ -3512,10 +4550,274 @@ export default function FacultyAssessmentMasterPage() {
                             </div>
                           ) : (
                             <div className="space-y-3">
-                              {sec.questions.map((q: any, qIdx: number) => (
+                              {sec.questions.map((q: any, qIdx: number) => {
+                                const isEditingThisQ = editingSectionQuestion?.secId === sec.id && editingSectionQuestion?.qId === (q.questionId || q.id);
+
+                                if (isEditingThisQ && editingSectionQuestion) {
+                                  return (
+                                    <div key={q.questionId || q.id} className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-slate-800/90 border-2 border-[#5B4BFF] space-y-4 shadow-md animate-fadeIn">
+                                      <div className="flex items-center justify-between border-b border-indigo-200 dark:border-indigo-900 pb-2.5">
+                                        <div className="flex items-center gap-2">
+                                          <span className="w-6 h-6 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-xs">
+                                            {qIdx + 1}
+                                          </span>
+                                          <span className="text-xs font-black uppercase text-[#2D2575] dark:text-indigo-300">
+                                            ✏️ Edit Question Prompt &amp; Weightage (Q{qIdx + 1})
+                                          </span>
+                                        </div>
+                                        <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-[#5B4BFF]">
+                                          {editingSectionQuestion.mode || q.mode}
+                                        </span>
+                                      </div>
+
+                                      {/* 1. Question Prompt Textarea */}
+                                      <div>
+                                        <label className="block text-[11px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                          Question Prompt / Text *
+                                        </label>
+                                        <textarea
+                                          value={editingSectionQuestion.questionText}
+                                          onChange={(e) => setEditingSectionQuestion(prev => prev ? { ...prev, questionText: e.target.value } : null)}
+                                          rows={3}
+                                          placeholder="Type or refine question wording..."
+                                          className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21]"
+                                        />
+                                      </div>
+
+                                      {/* 2. Weightage & Sub-parts Configuration */}
+                                      <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3">
+                                        <div className="flex items-center justify-between">
+                                          <label className="text-[11px] font-black uppercase text-[#5B4BFF]">
+                                            Weightage &amp; Sub-parts Structure
+                                          </label>
+                                          <div className="flex items-center gap-2">
+                                            <span className="text-[11px] font-extrabold text-[#4E5969] dark:text-slate-400">Total Question Marks:</span>
+                                            <span className="px-3 py-0.5 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-black text-xs border border-[#5B4BFF]/30">
+                                              {editingSectionQuestion.subQuestions && editingSectionQuestion.subQuestions.length > 0
+                                                ? editingSectionQuestion.subQuestions.reduce((sum, sq) => sum + Number(sq.marks || 0), 0)
+                                                : editingSectionQuestion.customMarks} Marks
+                                            </span>
+                                          </div>
+                                        </div>
+
+                                        {/* Sub-parts List if present */}
+                                        {editingSectionQuestion.subQuestions && editingSectionQuestion.subQuestions.length > 0 ? (
+                                          <div className="space-y-2">
+                                            <div className="text-[10px] text-slate-500 font-bold uppercase">Editable Sub-Parts:</div>
+                                            {editingSectionQuestion.subQuestions.map((sq: any, sIdx: number) => (
+                                              <div key={sq.id || sIdx} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
+                                                <input
+                                                  type="text"
+                                                  value={sq.label || `${String.fromCharCode(97 + sIdx)})`}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setEditingSectionQuestion(prev => {
+                                                      if (!prev) return null;
+                                                      const newSubs = [...prev.subQuestions];
+                                                      newSubs[sIdx] = { ...newSubs[sIdx], label: val };
+                                                      return { ...prev, subQuestions: newSubs };
+                                                    });
+                                                  }}
+                                                  className="w-12 px-2 py-1 rounded bg-white dark:bg-slate-900 border text-center font-mono font-black text-xs text-[#5B4BFF]"
+                                                  placeholder="a)"
+                                                />
+                                                <input
+                                                  type="text"
+                                                  value={sq.questionText}
+                                                  onChange={(e) => {
+                                                    const val = e.target.value;
+                                                    setEditingSectionQuestion(prev => {
+                                                      if (!prev) return null;
+                                                      const newSubs = [...prev.subQuestions];
+                                                      newSubs[sIdx] = { ...newSubs[sIdx], questionText: val };
+                                                      return { ...prev, subQuestions: newSubs };
+                                                    });
+                                                  }}
+                                                  className="flex-1 px-3 py-1 rounded bg-white dark:bg-slate-900 border text-xs font-bold text-[#1B1E28] dark:text-white"
+                                                  placeholder="Subpart question text..."
+                                                />
+                                                <div className="flex items-center gap-1.5 shrink-0">
+                                                  <input
+                                                    type="number"
+                                                    step={0.5}
+                                                    min={0}
+                                                    value={sq.marks !== undefined ? sq.marks : ''}
+                                                    onChange={(e) => {
+                                                      const val = Number(e.target.value);
+                                                      setEditingSectionQuestion(prev => {
+                                                        if (!prev) return null;
+                                                        const newSubs = [...prev.subQuestions];
+                                                        newSubs[sIdx] = { ...newSubs[sIdx], marks: val };
+                                                        const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
+                                                        return { ...prev, subQuestions: newSubs, customMarks: newTotal };
+                                                      });
+                                                    }}
+                                                    className="w-16 px-2 py-1 rounded bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#00C48C] font-black text-xs text-center"
+                                                  />
+                                                  <span className="text-[10px] text-slate-400 font-bold">M</span>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingSectionQuestion(prev => {
+                                                        if (!prev) return null;
+                                                        const newSubs = prev.subQuestions.filter((_, idx) => idx !== sIdx);
+                                                        const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
+                                                        return { ...prev, subQuestions: newSubs, customMarks: newTotal };
+                                                      });
+                                                    }}
+                                                    className="p-1 rounded hover:bg-rose-100 text-[#F04438] text-xs font-bold cursor-pointer"
+                                                    title="Remove sub-part"
+                                                  >
+                                                    ✕
+                                                  </button>
+                                                </div>
+                                              </div>
+                                            ))}
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingSectionQuestion(prev => {
+                                                  if (!prev) return null;
+                                                  const nextLabel = `${String.fromCharCode(97 + prev.subQuestions.length)})`;
+                                                  const newSubs = [...prev.subQuestions, { id: `sub-${Date.now()}`, label: nextLabel, questionText: '', marks: 5 }];
+                                                  const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
+                                                  return { ...prev, subQuestions: newSubs, customMarks: newTotal };
+                                                });
+                                              }}
+                                              className="px-3 py-1 rounded-lg bg-[#EEF2FF] text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white text-xs font-black transition flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <span>➕</span>
+                                              <span>Add Another Sub-part</span>
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                            <div className="flex items-center gap-2">
+                                              <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-300">Marks for Question:</span>
+                                              <input
+                                                type="number"
+                                                min={0.5}
+                                                step={0.5}
+                                                value={editingSectionQuestion.customMarks}
+                                                onChange={(e) => setEditingSectionQuestion(prev => prev ? { ...prev, customMarks: Number(e.target.value) } : null)}
+                                                className="w-20 px-3 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center"
+                                              />
+                                              <span className="text-xs font-bold text-slate-400">Marks</span>
+                                            </div>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setEditingSectionQuestion(prev => {
+                                                  if (!prev) return null;
+                                                  const half = Number((prev.customMarks / 2).toFixed(1)) || 5;
+                                                  return {
+                                                    ...prev,
+                                                    subQuestions: [
+                                                      { id: `sub-1`, label: 'a)', questionText: '', marks: half },
+                                                      { id: `sub-2`, label: 'b)', questionText: '', marks: half }
+                                                    ]
+                                                  };
+                                                });
+                                              }}
+                                              className="px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 hover:bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30 text-xs font-black transition flex items-center gap-1 cursor-pointer"
+                                            >
+                                              <span>✨</span>
+                                              <span>Split into Sub-Parts (a, b...)</span>
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {/* 3. MCQ Options if MCQ */}
+                                      {editingSectionQuestion.mode === 'MCQ' && (
+                                        <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
+                                          <span className="text-[11px] font-black uppercase text-[#5B4BFF] block">MCQ Options &amp; Correct Answer</span>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                            {['a', 'b', 'c', 'd'].map(letter => {
+                                              const optKey = `option${letter.toUpperCase()}` as 'optionA' | 'optionB' | 'optionC' | 'optionD';
+                                              const isSelected = editingSectionQuestion.correctOption === `option_${letter}`;
+                                              return (
+                                                <div key={letter} className={`flex items-center gap-2 p-2 rounded-xl border ${isSelected ? 'border-[#00C48C] bg-[#E6F9F3]/40' : 'border-[#E7EAF3] dark:border-slate-700 bg-[#F8FAFC] dark:bg-slate-800'}`}>
+                                                  <input
+                                                    type="radio"
+                                                    name={`correct-${q.questionId}`}
+                                                    checked={isSelected}
+                                                    onChange={() => setEditingSectionQuestion(prev => prev ? { ...prev, correctOption: `option_${letter}` } : null)}
+                                                    className="text-[#00C48C] focus:ring-[#00C48C] cursor-pointer"
+                                                  />
+                                                  <span className="font-mono font-bold text-xs uppercase">{letter})</span>
+                                                  <input
+                                                    type="text"
+                                                    value={editingSectionQuestion[optKey] || ''}
+                                                    onChange={(e) => {
+                                                      const val = e.target.value;
+                                                      setEditingSectionQuestion(prev => prev ? { ...prev, [optKey]: val } : null);
+                                                    }}
+                                                    className="flex-1 bg-transparent border-0 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none"
+                                                    placeholder={`Option ${letter.toUpperCase()} text...`}
+                                                  />
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Action Buttons: Save or Cancel */}
+                                      <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-indigo-200 dark:border-indigo-900">
+                                        <button
+                                          type="button"
+                                          onClick={() => setEditingSectionQuestion(null)}
+                                          className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
+                                        >
+                                          ✕ Cancel
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={handleSaveEditedSectionQuestion}
+                                          className="px-5 py-1.5 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-indigo-600 hover:from-[#4E3EFF] hover:to-indigo-500 text-white font-black text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                                        >
+                                          <span>✓</span>
+                                          <span>Save Question &amp; Weightage</span>
+                                        </button>
+                                      </div>
+                                    </div>
+                                  );
+                                }
+
+                                return (
                                 <div key={q.questionId} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3 shadow-sm">
                                   <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
                                     <div className="flex items-start gap-3 flex-1">
+                                      <div className="flex flex-col items-center gap-1 pt-0.5">
+                                        <input
+                                          type="checkbox"
+                                          checked={(secGroupSelect[sec.id] || []).includes(q.questionId)}
+                                          onChange={() => handleToggleSelectForGroup(sec.id, q.questionId)}
+                                          className="w-4 h-4 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] cursor-pointer"
+                                          title="Select for choice group"
+                                        />
+                                        <div className="flex flex-col bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[9px] font-black">
+                                          <button
+                                            type="button"
+                                            disabled={qIdx === 0}
+                                            onClick={() => handleMoveQuestionUp(sec.id, qIdx)}
+                                            className="px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                                            title="Move Up"
+                                          >
+                                            ▲
+                                          </button>
+                                          <button
+                                            type="button"
+                                            disabled={qIdx === sec.questions.length - 1}
+                                            onClick={() => handleMoveQuestionDown(sec.id, qIdx)}
+                                            className="px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border-t border-slate-200 dark:border-slate-700"
+                                            title="Move Down"
+                                          >
+                                            ▼
+                                          </button>
+                                        </div>
+                                      </div>
                                       <span className="font-mono text-[#5B4BFF] font-black text-sm">{qIdx + 1}.</span>
                                       <div className="space-y-1 flex-1">
                                         <p className="font-black text-[#1B1E28] dark:text-white leading-relaxed text-xs">{q.questionText}</p>
@@ -3557,20 +4859,42 @@ export default function FacultyAssessmentMasterPage() {
                                       </div>
                                     </div>
 
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2.5">
                                       <div className="flex items-center gap-1.5">
                                         <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">Total Question Marks:</span>
-                                        <input
-                                          type="number"
-                                          value={q.customMarks}
-                                          onChange={(e) => handleUpdateCustomMarks(sec.id, q.questionId, Number(e.target.value))}
-                                          className="w-16 px-2.5 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
-                                        />
+                                        {Array.isArray(q.subQuestions) && q.subQuestions.length > 0 ? (
+                                          <span
+                                            className="px-2.5 py-1 rounded-xl bg-[#EEF2FF] text-[#5B4BFF] font-black text-xs border border-[#5B4BFF]/40"
+                                            title="Computed as sum of subpart marks"
+                                          >
+                                            {Number(q.customMarks || 0).toFixed(1)} M
+                                          </span>
+                                        ) : (
+                                          <input
+                                            type="number"
+                                            value={q.customMarks}
+                                            onChange={(e) => handleUpdateCustomMarks(sec.id, q.questionId, Number(e.target.value))}
+                                            className="w-16 px-2.5 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
+                                          />
+                                        )}
                                       </div>
+
+                                      {/* Edit Question & Weightage Action Button */}
+                                      <button
+                                        type="button"
+                                        onClick={() => handleStartEditSectionQuestion(sec.id, q)}
+                                        className="text-[#5B4BFF] hover:text-[#4E3EFF] font-black text-xs px-2.5 py-1 rounded-lg bg-[#EEF2FF] hover:bg-[#EEF2FF]/80 border border-[#5B4BFF]/30 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                                        title="Edit question text, weightage, sub-parts, or options"
+                                      >
+                                        <span>✏️</span>
+                                        <span>Edit</span>
+                                      </button>
+
                                       <button
                                         type="button"
                                         onClick={() => handleRemoveQuestionFromSection(sec.id, q.questionId)}
-                                        className="text-[#F04438] hover:text-rose-700 font-extrabold text-xs px-2.5 py-1 rounded-lg bg-[#FEECEB] border border-[#F04438]/20"
+                                        className="text-[#F04438] hover:text-rose-700 font-extrabold text-xs px-2.5 py-1 rounded-lg bg-[#FEECEB] border border-[#F04438]/20 cursor-pointer"
+                                        title="Remove question from section"
                                       >
                                         ✕
                                       </button>
@@ -3606,7 +4930,8 @@ export default function FacultyAssessmentMasterPage() {
                                     </div>
                                   )}
                                 </div>
-                              ))}
+                              );
+                              })}
                             </div>
                           )}
                         </div>
@@ -3865,6 +5190,58 @@ export default function FacultyAssessmentMasterPage() {
 
         </main>
       </div>
+
+      {/* Blueprint Auto-Generation Modal */}
+      {blueprintModalSecId && (
+        <PaperBlueprintModal
+          isOpen={!!blueprintModalSecId}
+          onClose={() => setBlueprintModalSecId(null)}
+          availableTopics={availableTopics}
+          availableUnits={availableUnits}
+          onApplyBlueprintQuestions={handleApplyBlueprintQuestions}
+          tenantSlug={getTenantSlug()}
+          subjectId={selectedSubject}
+          subjectCode={selectedSubject}
+        />
+      )}
+
+      {/* Live Scoring Simulation Modal */}
+      {showScoringSimulation && (
+        <PaperLiveScoringPreviewModal
+          isOpen={showScoringSimulation}
+          onClose={() => setShowScoringSimulation(false)}
+          paper={{
+            id: editingPaperId || 'simulation-paper',
+            code: paperCode || 'SIM-01',
+            name: paperTitle || 'Simulation Examination Paper',
+            duration_minutes: paperDuration || 60,
+            passing_marks: Math.round(computedEffectiveMax * 0.33),
+            status: PaperStatus.DRAFT,
+            version: 1,
+            sections: paperSections.map(sec => ({
+              ...sec,
+              questionIds: (sec.questions || []).map((q: any) => q.questionId || q.id),
+              choiceGroups: sec.choiceGroups || [],
+              attemptRule: sec.attemptRule || 'ALL',
+              targetQuestionsCount: sec.targetQuestionsCount || (sec.questions || []).length,
+              requiredToAttempt: sec.requiredToAttempt ?? (sec.questions || []).length,
+              overAttemptPolicy: sec.overAttemptPolicy || OverAttemptPolicy.BEST_N,
+            })),
+            max_marks: computedEffectiveMax,
+          }}
+          questionsMap={allPaperQuestionsMap}
+        />
+      )}
+
+      {/* Version Diff Modal */}
+      {diffModalPaper && (
+        <PaperVersionDiffModal
+          isOpen={!!diffModalPaper}
+          onClose={() => setDiffModalPaper(null)}
+          previousVersion={diffModalPaper.previous}
+          currentDraft={diffModalPaper.current}
+        />
+      )}
 
       {/* Printable Exam Paper Review Modal */}
       {previewModalPaper && (

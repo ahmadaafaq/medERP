@@ -16,10 +16,31 @@ import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTim
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 function getTenantHeaders() {
-  if (typeof window === 'undefined') return { slug: '', headers: {} as Record<string, string> };
+  if (typeof window === 'undefined') return { slug: '', deptId: '', empId: '', userId: '', courseCd: '', headers: {} as Record<string, string> };
   const slug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').replace(/^tenant_/, '').replace(/^tenant-/, '') || 'default';
   const token = localStorage.getItem('token') || '';
-  return { slug, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'x-tenant-slug': slug, 'x-tenant': slug } };
+  let u: any = {};
+  try { u = JSON.parse(localStorage.getItem('user') || '{}'); } catch {}
+  const deptId = (localStorage.getItem('department_id') || localStorage.getItem('departmentId') || u?.departmentId || u?.department_id || '').trim();
+  const empId = (localStorage.getItem('emp_id') || u?.empId || u?.emp_id || localStorage.getItem('username') || '').trim();
+  const userId = (localStorage.getItem('userId') || u?.id || u?.sub || '').trim();
+  const courseCd = (localStorage.getItem('course_cd') || u?.courseCd || u?.course_cd || '').trim();
+  const headers: Record<string, string> = {
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    'x-tenant-slug': slug,
+    'x-tenant': slug,
+  };
+  if (userId) headers['x-user-id'] = userId;
+  if (empId) headers['x-emp-id'] = empId;
+  if (deptId) headers['x-department-id'] = deptId;
+  return {
+    slug,
+    deptId,
+    empId,
+    userId,
+    courseCd,
+    headers,
+  };
 }
 
 function HodQPApprovalCard() {
@@ -30,8 +51,14 @@ function HodQPApprovalCard() {
   const load = async () => {
     setLoading(true);
     try {
-      const { slug, headers } = getTenantHeaders();
-      const r = await fetch(`${API_BASE}/exams/papers/pending-hod-approval?tenant=${slug}`, { headers });
+      const { slug, empId, userId, headers } = getTenantHeaders();
+      const qp = new URLSearchParams({ tenant: slug });
+      // NOTE: Do NOT send departmentId for HOD requests — backend resolves HOD scope
+      // from userId/empId directly (via faculty.department_id + hod_user_id).
+      // Sending stale localStorage departmentId would interfere with scope resolution.
+      if (userId) qp.set('userId', userId);
+      if (empId) qp.set('empId', empId);
+      const r = await fetch(`${API_BASE}/exams/papers/pending-hod-approval?${qp.toString()}`, { headers });
       const d = await r.json();
       setPapers(Array.isArray(d) ? d : (d.data || []));
     } catch { setPapers([]); } finally { setLoading(false); }
@@ -102,8 +129,13 @@ function HodTimetableApprovalCard() {
   const load = async () => {
     setLoading(true);
     try {
-      const { slug, headers } = getTenantHeaders();
-      const r = await fetch(`${API_BASE}/exams/timetable-drafts/pending-hod-approval?tenant=${slug}`, { headers });
+      const { slug, empId, userId, headers } = getTenantHeaders();
+      const qp = new URLSearchParams({ tenant: slug });
+      // NOTE: Do NOT send departmentId for HOD requests — backend resolves HOD scope
+      // from userId/empId directly (via faculty.department_id + hod_user_id).
+      if (userId) qp.set('userId', userId);
+      if (empId) qp.set('empId', empId);
+      const r = await fetch(`${API_BASE}/exams/timetable-drafts/pending-hod-approval?${qp.toString()}`, { headers });
       const d = await r.json();
       setDrafts(Array.isArray(d) ? d : (d.data || []));
     } catch { setDrafts([]); } finally { setLoading(false); }
@@ -364,8 +396,65 @@ export default function HODDashboard() {
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      setUserName(localStorage.getItem('name') || localStorage.getItem('username') || 'HOD');
-      setDeptName(localStorage.getItem('department_name') || localStorage.getItem('departmentName') || '');
+      const storedName = localStorage.getItem('name') || localStorage.getItem('username') || 'HOD';
+      setUserName(storedName);
+      const storedDept = localStorage.getItem('department_name') || localStorage.getItem('departmentName') || '';
+      setDeptName(storedDept);
+
+      const token = localStorage.getItem('token') || '';
+      if (token) {
+        // Build tenant slug from localStorage
+        const slug = (localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '')
+          .replace(/^tenant_/, '').replace(/^tenant-/, '') || 'default';
+        fetch(`${API_BASE}/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'x-tenant-slug': slug,
+            'x-tenant': slug,
+          },
+        })
+          .then((r) => r.json())
+          .then((data) => {
+            // getMe returns a flat object; profile is nested under data.profile
+            // Department name and ID come from faculty record (via profile)
+            const p = data?.profile || {};
+            // data itself also has departmentName/departmentId as top-level (from getMe return)
+            const realName = p.name || data?.name || data?.faculty_name || storedName;
+            // Use profile.department_name as the AUTHORITATIVE source (from faculty → departments join)
+            // This overrides any stale localStorage value
+            const realDept = p.department_name || data?.departmentName || data?.department || storedDept;
+            const realDeptId = p.department_id || data?.departmentId || '';
+            const realCourseCd = p.course_cd || data?.courseCd || '';
+            const realEmpId = p.emp_id || data?.empId || '';
+            const realUserId = data?.id || data?.sub || '';
+
+            if (realName) {
+              setUserName(realName);
+              localStorage.setItem('name', realName);
+            }
+            // Always overwrite department info with fresh API data to clear stale localStorage
+            if (realDept) {
+              setDeptName(realDept);
+              localStorage.setItem('department_name', realDept);
+              localStorage.setItem('departmentName', realDept);
+            }
+            if (realDeptId) {
+              localStorage.setItem('department_id', realDeptId);
+              localStorage.setItem('departmentId', realDeptId);
+            }
+            if (realCourseCd) {
+              localStorage.setItem('course_cd', realCourseCd);
+              localStorage.setItem('courseCd', realCourseCd);
+            }
+            if (realEmpId) {
+              localStorage.setItem('emp_id', realEmpId);
+            }
+            if (realUserId) {
+              localStorage.setItem('userId', realUserId);
+            }
+          })
+          .catch(() => {});
+      }
     }
   }, []);
 

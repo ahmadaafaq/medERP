@@ -218,6 +218,42 @@ const STANDARD_DESIGNATIONS = [
   'Other / Custom',
 ];
 
+const resolveStaffDesig = (fac: any): string => {
+  if (!fac) return "Staff Member";
+  const desig = (fac.designation || "").trim();
+  const assigned = Array.isArray(fac.assigned_roles)
+    ? fac.assigned_roles
+    : typeof fac.assigned_roles === "string"
+    ? fac.assigned_roles.split(",").map((x: string) => x.trim().toUpperCase())
+    : [];
+  const isHod =
+    assigned.includes("HOD") ||
+    (fac.role || "").toUpperCase() === "HOD" ||
+    (fac.staff_type || "").toUpperCase() === "HOD";
+  const isClerk =
+    assigned.includes("CLERK") || (fac.role || "").toUpperCase() === "CLERK";
+
+  if (isHod) {
+    if (
+      !desig ||
+      desig.toLowerCase().includes("clerk") ||
+      desig.toLowerCase() === "faculty" ||
+      desig.toLowerCase() === "staff member"
+    ) {
+      return "Head of Department";
+    }
+  }
+  if (
+    !isClerk &&
+    (assigned.includes("FACULTY") || (fac.staff_type || "").toUpperCase() === "FACULTY")
+  ) {
+    if (!desig || desig.toLowerCase().includes("clerk")) {
+      return "Assistant Professor";
+    }
+  }
+  return desig || (isHod ? "Head of Department" : "Faculty Member");
+};
+
 export default function StaffMasterPage() {
   const [colleges, setColleges] = useState<College[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
@@ -1854,7 +1890,7 @@ export default function StaffMasterPage() {
                               </div>
                               <div className="cursor-pointer" onClick={() => setDetailFaculty(fac)}>
                                 <p className="font-bold text-slate-900 dark:text-white tracking-tight text-sm hover:text-[#5B4BFF] transition-colors">{fac.name}</p>
-                                <p className="text-[11px] text-[#5B4BFF] font-semibold">{fac.designation || 'Staff Member'}</p>
+                                <p className="text-[11px] text-[#5B4BFF] font-semibold">{resolveStaffDesig(fac)}</p>
                               </div>
                             </div>
                           </td>
@@ -2245,7 +2281,7 @@ export default function StaffMasterPage() {
                     </span>
                   </div>
                   <p className="text-xs text-white/80 font-bold mt-1">
-                    {detailFaculty.designation || 'Staff Member'} • <span className="font-mono bg-white/15 px-2 py-0.5 rounded-md text-white">{detailFaculty.emp_id}</span>
+                    {resolveStaffDesig(detailFaculty)} • <span className="font-mono bg-white/15 px-2 py-0.5 rounded-md text-white">{detailFaculty.emp_id}</span>
                   </p>
                 </div>
               </div>
@@ -2321,7 +2357,7 @@ export default function StaffMasterPage() {
 
                   <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/50">
                     <span className="text-[10px] text-slate-400 font-extrabold uppercase tracking-wider block mb-1">Designation</span>
-                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100">{detailFaculty.designation || 'Staff Member'}</span>
+                    <span className="font-bold text-xs text-slate-800 dark:text-slate-100">{resolveStaffDesig(detailFaculty)}</span>
                   </div>
 
                   <div className="p-3.5 rounded-xl bg-slate-50/80 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/50">

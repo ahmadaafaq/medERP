@@ -14,14 +14,27 @@ import { formatCourseName, formatSemester } from '../../../../lib/exam-formatter
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 function getH() {
-  if (typeof window === 'undefined') return { slug: '', headers: {} as any };
+  if (typeof window === 'undefined') return { slug: '', deptId: '', empId: '', userId: '', courseCd: '', headers: {} as any };
   const slug = getTenantSlug() || 'default';
   const token = localStorage.getItem('token') || '';
+  let u: any = {};
+  try { u = JSON.parse(localStorage.getItem('user') || '{}'); } catch {}
+  const deptId = localStorage.getItem('department_id') || localStorage.getItem('departmentId') || u?.departmentId || u?.department_id || '';
+  const empId = localStorage.getItem('emp_id') || u?.empId || u?.emp_id || localStorage.getItem('username') || '';
+  const userId = localStorage.getItem('userId') || u?.id || u?.sub || '';
+  const courseCd = localStorage.getItem('course_cd') || u?.courseCd || u?.course_cd || '';
   return {
     slug,
+    deptId,
+    empId,
+    userId,
+    courseCd,
     headers: {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'x-tenant-slug': slug,
+      'x-user-id': userId,
+      'x-emp-id': empId,
+      'x-department-id': deptId,
       'Content-Type': 'application/json',
     },
   };
@@ -53,19 +66,29 @@ export default function HODQPApprovalsPage() {
   const loadPapers = async () => {
     setLoading(true);
     try {
-      const { slug, headers } = getH();
-      let routePath = `/api/v1/exams/papers?tenant=${slug}`;
-      let fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}`;
+      const { slug, deptId, empId, userId, courseCd, headers } = getH();
+      const qp = new URLSearchParams({ tenant: slug });
+      // For HOD-specific endpoints, do NOT send departmentId — backend resolves from userId/empId.
+      // Only send departmentId for general paper list endpoints.
+      if (userId) qp.set('userId', userId);
+      if (empId) qp.set('empId', empId);
+      if (courseCd) qp.set('courseCd', courseCd);
+
+      let routePath = `/api/v1/exams/papers?${qp.toString()}`;
+      let fallbackPath = `${API_BASE}/exams/papers?${qp.toString()}`;
+      // Add deptId only for the general papers endpoint
+      if (deptId) { const qpWithDept = new URLSearchParams(qp); qpWithDept.set('departmentId', deptId); routePath = `/api/v1/exams/papers?${qpWithDept.toString()}`; fallbackPath = `${API_BASE}/exams/papers?${qpWithDept.toString()}`; }
 
       if (filterTab === 'PENDING_HOD_APPROVAL') {
-        routePath = `/api/v1/exams/papers/pending-hod-approval?tenant=${slug}`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=PENDING_HOD_APPROVAL`;
+        routePath = `/api/v1/exams/papers/pending-hod-approval?${qp.toString()}`;
+        fallbackPath = `${API_BASE}/exams/papers/pending-hod-approval?${qp.toString()}`;
       } else if (filterTab === 'HOD_APPROVED') {
-        routePath = `/api/v1/exams/papers/approved?tenant=${slug}`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=HOD_APPROVED`;
+        routePath = `/api/v1/exams/papers/approved?${qp.toString()}`;
+        fallbackPath = `${API_BASE}/exams/papers/approved?${qp.toString()}`;
       } else if (filterTab !== 'ALL') {
-        routePath = `/api/v1/exams/papers?tenant=${slug}&status=${filterTab}`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=${filterTab}`;
+        qp.set('status', filterTab);
+        routePath = `/api/v1/exams/papers?${qp.toString()}`;
+        fallbackPath = `${API_BASE}/exams/papers?${qp.toString()}`;
       }
 
       let list: any[] = [];

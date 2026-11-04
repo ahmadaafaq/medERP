@@ -493,6 +493,50 @@ export class UsersService {
     } catch (e) { }
   }
 
+  normalizeStaffDesignation(
+    rawDesig: string | null | undefined,
+    assignedRoles: string[] = [],
+    primaryRole?: string,
+    staffType?: string,
+  ): string {
+    const desig = (rawDesig || '').trim();
+    const isClerkRole = assignedRoles.includes('CLERK') || (primaryRole || '').toUpperCase() === 'CLERK';
+    const isHodRole =
+      assignedRoles.includes('HOD') ||
+      (primaryRole || '').toUpperCase() === 'HOD' ||
+      (staffType || '').toUpperCase() === 'HOD';
+    const isDqacRole = assignedRoles.includes('DQAC') || (primaryRole || '').toUpperCase() === 'DQAC';
+    const isFacultyRole =
+      assignedRoles.includes('FACULTY') ||
+      (primaryRole || '').toUpperCase() === 'FACULTY' ||
+      (staffType || '').toUpperCase() === 'FACULTY';
+    const isAdminRole =
+      assignedRoles.includes('COLLEGE_ADMIN') ||
+      (primaryRole || '').toUpperCase() === 'COLLEGE_ADMIN' ||
+      (primaryRole || '').toUpperCase() === 'ADMIN' ||
+      (primaryRole || '').toUpperCase() === 'SUPER_ADMIN';
+
+    if (!isClerkRole && (isHodRole || isDqacRole || isFacultyRole || isAdminRole)) {
+      if (
+        !desig ||
+        desig.toLowerCase().includes('clerk') ||
+        desig.toLowerCase() === 'staff member' ||
+        desig.toLowerCase() === 'staff'
+      ) {
+        if (isHodRole) return 'Head of Department';
+        if (isAdminRole) return 'College Administrator';
+        if (isDqacRole) return 'DQAC Member';
+        return 'Assistant Professor';
+      }
+    }
+
+    if (isHodRole && (!desig || desig.toLowerCase() === 'faculty' || desig.toLowerCase() === 'faculty member')) {
+      return 'Head of Department';
+    }
+
+    return desig || (isHodRole ? 'Head of Department' : isFacultyRole ? 'Assistant Professor' : 'Staff Member');
+  }
+
   async getFaculty(tenantSlug: string, pagination: PaginationDto, filters: {
     search?: string; departmentId?: string; role?: UserRole; staffType?: string; isActive?: string;
   } = {}) {
@@ -541,8 +585,16 @@ export class UsersService {
               assignedRoles = ['FACULTY'];
             }
 
+            const normalizedDesignation = this.normalizeStaffDesignation(
+              r.designation,
+              assignedRoles,
+              r.role,
+              r.staff_type,
+            );
+
             allFaculty.push({
               ...r,
+              designation: normalizedDesignation,
               assigned_roles: Array.from(new Set(assignedRoles)),
               college_id: col.id,
               college_name: col.name,
@@ -646,8 +698,16 @@ export class UsersService {
         assignedRoles = ['FACULTY'];
       }
 
+      const normalizedDesignation = this.normalizeStaffDesignation(
+        r.designation,
+        assignedRoles,
+        r.role,
+        r.staff_type,
+      );
+
       return {
         ...r,
+        designation: normalizedDesignation,
         assigned_roles: Array.from(new Set(assignedRoles)),
         college_id: currentCollege?.id,
         college_name: currentCollege?.name,
@@ -680,10 +740,37 @@ export class UsersService {
       ).catch(() => []);
     };
 
-    if (resolvedSlug && resolvedSlug !== 'all') {
+    const formatFacultyRow = (row: any, schemaName: string, tSlug: string) => {
+      let assignedRoles: string[] = [];
+      if (row.assigned_roles && typeof row.assigned_roles === "string") {
+        assignedRoles = row.assigned_roles.split(",").map((x: string) => x.trim().toUpperCase()).filter(Boolean);
+      } else if (row.role) {
+        const ur = String(row.role).toUpperCase();
+        if (ur === "COLLEGE_ADMIN" || ur === "SUPER_ADMIN") assignedRoles = ["FACULTY", "COLLEGE_ADMIN"];
+        else if (ur === "HOD") assignedRoles = ["FACULTY", "HOD"];
+        else assignedRoles = [ur];
+      } else {
+        assignedRoles = ["FACULTY"];
+      }
+      const normalizedDesignation = this.normalizeStaffDesignation(
+        row.designation,
+        assignedRoles,
+        row.role,
+        row.staff_type,
+      );
+      return {
+        ...row,
+        designation: normalizedDesignation,
+        assigned_roles: Array.from(new Set(assignedRoles)),
+        _schema: schemaName,
+        _tenantSlug: tSlug,
+      };
+    };
+
+    if (resolvedSlug && resolvedSlug !== "all") {
       const primarySchema = `tenant_${resolvedSlug}`;
       const rows = await fetchFromSchema(primarySchema);
-      if (rows && rows[0]) return { ...rows[0], _schema: primarySchema, _tenantSlug: resolvedSlug };
+      if (rows && rows[0]) return formatFacultyRow(rows[0], primarySchema, resolvedSlug);
     }
 
     // Fallback across all schemas if not found in primary
@@ -691,7 +778,7 @@ export class UsersService {
       if (!col.slug || col.slug === resolvedSlug) continue;
       const s = `tenant_${col.slug}`;
       const rows = await fetchFromSchema(s);
-      if (rows && rows[0]) return { ...rows[0], _schema: s, _tenantSlug: col.slug };
+      if (rows && rows[0]) return formatFacultyRow(rows[0], s, col.slug);
     }
 
     throw new NotFoundException('Faculty not found');
@@ -1526,13 +1613,29 @@ export class UsersService {
     // Update faculty designation if applicable
     if (facultyRecordId) {
       const hasAdmin = canonicalRoles.includes('COLLEGE_ADMIN');
+      const hasHod = canonicalRoles.includes('HOD');
+      const hasDqac = canonicalRoles.includes('DQAC');
+      const hasClerk = canonicalRoles.includes('CLERK');
+
       let updatedDesignation = currentDesignation;
+      if (hasHod) {
+        if (!updatedDesignation || updatedDesignation.toLowerCase().includes('clerk') || updatedDesignation.toLowerCase() === 'faculty' || updatedDesignation.toLowerCase() === 'faculty member') {
+          updatedDesignation = 'Head of Department';
+        }
+      } else if (hasDqac) {
+        if (updatedDesignation.toLowerCase().includes('clerk')) {
+          updatedDesignation = 'DQAC Member';
+        }
+      } else if (!hasClerk && updatedDesignation.toLowerCase().includes('clerk')) {
+        updatedDesignation = 'Faculty Member';
+      }
+
       if (hasAdmin) {
         if (!updatedDesignation.toLowerCase().includes('admin')) {
           updatedDesignation = `${updatedDesignation} (Admin)`.trim();
         }
       } else {
-        updatedDesignation = updatedDesignation.replace(/\s*\(\s*Admin\s*\)/gi, '').trim() || 'Faculty';
+        updatedDesignation = updatedDesignation.replace(/\s*\(\s*Admin\s*\)/gi, '').trim() || 'Faculty Member';
       }
 
       await this.ds.query(
@@ -1541,6 +1644,16 @@ export class UsersService {
          WHERE id::text = $2::text`,
         [updatedDesignation, facultyRecordId],
       );
+
+      // If assigned HOD role, ensure department links this user as hod_user_id
+      if (hasHod && facRows[0]?.department_id) {
+        await this.ds.query(
+          `UPDATE "${schema}".departments 
+           SET hod_user_id = $1 
+           WHERE id::text = $2::text`,
+          [userId, facRows[0].department_id],
+        ).catch(() => {});
+      }
     }
 
     this.logger.log(`Updated roles for user ${userId} (${userName}): [${assignedRolesStr}] primary=${primaryRole} in ${slug}`);

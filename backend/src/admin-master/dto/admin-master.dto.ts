@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsBoolean, IsNumber,
-  IsUUID, MaxLength, IsArray,
+  IsUUID, MaxLength, IsArray, IsObject,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
@@ -1762,8 +1762,15 @@ export class SaveCoPoMatrixDto {
   @IsString()
   subject_name?: string;
 
-  @ApiProperty({ example: { 'CO1': { 'PO1': 3, 'PO2': 2 }, 'averages': {} } })
-  matrix_data: Record<string, any>;
+  @ApiPropertyOptional({ example: { 'CO1': { 'PO1': 3, 'PO2': 2 }, 'averages': {} } })
+  @IsOptional()
+  @IsObject()
+  matrix_data?: Record<string, any>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  mappings?: any[];
 }
 
 // ─── 13. PO - PEO MATRIX ────────────────────────────────────────────────────
@@ -1808,8 +1815,15 @@ export class SavePoPeoMatrixDto {
   @IsString()
   section?: string;
 
-  @ApiProperty({ example: { 'PO1': { 'PEO1': 3, 'PEO2': 2 }, 'averages': {} } })
-  matrix_data: Record<string, any>;
+  @ApiPropertyOptional({ example: { 'PO1': { 'PEO1': 3, 'PEO2': 2 }, 'averages': {} } })
+  @IsOptional()
+  @IsObject()
+  matrix_data?: Record<string, any>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  mappings?: any[];
 }
 
 

@@ -1069,17 +1069,28 @@ export class CollegeMasterService implements OnApplicationBootstrap {
         // 11. Resolve / Create User Account in tenant schema & Set password '12345678'
         let userId: string | null = null;
         const userRows = await this.ds.query(
-          `SELECT id FROM "${schema}".users WHERE email = $1 LIMIT 1`,
+          `SELECT id, role, assigned_roles FROM "${schema}".users WHERE email = $1 LIMIT 1`,
           [email],
         ).catch(() => []);
         if (userRows.length > 0) {
           userId = userRows[0].id;
-          // Update password to 12345678 and refresh active status
+          const existingRole = String(userRows[0].role || "").toUpperCase();
+          const existingAssignedRoles = String(userRows[0].assigned_roles || "").toUpperCase();
+          const isElevated =
+            existingRole === "HOD" ||
+            existingRole === "FACULTY" ||
+            existingRole === "ADMIN" ||
+            existingRole === "COLLEGE_ADMIN" ||
+            existingAssignedRoles.includes("HOD") ||
+            existingAssignedRoles.includes("FACULTY") ||
+            existingAssignedRoles.includes("ADMIN");
+          const effectiveRole = isElevated ? userRows[0].role : userRole;
+          // Update password to 12345678 and refresh active status without demoting elevated roles
           await this.ds.query(
             `UPDATE "${schema}".users 
              SET password_hash = $1, is_active = $2, role = COALESCE($3, role), updated_at = NOW() 
              WHERE id = $4`,
-            [defaultPasswordHash, isActive, userRole, userId],
+            [defaultPasswordHash, isActive, effectiveRole, userId],
           ).catch(() => {});
         } else {
           const newUser = await this.ds.query(
@@ -1109,7 +1120,13 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                  email = COALESCE($2, email),
                  phone = COALESCE($3, phone),
                  department_id = COALESCE($4, department_id),
-                 designation = $5,
+                 designation = CASE
+                   WHEN "${schema}".faculty.designation ILIKE '%Head of Department%' OR "${schema}".faculty.designation ILIKE '%HOD%' THEN "${schema}".faculty.designation
+                   WHEN "${schema}".faculty.staff_type = 'HOD' THEN 'Head of Department'
+                   WHEN "${schema}".faculty.designation ILIKE '%Professor%' THEN "${schema}".faculty.designation
+                   WHEN $5 ILIKE '%Clerk%' AND ("${schema}".faculty.staff_type = 'HOD' OR "${schema}".faculty.staff_type = 'Faculty') THEN COALESCE(NULLIF("${schema}".faculty.designation, 'Clerk'), 'Faculty Member')
+                   ELSE COALESCE($5, "${schema}".faculty.designation, 'Faculty Member')
+                 END,
                  qualification = COALESCE($6, qualification),
                  blood_group = COALESCE($7, blood_group),
                  caste = COALESCE($8, caste),
@@ -1138,7 +1155,12 @@ export class CollegeMasterService implements OnApplicationBootstrap {
                  joining_date = COALESCE($31::timestamptz, joining_date),
                  date_of_leaving = COALESCE($32, date_of_leaving),
                  photo_url = $33,
-                 staff_type = $34,
+                 staff_type = CASE
+                   WHEN "${schema}".faculty.staff_type = 'HOD' THEN 'HOD'
+                   WHEN "${schema}".faculty.designation ILIKE '%Head of Department%' THEN 'HOD'
+                   WHEN "${schema}".faculty.staff_type = 'Faculty' AND $34 = 'Staff' THEN 'Faculty'
+                   ELSE $34
+                 END,
                  employment_status = $35,
                  experience = $36,
                  gender = $37,

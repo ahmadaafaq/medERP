@@ -49,6 +49,7 @@ interface QuestionSubPart {
 }
 
 interface QuestionDetail {
+  id?: string;
   questionId: string;
   questionText: string;
   mode: string;
@@ -78,6 +79,10 @@ interface PaperSection {
   questions: QuestionDetail[];
   practicalMarks?: number;
   practicalComponents?: PracticalComponent[];
+  requiredToAttempt?: number;
+  attemptRule?: string;
+  overAttemptPolicy?: string;
+  choiceGroups?: any[];
 }
 
 interface ExamPaper {
@@ -115,15 +120,18 @@ interface ExamPaper {
 interface StudentRow {
   id: string;
   rollno: string;
+  registration_no?: string;
+  photo_url?: string;
   name: string;
   gender?: string;
   evaluated: boolean;
   marks_obtained: number;
   max_marks: number;
-  questionMarks?: { [qId: string]: number };
-  subPartMarks?: { [subId: string]: number };
+  questionMarks?: { [qId: string]: number | string };
+  subPartMarks?: { [subId: string]: number | string };
+  skippedQuestionIds?: string[];
   practicalMark?: number;
-  competencyScores: { [compCode: string]: { scored: number; max: number } };
+  competencyScores: { [compCode: string]: { scored: number; max: number; isSkipped?: boolean } };
   is_pass: boolean;
 }
 
@@ -236,6 +244,7 @@ export default function FacultyMarksPage() {
   // ── Marks Entry State ─────────────────────────────────────────────────
   const [questionMarksMap, setQuestionMarksMap] = useState<{ [qId: string]: number | string }>({});
   const [subPartMarksMap, setSubPartMarksMap] = useState<{ [subId: string]: number | string }>({});
+  const [skippedQuestionsMap, setSkippedQuestionsMap] = useState<{ [qId: string]: boolean }>({});
   const [practicalSectionMark, setPracticalSectionMark] = useState<number | string>(0);
   const [practicalComponentMarksMap, setPracticalComponentMarksMap] = useState<{ [compId: string]: number | string }>({});
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -632,33 +641,58 @@ export default function FacultyMarksPage() {
     return Array.from(compSet);
   }, [activePaper]);
 
-  const calculateStudentCompetencyScores = (paper: any, qMarks: any = {}, subMarks: any = {}) => {
+  const calculateStudentCompetencyScores = (
+    paper: any,
+    qMarks: any = {},
+    subMarks: any = {},
+    skippedListOrMap: any = {}
+  ) => {
     if (!paper || !Array.isArray(paper.sections)) return {};
-    const scores: { [compCode: string]: { scored: number; max: number } } = {};
+    const scores: { [compCode: string]: { scored: number; max: number; isSkipped?: boolean } } = {};
+
+    const isSkippedCheck = (qId: string) => {
+      if (Array.isArray(skippedListOrMap)) return skippedListOrMap.includes(qId);
+      if (skippedListOrMap && typeof skippedListOrMap === 'object') {
+        if (skippedListOrMap[qId]) return true;
+      }
+      return qMarks[qId] === 'SKIPPED' || qMarks[qId] === null;
+    };
 
     paper.sections.forEach((sec: any) => {
       if (!Array.isArray(sec.questions)) return;
       sec.questions.forEach((q: any) => {
         const comp = q.competencyCode || q.competency_code || 'General';
-        if (!scores[comp]) {
-          scores[comp] = { scored: 0, max: 0 };
-        }
-
+        const qId = q.questionId || q.id;
         const qMax = Number(q.customMarks || q.defaultMarks || q.max_marks || q.maxMarks || 2);
 
+        if (!scores[comp]) {
+          scores[comp] = { scored: 0, max: 0, isSkipped: true };
+        }
+
+        const isSkipped = isSkippedCheck(qId);
+        if (isSkipped) {
+          // Unattempted / Skipped question: do not penalize student or inflate max marks
+          return;
+        }
+
+        scores[comp].isSkipped = false;
+
         if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
-          const totalSubMax = q.subQuestions.reduce((sum: number, sq: any) => sum + Number(sq.marks || 1), 0);
-          q.subQuestions.forEach((sq: any, idx: number) => {
-            const sqKey = sq.id || `${q.questionId}_sq_${idx}`;
-            const sqRatio = totalSubMax > 0 ? Number(sq.marks || 1) / totalSubMax : 1 / q.subQuestions.length;
-            const sqMax = Number((sqRatio * qMax).toFixed(2));
-            const sqScored = Number(subMarks[sqKey] ?? subMarks[sq.id] ?? subMarks[String(idx + 1)] ?? 0);
-            
-            scores[comp].max += sqMax;
-            scores[comp].scored += sqScored;
+          let subScoredSum = 0;
+          q.subQuestions.forEach((sq: any) => {
+            const compositeKey = `${qId}_${sq.id}`;
+            const sqScored = Number(subMarks[compositeKey] ?? 0);
+            subScoredSum += isNaN(sqScored) ? 0 : sqScored;
           });
+          // Cap total scored on question to question's max marks so subparts never overshoot
+          const qScored = Math.min(qMax, subScoredSum);
+          scores[comp].max += qMax;
+          scores[comp].scored += qScored;
+          scores[comp].scored = Math.min(scores[comp].max, scores[comp].scored);
         } else {
-          const qScored = Number(qMarks[q.questionId] ?? qMarks[q.id] ?? 0);
+          const rawQ = qMarks[qId];
+          const numQ = Number(rawQ ?? 0);
+          const qScored = isNaN(numQ) ? 0 : Math.min(qMax, Math.max(0, numQ));
           scores[comp].max += qMax;
           scores[comp].scored += qScored;
         }
@@ -720,30 +754,69 @@ export default function FacultyMarksPage() {
           );
           const maxM = Number(activePaper?.max_marks || (hasPractical ? (40 + practicalMaxMarks) : 40));
 
-          const mapped: StudentRow[] = rawList.map((st: any, idx: number) => {
+          const seenNameBatch = new Map<string, StudentRow>();
+          const seenKey = new Set<string>();
+
+          for (let idx = 0; idx < rawList.length; idx++) {
+            const st = rawList[idx];
+            if (st.is_active === false) continue;
+            const statusUpper = String(st.status || st.studsts || '').toUpperCase().trim();
+            if (statusUpper === 'PROPOSED' || statusUpper === 'CANCELLED' || statusUpper === 'WITHDRAWN') continue;
+
             const stId = st.id || `st-${idx + 1}`;
-            const stRoll = st.registration_no || st.rollno || `#${String(idx + 1).padStart(6, '0')}`;
-            const stName = (st.name || '').toLowerCase();
-            const saved = savedResultsMap[stId] || savedResultsMap[stRoll] || savedResultsMap[stName];
+            const aktuRoll = (st.rollno || '').trim();
+            const regNo = (st.registration_no || '').trim();
+            const realName = (st.name || '').trim();
+            if (!realName) continue;
+
+            const hasAktu = Boolean(aktuRoll && aktuRoll.length >= 10 && aktuRoll !== regNo);
+            const displayRoll = aktuRoll || regNo || `#${String(idx + 1).padStart(6, '0')}`;
+            const photoUrl = st.photo_url || (regNo ? `https://myportal.srms.ac.in/SRMSERP/Registration/StudentDocument/1/${regNo}/${regNo}.JPG` : undefined);
+
+            const saved = savedResultsMap[stId] || (regNo && savedResultsMap[regNo]) || (aktuRoll && savedResultsMap[aktuRoll]) || savedResultsMap[realName.toLowerCase()];
 
             const qM = saved?.question_marks ? (typeof saved.question_marks === 'string' ? JSON.parse(saved.question_marks) : saved.question_marks) : undefined;
             const subM = saved?.sub_part_marks ? (typeof saved.sub_part_marks === 'string' ? JSON.parse(saved.sub_part_marks) : saved.sub_part_marks) : undefined;
+            const skippedRaw = saved?.skipped_question_ids ? (typeof saved.skipped_question_ids === 'string' ? JSON.parse(saved.skipped_question_ids) : saved.skipped_question_ids) : (saved?.ignored_question_ids ? (typeof saved.ignored_question_ids === 'string' ? JSON.parse(saved.ignored_question_ids) : saved.ignored_question_ids) : []);
+            const skippedList: string[] = Array.isArray(skippedRaw) ? skippedRaw : [];
 
-            return {
+            const rowItem: StudentRow = {
               id: stId,
-              rollno: stRoll,
-              name: st.name || `Student ${idx + 1}`,
+              rollno: displayRoll,
+              registration_no: regNo,
+              photo_url: photoUrl,
+              name: realName,
               gender: st.gender || 'Male',
               evaluated: Boolean(saved),
               marks_obtained: saved ? Number(saved.marks_obtained) : 0,
               max_marks: maxM,
               questionMarks: qM,
               subPartMarks: subM,
+              skippedQuestionIds: skippedList,
               practicalMark: saved ? Number(saved.practical_mark || 0) : undefined,
               competencyScores: {},
               is_pass: saved ? Boolean(saved.is_pass) : false,
             };
-          });
+
+            const dedupeKey = hasAktu ? `aktu_${aktuRoll}` : (regNo ? `reg_${regNo}` : `id_${stId}`);
+            if (seenKey.has(dedupeKey)) continue;
+
+            const nameBatchKey = `${realName.toLowerCase()}_${st.course_cd || ''}_${st.batch_cd || ''}`;
+            const existing = seenNameBatch.get(nameBatchKey);
+            if (existing) {
+              const existingHasAktu = Boolean(existing.rollno && existing.rollno.length >= 10 && existing.rollno !== existing.registration_no);
+              if (hasAktu && !existingHasAktu) {
+                seenNameBatch.set(nameBatchKey, rowItem);
+                seenKey.add(dedupeKey);
+              }
+              continue;
+            }
+
+            seenNameBatch.set(nameBatchKey, rowItem);
+            seenKey.add(dedupeKey);
+          }
+
+          const mapped = Array.from(seenNameBatch.values());
           setStudents(mapped);
           setSelectedStudentId(mapped[0]?.id || null);
           setLoading(false);
@@ -760,7 +833,11 @@ export default function FacultyMarksPage() {
   const filteredStudents = useMemo(() => {
     if (!searchQuery.trim()) return students;
     const q = searchQuery.toLowerCase();
-    return students.filter(s => s.name.toLowerCase().includes(q) || String(s.rollno).toLowerCase().includes(q));
+    return students.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      String(s.rollno).toLowerCase().includes(q) ||
+      String(s.registration_no || '').toLowerCase().includes(q)
+    );
   }, [students, searchQuery]);
 
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId) || null, [students, selectedStudentId]);
@@ -786,11 +863,12 @@ export default function FacultyMarksPage() {
         }
       } else {
         sec.questions.forEach(q => {
+          const qId: string = q.questionId || (q as any).id || '';
           if (!q.subQuestions || q.subQuestions.length === 0) {
-            map[`q_${q.questionId}`] = idx++;
+            map[`q_${qId}`] = idx++;
           } else {
             q.subQuestions.forEach(sq => {
-              map[`sq_${sq.id}`] = idx++;
+              map[`sq_${qId}_${sq.id}`] = idx++;
             });
           }
         });
@@ -800,30 +878,42 @@ export default function FacultyMarksPage() {
     return map;
   }, [activePaper]);
 
-  // Reset / populate marks when selected student or paper changes — 0 by default
+  // Reset / populate marks when selected student or paper changes
   useEffect(() => {
     if (!selectedStudent || !activePaper?.sections) return;
-    const qMarks: { [qId: string]: number } = {};
-    const subMarks: { [subId: string]: number } = {};
+    const qMarks: { [qId: string]: number | string } = {};
+    const subMarks: { [subId: string]: number | string } = {};
+    const skippedMap: { [qId: string]: boolean } = {};
+
+    const savedSkipped = new Set<string>(selectedStudent.skippedQuestionIds || []);
 
     activePaper.sections.forEach(sec => {
       sec.questions.forEach(q => {
-        const savedQ = selectedStudent.questionMarks?.[q.questionId];
-        qMarks[q.questionId] = selectedStudent.evaluated
-          ? (savedQ !== undefined && !isNaN(Number(savedQ)) ? Number(savedQ) : 0)
-          : 0;
+        const qId: string = q.questionId || (q as any).id || '';
+        const savedQ = selectedStudent.questionMarks?.[qId];
+        const isQExplicitlySkipped = savedSkipped.has(qId) || savedQ === 'SKIPPED' || savedQ === null;
+
+        if (isQExplicitlySkipped) {
+          skippedMap[qId] = true;
+          qMarks[qId] = '';
+        } else {
+          qMarks[qId] = selectedStudent.evaluated
+            ? (savedQ !== undefined && !isNaN(Number(savedQ)) ? Number(savedQ) : 0)
+            : 0;
+        }
 
         if (Array.isArray(q.subQuestions)) {
           q.subQuestions.forEach(sq => {
-            const savedSub = selectedStudent.subPartMarks?.[sq.id];
-            subMarks[sq.id] = selectedStudent.evaluated
-              ? (savedSub !== undefined && !isNaN(Number(savedSub)) ? Number(savedSub) : 0)
-              : 0;
+            const compositeKey = `${qId}_${sq.id}`;
+            const savedSub = selectedStudent.subPartMarks?.[compositeKey] ?? selectedStudent.subPartMarks?.[sq.id];
+            const parsedVal = savedSub !== undefined && !isNaN(Number(savedSub)) ? Number(savedSub) : 0;
+            subMarks[compositeKey] = selectedStudent.evaluated && !isQExplicitlySkipped ? parsedVal : 0;
           });
         }
       });
     });
 
+    setSkippedQuestionsMap(skippedMap);
     setQuestionMarksMap(qMarks);
     setSubPartMarksMap(subMarks);
     setPracticalSectionMark(
@@ -833,19 +923,29 @@ export default function FacultyMarksPage() {
     );
   }, [selectedStudentId, selectedPaperId, selectedStudent?.evaluated, hasPracticalSec]);
 
-  // Auto focus and select first number when student is selected
+  // Auto focus and select first available input when student is selected
   useEffect(() => {
     if (selectedStudentId) {
       const timer = setTimeout(() => {
-        const firstInput = inputRefs.current[0];
-        if (firstInput) {
-          firstInput.focus();
-          firstInput.select();
+        const firstEnabled = inputRefs.current.find(el => el && !el.disabled);
+        if (firstEnabled) {
+          firstEnabled.focus();
+          firstEnabled.select();
         }
-      }, 70);
+      }, 80);
       return () => clearTimeout(timer);
     }
   }, [selectedStudentId, activePaper?.id]);
+
+  const toggleQuestionSkip = (qId: string) => {
+    setSkippedQuestionsMap(prev => {
+      const isNowSkipped = !prev[qId];
+      if (isNowSkipped) {
+        setQuestionMarksMap(qm => ({ ...qm, [qId]: '' }));
+      }
+      return { ...prev, [qId]: isNowSkipped };
+    });
+  };
 
   const handleMarkChange = (
     id: string,
@@ -853,7 +953,6 @@ export default function FacultyMarksPage() {
     maxMarks: number,
     type: 'question' | 'sub' | 'practical'
   ) => {
-    // If user hits backspace and makes it empty, allow empty state for typing
     if (rawVal === '') {
       if (type === 'question') setQuestionMarksMap(prev => ({ ...prev, [id]: '' }));
       else if (type === 'sub') setSubPartMarksMap(prev => ({ ...prev, [id]: '' }));
@@ -864,7 +963,6 @@ export default function FacultyMarksPage() {
     const parsed = parseFloat(rawVal);
     if (isNaN(parsed)) return;
 
-    // Validation: no negative marks, do not exceed question max marks
     let validated = parsed;
     if (validated < 0) {
       validated = 0;
@@ -872,9 +970,16 @@ export default function FacultyMarksPage() {
       validated = maxMarks;
     }
 
-    if (type === 'question') setQuestionMarksMap(prev => ({ ...prev, [id]: validated }));
-    else if (type === 'sub') setSubPartMarksMap(prev => ({ ...prev, [id]: validated }));
-    else setPracticalSectionMark(validated);
+    if (type === 'question') {
+      setSkippedQuestionsMap(sm => ({ ...sm, [id]: false }));
+      setQuestionMarksMap(prev => ({ ...prev, [id]: validated }));
+    } else if (type === 'sub') {
+      const parentQId = id.split('_')[0];
+      if (parentQId) setSkippedQuestionsMap(sm => ({ ...sm, [parentQId]: false }));
+      setSubPartMarksMap(prev => ({ ...prev, [id]: validated }));
+    } else {
+      setPracticalSectionMark(validated);
+    }
   };
 
   const handleMarkBlur = (
@@ -882,10 +987,10 @@ export default function FacultyMarksPage() {
     maxMarks: number,
     type: 'question' | 'sub' | 'practical'
   ) => {
-    // On blur, if field is empty or NaN, default back to 0
     if (type === 'question') {
       setQuestionMarksMap(prev => {
         const v = prev[id];
+        if (skippedQuestionsMap[id]) return prev;
         const num = typeof v === 'number' ? v : parseFloat(String(v));
         const finalVal = isNaN(num) ? 0 : Math.min(maxMarks, Math.max(0, num));
         return { ...prev, [id]: finalVal };
@@ -916,30 +1021,93 @@ export default function FacultyMarksPage() {
       e.preventDefault();
       handleMarkBlur(id, maxMarks, type);
 
-      const nextInput = inputRefs.current[currentIndex + 1];
+      // Search forward for the next active non-disabled input
+      let nextIdx = currentIndex + 1;
+      let nextInput = inputRefs.current[nextIdx];
+      while (nextInput && nextInput.disabled) {
+        nextIdx++;
+        nextInput = inputRefs.current[nextIdx];
+      }
+
       if (nextInput) {
         nextInput.focus();
         nextInput.select();
       } else {
-        // Last question input reached: auto submit and load next student
+        // Last input reached: save current student evaluation and load next
         handleSaveStudentEvaluation();
       }
     }
   };
 
   const calculatedStudentTotal = useMemo(() => {
-    const qTotal = Object.values(questionMarksMap).reduce<number>((acc, val) => {
-      const num = typeof val === 'number' ? val : (parseFloat(String(val)) || 0);
-      return acc + (isNaN(num) ? 0 : num);
-    }, 0);
-    const subTotal = Object.values(subPartMarksMap).reduce<number>((acc, val) => {
-      const num = typeof val === 'number' ? val : (parseFloat(String(val)) || 0);
-      return acc + (isNaN(num) ? 0 : num);
-    }, 0);
-    const practVal = typeof practicalSectionMark === 'number' ? practicalSectionMark : (parseFloat(String(practicalSectionMark)) || 0);
-    const total = qTotal + subTotal + (hasPracticalSec ? (isNaN(practVal) ? 0 : practVal) : 0);
-    return Math.round(total * 100) / 100;
-  }, [questionMarksMap, subPartMarksMap, practicalSectionMark, hasPracticalSec]);
+    if (!activePaper?.sections) return 0;
+    let grandTotal = 0;
+
+    activePaper.sections.forEach(sec => {
+      if (sec.type === 'PRACTICAL') {
+        const practVal = typeof practicalSectionMark === 'number' ? practicalSectionMark : (parseFloat(String(practicalSectionMark)) || 0);
+        grandTotal += isNaN(practVal) ? 0 : practVal;
+        return;
+      }
+
+      const questionsList = sec.questions || [];
+      const scoredQuestions: { qId: string; scored: number; isAttempted: boolean }[] = [];
+
+      questionsList.forEach(q => {
+        const qId: string = q.questionId || (q as any).id || '';
+        const qMax = Number(q.customMarks || q.defaultMarks || 2);
+        const isSkipped = Boolean(skippedQuestionsMap[qId]);
+
+        if (isSkipped) {
+          scoredQuestions.push({ qId, scored: 0, isAttempted: false });
+          return;
+        }
+
+        if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
+          let subSum = 0;
+          let anyEntered = false;
+          q.subQuestions.forEach(sq => {
+            const compositeKey = `${qId}_${sq.id}`;
+            const val = subPartMarksMap[compositeKey];
+            if (val !== undefined && val !== '' && !isNaN(Number(val))) {
+              subSum += Number(val);
+              anyEntered = true;
+            }
+          });
+          scoredQuestions.push({
+            qId,
+            scored: Math.min(qMax, subSum),
+            isAttempted: anyEntered,
+          });
+        } else {
+          const val = questionMarksMap[qId];
+          const hasVal = val !== undefined && val !== '' && !isNaN(Number(val));
+          scoredQuestions.push({
+            qId,
+            scored: hasVal ? Math.min(qMax, Math.max(0, Number(val))) : 0,
+            isAttempted: hasVal,
+          });
+        }
+      });
+
+      const reqAttempt = Number(sec.requiredToAttempt);
+      const isChoiceRule = (sec.attemptRule === 'CHOICE' || (reqAttempt > 0 && reqAttempt < questionsList.length));
+
+      if (isChoiceRule && reqAttempt > 0) {
+        // Top N best scored questions are counted for choice sections
+        const attempted = scoredQuestions.filter(sq => sq.isAttempted);
+        attempted.sort((a, b) => b.scored - a.scored);
+        const counted = attempted.slice(0, reqAttempt);
+        const secTotal = counted.reduce((sum, item) => sum + item.scored, 0);
+        grandTotal += secTotal;
+      } else {
+        const secTotal = scoredQuestions.reduce((sum, item) => sum + item.scored, 0);
+        grandTotal += secTotal;
+      }
+    });
+
+    return Math.round(grandTotal * 100) / 100;
+  }, [activePaper, questionMarksMap, subPartMarksMap, practicalSectionMark, skippedQuestionsMap]);
 
   const handleSaveStudentEvaluation = async () => {
     if (!selectedStudent || !activePaper) return;
@@ -947,10 +1115,14 @@ export default function FacultyMarksPage() {
     const slug = getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
 
-    const sanitizedQMarks: { [k: string]: number } = {};
+    const sanitizedQMarks: { [k: string]: number | string } = {};
     Object.entries(questionMarksMap).forEach(([k, v]) => {
-      const num = typeof v === 'number' ? v : parseFloat(String(v));
-      sanitizedQMarks[k] = isNaN(num) ? 0 : num;
+      if (skippedQuestionsMap[k]) {
+        sanitizedQMarks[k] = 'SKIPPED';
+      } else {
+        const num = typeof v === 'number' ? v : parseFloat(String(v));
+        sanitizedQMarks[k] = isNaN(num) ? 0 : num;
+      }
     });
 
     const sanitizedSubMarks: { [k: string]: number } = {};
@@ -958,6 +1130,8 @@ export default function FacultyMarksPage() {
       const num = typeof v === 'number' ? v : parseFloat(String(v));
       sanitizedSubMarks[k] = isNaN(num) ? 0 : num;
     });
+
+    const skippedIds = Object.keys(skippedQuestionsMap).filter(k => skippedQuestionsMap[k]);
 
     const sanitizedPractical = typeof practicalSectionMark === 'number'
       ? practicalSectionMark
@@ -977,6 +1151,7 @@ export default function FacultyMarksPage() {
           marksObtained: evaluatedTotal,
           questionMarks: sanitizedQMarks,
           subPartMarks: sanitizedSubMarks,
+          skippedQuestionIds: skippedIds,
           practicalMark: hasPracticalSec ? sanitizedPractical : 0,
         }),
       });
@@ -985,21 +1160,15 @@ export default function FacultyMarksPage() {
     }
 
     const maxM = activePaper.max_marks || 100;
+    const computedScores = calculateStudentCompetencyScores(
+      activePaper,
+      sanitizedQMarks,
+      sanitizedSubMarks,
+      skippedIds
+    );
+
     setStudents(prev => prev.map(s => {
       if (s.id !== selectedStudent.id) return s;
-      const compScores: { [k: string]: { scored: number; max: number } } = {};
-      paperCompetencies.forEach(comp => {
-        const compQs = activePaper.sections?.flatMap(sec => sec.questions.filter(q => q.competencyCode === comp)) || [];
-        const compMax = compQs.reduce((a, q) => a + (q.customMarks || 2), 0);
-        const compScored = compQs.reduce((a, q) => {
-          if (q.subQuestions?.length) {
-            return a + q.subQuestions.reduce((sa, sq) => sa + (sanitizedSubMarks[sq.id] || 0), 0);
-          }
-          return a + (sanitizedQMarks[q.questionId] || 0);
-        }, 0);
-        compScores[comp] = { scored: compScored, max: compMax || 50 };
-      });
-
       return {
         ...s,
         evaluated: true,
@@ -1007,9 +1176,10 @@ export default function FacultyMarksPage() {
         max_marks: maxM,
         questionMarks: sanitizedQMarks,
         subPartMarks: sanitizedSubMarks,
+        skippedQuestionIds: skippedIds,
         practicalMark: hasPracticalSec ? sanitizedPractical : 0,
-        competencyScores: compScores,
-        is_pass: evaluatedTotal >= (maxM * 0.4)
+        competencyScores: computedScores,
+        is_pass: evaluatedTotal >= (activePaper.passing_marks || maxM * 0.4)
       };
     }));
 
@@ -1272,30 +1442,60 @@ export default function FacultyMarksPage() {
                         <div
                           key={st.id}
                           onClick={() => setSelectedStudentId(st.id)}
-                          className={`p-3.5 rounded-xl cursor-pointer transition-all duration-150 border flex items-center justify-between ${
+                          className={`p-3 rounded-xl cursor-pointer transition-all duration-150 border flex items-center justify-between gap-3 ${
                             isSel
                               ? 'bg-[#EEF2FF] border-2 border-[#5B4BFF] text-[#1B1E28] dark:text-white shadow-sm'
                               : 'bg-white dark:bg-slate-800/60 border-[#E7EAF3] dark:border-slate-800 hover:border-[#5B4BFF]/40 text-[#4E5969] dark:text-slate-300'
                           }`}
                         >
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <span className={`text-[11px] font-mono font-black ${isSel ? 'text-[#5B4BFF]' : 'text-[#7867FF]'}`}>
-                                {st.rollno}
+                          <div className="flex items-center gap-3 min-w-0">
+                            {/* Profile Photo */}
+                            <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700 flex-shrink-0 border border-slate-200 dark:border-slate-600 flex items-center justify-center">
+                              {st.photo_url ? (
+                                <img
+                                  src={st.photo_url}
+                                  alt={st.name}
+                                  className="w-full h-full object-cover"
+                                  onError={(e) => {
+                                    (e.target as HTMLElement).style.display = 'none';
+                                    const next = (e.target as HTMLElement).nextElementSibling as HTMLElement;
+                                    if (next) next.style.display = 'flex';
+                                  }}
+                                />
+                              ) : null}
+                              <span
+                                className="w-full h-full text-[11px] font-black text-slate-500 uppercase flex items-center justify-center"
+                                style={st.photo_url ? { display: 'none' } : undefined}
+                              >
+                                {st.name.slice(0, 2)}
                               </span>
-                              {st.evaluated ? (
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                                  ✓ Done
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-black bg-[#FFF8E6] text-[#FFB020] border border-[#FFB020]/30">
-                                  Pending
-                                </span>
-                              )}
                             </div>
-                            <h5 className="text-xs font-black text-[#1B1E28] dark:text-white mt-1">{st.name}</h5>
+
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`text-[11px] font-mono font-black ${isSel ? 'text-[#5B4BFF]' : 'text-slate-800 dark:text-slate-200'}`}>
+                                  {st.rollno}
+                                </span>
+                                {st.registration_no && st.registration_no !== st.rollno && (
+                                  <span className="text-[10px] font-mono text-slate-400">
+                                    ({st.registration_no})
+                                  </span>
+                                )}
+                                {st.evaluated ? (
+                                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
+                                    ✓ Done
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-[#FFF8E6] text-[#FFB020] border border-[#FFB020]/30">
+                                    Pending
+                                  </span>
+                                )}
+                              </div>
+                              <h5 className="text-xs font-black text-[#1B1E28] dark:text-white mt-0.5 truncate">{st.name}</h5>
+                            </div>
                           </div>
-                          <div className="text-right">
+
+                          <div className="text-right flex-shrink-0">
                             <span className={`text-xs font-black ${st.evaluated ? 'text-[#00C48C]' : 'text-[#7B8794]'}`}>
                               {st.marks_obtained.toFixed(1)} / {st.max_marks}
                             </span>
@@ -1313,15 +1513,43 @@ export default function FacultyMarksPage() {
                 {selectedStudent ? (
                   <div className="space-y-5">
                     {/* Student Evaluation Header Bar */}
-                    <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-4 flex-wrap gap-3">
-                      <div>
-                        <span className="text-[10px] font-black text-[#5B4BFF] uppercase tracking-widest">
-                          Evaluating Answer Sheet
-                        </span>
-                        <h3 className="text-lg font-black text-[#1B1E28] dark:text-white mt-0.5">{selectedStudent.name}</h3>
-                        <p className="text-xs text-[#4E5969] dark:text-slate-400 font-medium">
-                          Roll No: <strong className="font-mono text-[#5B4BFF]">{selectedStudent.rollno}</strong> • Paper: [{activePaper.code}] {activePaper.name}
-                        </p>
+                    <div className="flex items-center justify-between border-b border-[#E7EAF3] dark:border-slate-800 pb-4 flex-wrap gap-4">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        {/* Student Avatar */}
+                        <div className="w-12 h-12 rounded-full overflow-hidden bg-slate-100 dark:bg-slate-700 border-2 border-[#5B4BFF]/30 flex-shrink-0 flex items-center justify-center shadow-sm">
+                          {selectedStudent.photo_url ? (
+                            <img
+                              src={selectedStudent.photo_url}
+                              alt={selectedStudent.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                                const next = (e.target as HTMLElement).nextElementSibling as HTMLElement;
+                                if (next) next.style.display = 'flex';
+                              }}
+                            />
+                          ) : null}
+                          <span
+                            className="w-full h-full text-sm font-black text-slate-500 uppercase flex items-center justify-center"
+                            style={selectedStudent.photo_url ? { display: 'none' } : undefined}
+                          >
+                            {selectedStudent.name.slice(0, 2)}
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] font-black text-[#5B4BFF] uppercase tracking-widest block">
+                            Evaluating Answer Sheet
+                          </span>
+                          <h3 className="text-lg font-black text-[#1B1E28] dark:text-white mt-0.5">{selectedStudent.name}</h3>
+                          <div className="flex items-center gap-2 flex-wrap text-xs text-[#4E5969] dark:text-slate-400 font-medium">
+                            <span>AKTU Roll: <strong className="font-mono text-[#5B4BFF]">{selectedStudent.rollno}</strong></span>
+                            {selectedStudent.registration_no && (
+                              <span>• Reg No: <strong className="font-mono text-slate-700 dark:text-slate-300">{selectedStudent.registration_no}</strong></span>
+                            )}
+                            <span>• Paper: [{activePaper.code}] {activePaper.name}</span>
+                          </div>
+                        </div>
                       </div>
 
                       <div className="text-right bg-[#F8FAFC] dark:bg-slate-800 p-3.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
@@ -1442,119 +1670,179 @@ export default function FacultyMarksPage() {
                             <div className="space-y-3.5">
                               {sec.questions.length === 0 ? (
                                 <p className="text-xs text-[#4E5969] dark:text-slate-400 italic text-center py-3">No questions defined in this section</p>
-                              ) : sec.questions.map((q, qIdx) => (
-                                <div key={q.questionId} className="p-4 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-sm space-y-3">
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="space-y-1.5 flex-1">
-                                      {/* Top Row: Q Number, Topic, Competency */}
-                                      <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-mono font-black text-[#5B4BFF] text-xs">Q{qIdx + 1}.</span>
-                                        {q.competencyCode && (
-                                          <span className="px-2 py-0.5 rounded-full font-mono font-black text-[10px] bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                                            🎯 {q.competencyCode}
-                                          </span>
-                                        )}
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                                          q.mode === 'MCQ' ? 'bg-[#EEF2FF] text-[#5B4BFF]' : 'bg-[#FFF4EC] text-[#F36C21]'
-                                        }`}>
-                                          [{q.mode}]
-                                        </span>
-                                        {q.topic && (
-                                          <span className="text-[10px] font-bold text-[#4E5969] dark:text-slate-400">
-                                            📚 {q.topic}
-                                          </span>
-                                        )}
-                                      </div>
-
-                                      {/* Question Prompt / Name (Crucial Requirement) */}
-                                      <p className="font-bold text-xs sm:text-sm text-[#1B1E28] dark:text-white leading-relaxed">
-                                        {q.questionText}
-                                      </p>
-
-                                      {/* MCQ Choices Display (if available) */}
-                                      {q.mode === 'MCQ' && (q.optionA || q.optionB || q.optionC || q.optionD) && (
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 text-xs text-[#4E5969] dark:text-slate-300">
-                                          {q.optionA && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_a' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>A) {q.optionA}</div>}
-                                          {q.optionB && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_b' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>B) {q.optionB}</div>}
-                                          {q.optionC && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_c' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>C) {q.optionC}</div>}
-                                          {q.optionD && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_d' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>D) {q.optionD}</div>}
-                                        </div>
-                                      )}
+                              ) : (
+                                <div className="space-y-3.5">
+                                  {/* Fast Navigation Tip */}
+                                  <div className="px-3.5 py-2 rounded-xl bg-indigo-50/80 dark:bg-indigo-950/40 border border-indigo-200/60 dark:border-indigo-800/40 text-[11px] font-bold text-indigo-700 dark:text-indigo-300 flex items-center justify-between flex-wrap gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span>⌨️ <strong>Fast Evaluation:</strong> Type marks and press</span>
+                                      <kbd className="px-1.5 py-0.5 bg-white dark:bg-slate-800 rounded border border-indigo-200 dark:border-slate-700 font-mono font-black text-[#5B4BFF] shadow-xs text-[10px]">Enter ↵</kbd>
+                                      <span>to jump to the next input or save and advance.</span>
                                     </div>
-
-                                    {/* Direct Marks Input (for single prompt questions) */}
-                                    {(!q.subQuestions || q.subQuestions.length === 0) && (() => {
-                                      const qMax = q.customMarks || q.defaultMarks || 2;
-                                      const inputIdx = inputIndexMap[`q_${q.questionId}`] ?? 0;
-                                      const currentVal = questionMarksMap[q.questionId] !== undefined ? questionMarksMap[q.questionId] : 0;
-                                      return (
-                                        <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
-                                          <span className="text-[11px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
-                                          <input
-                                            ref={el => { inputRefs.current[inputIdx] = el; }}
-                                            type="number"
-                                            min={0}
-                                            max={qMax}
-                                            step={0.5}
-                                            value={currentVal}
-                                            placeholder="0"
-                                            onFocus={e => e.target.select()}
-                                            onChange={e => handleMarkChange(q.questionId, e.target.value, qMax, 'question')}
-                                            onBlur={() => handleMarkBlur(q.questionId, qMax, 'question')}
-                                            onKeyDown={e => handleKeyDown(e, inputIdx, q.questionId, qMax, 'question')}
-                                            className="w-16 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-[#5B4BFF]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] shadow-sm transition"
-                                          />
-                                          <span className="text-[11px] text-[#7B8794] font-bold">/ {qMax}</span>
-                                        </div>
-                                      );
-                                    })()}
+                                    <span className="text-[10px] text-indigo-500 font-medium">Use [Skip Question] for unattempted choices</span>
                                   </div>
 
-                                  {/* Sub-Questions / Sub-Parts Tree */}
-                                  {Array.isArray(q.subQuestions) && q.subQuestions.length > 0 && (
-                                    <div className="pl-4 space-y-2 border-l-2 border-[#5B4BFF]/40 pt-1.5">
-                                      {(() => {
-                                        const totalRaw = q.subQuestions.reduce((sum, s) => sum + Number(s.marks || 1), 0);
-                                        const qMax = Number(q.customMarks || q.defaultMarks || 3);
-                                        return q.subQuestions.map(sq => {
-                                          const sqMax = totalRaw > 0
-                                            ? Number(((Number(sq.marks || 1) / totalRaw) * qMax).toFixed(2))
-                                            : Number((qMax / (q.subQuestions?.length || 1)).toFixed(2));
-                                          const inputIdx = inputIndexMap[`sq_${sq.id}`] ?? 0;
-                                          const currentVal = subPartMarksMap[sq.id] !== undefined ? subPartMarksMap[sq.id] : 0;
-                                          
-                                          return (
-                                            <div key={sq.id} className="flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
-                                              <div className="flex items-center gap-2 flex-1">
-                                                <span className="font-mono font-black text-[#5B4BFF] text-xs shrink-0">{sq.label}</span>
-                                                <span className="text-xs font-bold text-[#1B1E28] dark:text-white">{sq.questionText}</span>
-                                              </div>
-                                              <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
-                                                <span className="text-[10px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
-                                                <input
-                                                  ref={el => { inputRefs.current[inputIdx] = el; }}
-                                                  type="number"
-                                                  min={0}
-                                                  max={sqMax}
-                                                  step={0.5}
-                                                  value={currentVal}
-                                                  placeholder="0"
-                                                  onFocus={e => e.target.select()}
-                                                  onChange={e => handleMarkChange(sq.id, e.target.value, sqMax, 'sub')}
-                                                  onBlur={() => handleMarkBlur(sq.id, sqMax, 'sub')}
-                                                  onKeyDown={e => handleKeyDown(e, inputIdx, sq.id, sqMax, 'sub')}
-                                                  className="w-16 px-2 py-1 rounded-xl bg-white dark:bg-slate-900 border-2 border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#00C48C] shadow-sm transition"
-                                                />
-                                                <span className="text-[10px] text-[#7B8794] font-bold">/ {sqMax}</span>
-                                              </div>
+                                  {sec.questions.map((q, qIdx) => {
+                                    const qId: string = q.questionId || (q as any).id || '';
+                                    const isSkipped = Boolean(skippedQuestionsMap[qId]);
+                                    const qMax = Number(q.customMarks || q.defaultMarks || 2);
+
+                                    return (
+                                      <div
+                                        key={qId}
+                                        className={`p-4 rounded-xl border shadow-sm transition space-y-3 ${
+                                          isSkipped
+                                            ? 'bg-slate-50/80 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 opacity-75'
+                                            : 'bg-white dark:bg-slate-900 border-[#E7EAF3] dark:border-slate-700'
+                                        }`}
+                                      >
+                                        <div className="flex items-start justify-between gap-3">
+                                          <div className="space-y-1.5 flex-1 min-w-0">
+                                            {/* Top Row: Q Number, Topic, Competency */}
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="font-mono font-black text-[#5B4BFF] text-xs">Q{qIdx + 1}.</span>
+                                              {q.competencyCode && (
+                                                <span className="px-2 py-0.5 rounded-full font-mono font-black text-[10px] bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
+                                                  🎯 {q.competencyCode}
+                                                </span>
+                                              )}
+                                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
+                                                q.mode === 'MCQ' ? 'bg-[#EEF2FF] text-[#5B4BFF]' : 'bg-[#FFF4EC] text-[#F36C21]'
+                                              }`}>
+                                                [{q.mode}]
+                                              </span>
+                                              {q.topic && (
+                                                <span className="text-[10px] font-bold text-[#4E5969] dark:text-slate-400">
+                                                  📚 {q.topic}
+                                                </span>
+                                              )}
                                             </div>
-                                          );
-                                        });
-                                      })()}
-                                    </div>
-                                  )}
+
+                                            {/* Question Prompt */}
+                                            <p className="font-bold text-xs sm:text-sm text-[#1B1E28] dark:text-white leading-relaxed">
+                                              {q.questionText}
+                                            </p>
+
+                                            {/* MCQ Choices Display (if available) */}
+                                            {q.mode === 'MCQ' && (q.optionA || q.optionB || q.optionC || q.optionD) && (
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 text-xs text-[#4E5969] dark:text-slate-300">
+                                                {q.optionA && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_a' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>A) {q.optionA}</div>}
+                                                {q.optionB && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_b' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>B) {q.optionB}</div>}
+                                                {q.optionC && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_c' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>C) {q.optionC}</div>}
+                                                {q.optionD && <div className={`p-2 rounded-lg border text-[11px] ${q.correctOption === 'option_d' ? 'bg-[#E6F9F3] border-[#00C48C]/40 text-[#00C48C] font-black' : 'bg-[#F8FAFC] dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700'}`}>D) {q.optionD}</div>}
+                                              </div>
+                                            )}
+                                          </div>
+
+                                          {/* Right Actions: Skip Button & Marks Input */}
+                                          <div className="flex items-center gap-2 shrink-0">
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleQuestionSkip(qId)}
+                                              className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition border flex items-center gap-1.5 ${
+                                                isSkipped
+                                                  ? 'bg-[#FEECEB] text-[#F04438] border-[#F04438]/40 hover:bg-[#FEECEB]/80'
+                                                  : 'bg-[#F8FAFC] dark:bg-slate-800 text-[#7B8794] border-[#E7EAF3] dark:border-slate-700 hover:text-[#F04438] hover:border-[#F04438]/40'
+                                              }`}
+                                              title={isSkipped ? 'Click to unskip and grade marks' : 'Mark as unattempted / skipped by student'}
+                                            >
+                                              <span>{isSkipped ? '⊘ Skipped (Unattempted)' : 'Skip Question'}</span>
+                                            </button>
+
+                                            {/* Single Question Marks Input (when not skipped) */}
+                                            {(!q.subQuestions || q.subQuestions.length === 0) && !isSkipped && (() => {
+                                              const inputIdx = inputIndexMap[`q_${qId}`] ?? 0;
+                                              const currentVal = questionMarksMap[qId] !== undefined ? questionMarksMap[qId] : 0;
+                                              return (
+                                                <div className="flex items-center gap-1.5 whitespace-nowrap">
+                                                  <span className="text-[11px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
+                                                  <input
+                                                    ref={el => { inputRefs.current[inputIdx] = el; }}
+                                                    type="number"
+                                                    min={0}
+                                                    max={qMax}
+                                                    step={0.5}
+                                                    value={currentVal}
+                                                    placeholder="0"
+                                                    onFocus={e => e.target.select()}
+                                                    onChange={e => handleMarkChange(qId, e.target.value, qMax, 'question')}
+                                                    onBlur={() => handleMarkBlur(qId, qMax, 'question')}
+                                                    onKeyDown={e => handleKeyDown(e, inputIdx, qId, qMax, 'question')}
+                                                    className="w-16 px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border-2 border-[#5B4BFF]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#5B4BFF] shadow-sm transition"
+                                                  />
+                                                  <span className="text-[11px] text-[#7B8794] font-bold">/ {qMax}</span>
+                                                </div>
+                                              );
+                                            })()}
+                                          </div>
+                                        </div>
+
+                                        {/* If Skipped: Banner */}
+                                        {isSkipped && (
+                                          <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/80 border border-dashed border-[#E7EAF3] dark:border-slate-700 flex items-center justify-between text-xs">
+                                            <span className="text-[#7B8794] font-bold">
+                                              ⊘ Student did not attempt this question (Optional Choice Skipped)
+                                            </span>
+                                            <button
+                                              type="button"
+                                              onClick={() => toggleQuestionSkip(qId)}
+                                              className="font-black text-[#5B4BFF] hover:underline text-[11px]"
+                                            >
+                                              Click to Enter Marks
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        {/* Sub-Questions / Sub-Parts Tree (if not skipped) */}
+                                        {!isSkipped && Array.isArray(q.subQuestions) && q.subQuestions.length > 0 && (
+                                          <div className="pl-4 space-y-2 border-l-2 border-[#5B4BFF]/40 pt-1.5">
+                                            {(() => {
+                                              const totalRaw = q.subQuestions.reduce((sum, s) => sum + Number(s.marks || 1), 0);
+                                              return q.subQuestions.map((sq, sqIdx) => {
+                                                const sqMax = totalRaw > 0
+                                                  ? Number(((Number(sq.marks || 1) / totalRaw) * qMax).toFixed(2))
+                                                  : Number((qMax / (q.subQuestions?.length || 1)).toFixed(2));
+                                                const compositeKey = `${qId}_${sq.id}`;
+                                                const inputIdx = inputIndexMap[`sq_${qId}_${sq.id}`] ?? 0;
+                                                const currentVal = subPartMarksMap[compositeKey] !== undefined
+                                                  ? subPartMarksMap[compositeKey]
+                                                  : 0;
+
+                                                return (
+                                                  <div key={sq.id || sqIdx} className="flex items-center justify-between p-3 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
+                                                    <div className="flex items-center gap-2 flex-1">
+                                                      <span className="font-mono font-black text-[#5B4BFF] text-xs shrink-0">{sq.label || `(${sqIdx + 1})`}</span>
+                                                      <span className="text-xs font-bold text-[#1B1E28] dark:text-white">{sq.questionText}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                                                      <span className="text-[10px] font-black text-[#4E5969] dark:text-slate-300">Marks:</span>
+                                                      <input
+                                                        ref={el => { inputRefs.current[inputIdx] = el; }}
+                                                        type="number"
+                                                        min={0}
+                                                        max={sqMax}
+                                                        step={0.5}
+                                                        value={currentVal}
+                                                        placeholder="0"
+                                                        onFocus={e => e.target.select()}
+                                                        onChange={e => handleMarkChange(compositeKey, e.target.value, sqMax, 'sub')}
+                                                        onBlur={() => handleMarkBlur(compositeKey, sqMax, 'sub')}
+                                                        onKeyDown={e => handleKeyDown(e, inputIdx, compositeKey, sqMax, 'sub')}
+                                                        className="w-16 px-2 py-1 rounded-xl bg-white dark:bg-slate-900 border-2 border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:ring-2 focus:ring-[#00C48C] shadow-sm transition"
+                                                      />
+                                                      <span className="text-[10px] text-[#7B8794] font-bold">/ {sqMax}</span>
+                                                    </div>
+                                                  </div>
+                                                );
+                                              });
+                                            })()}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
                                 </div>
-                              ))}
+                              )}
                             </div>
                           )}
                         </div>
@@ -1648,20 +1936,31 @@ export default function FacultyMarksPage() {
                           <td className="py-3.5 px-4 font-mono font-black text-[#00C48C]">{st.marks_obtained.toFixed(2)} / {st.max_marks}</td>
                           <td className="py-3.5 px-4 font-mono font-black text-[#F36C21]">{percentage.toFixed(1)}%</td>
                           {paperCompetencies.map(comp => {
-                            const computedScores = calculateStudentCompetencyScores(activePaper, st.questionMarks, st.subPartMarks);
-                            const compData = (computedScores[comp] && computedScores[comp].max > 0)
+                            const computedScores = calculateStudentCompetencyScores(
+                              activePaper,
+                              st.questionMarks,
+                              st.subPartMarks,
+                              st.skippedQuestionIds || []
+                            );
+                            const compData = (computedScores[comp] && (computedScores[comp].max > 0 || computedScores[comp].isSkipped))
                               ? computedScores[comp]
-                              : (st.competencyScores[comp] || { scored: 0, max: 0 });
+                              : (st.competencyScores[comp] || { scored: 0, max: 0, isSkipped: false });
 
-                            if (compData.max === 0) {
+                            if (compData.isSkipped || compData.max === 0) {
                               return (
                                 <td key={comp} className="py-3.5 px-4 text-center">
-                                  <span className="text-[#4E5969] dark:text-slate-500 font-mono text-[11px] font-bold">—</span>
+                                  <span
+                                    className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#F1F4F9] dark:bg-slate-800 text-[#7B8794] border border-[#E7EAF3] dark:border-slate-700 shadow-xs"
+                                    title="Question was unattempted / skipped (choice rule)"
+                                  >
+                                    Skipped (—)
+                                  </span>
                                 </td>
                               );
                             }
 
-                            const compPct = Math.min(100, Math.round((compData.scored / compData.max) * 100));
+                            const displayScored = Math.min(compData.max, compData.scored);
+                            const compPct = Math.min(100, Math.round((displayScored / compData.max) * 100));
                             const isGood = compPct >= 50;
 
                             return (
@@ -1671,7 +1970,7 @@ export default function FacultyMarksPage() {
                                     ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
                                     : 'bg-[#FFF8E6] text-[#FFB020] border-[#FFB020]/30'
                                 }`}>
-                                  {compData.scored}/{compData.max} = {compPct}%
+                                  {displayScored}/{compData.max} - {compPct}%
                                 </span>
                               </td>
                             );

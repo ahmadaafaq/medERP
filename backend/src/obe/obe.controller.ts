@@ -32,11 +32,12 @@ export class ObeController {
     @Query('batchYear') batchYear?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
+    @Query('section') section?: string,
   ) {
     return this.obeService.getTargets(tenant, {
       facultyId, subjectCode, semester,
       batchYear: batchYear ? Number(batchYear) : undefined,
-      courseCd, branchCd,
+      courseCd, branchCd, section,
     });
   }
 
@@ -61,6 +62,7 @@ export class ObeController {
     @Query('batchYear') batchYear?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
+    @Query('section') section?: string,
     @Query('markThresholdPct') markThresholdPct?: string,
   ) {
     return this.obeService.computeCoAttainment(tenant, {
@@ -69,6 +71,7 @@ export class ObeController {
       batch_year: batchYear ? Number(batchYear) : undefined,
       course_cd: courseCd,
       branch_cd: branchCd,
+      section,
       mark_threshold_pct: markThresholdPct ? Number(markThresholdPct) : undefined,
     });
   }
@@ -156,11 +159,12 @@ export class ObeController {
     @Query('batchYear') batchYear?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
+    @Query('section') section?: string,
   ) {
     return this.obeService.getFacultyDashboard(tenant, {
       facultyId, subjectCode, semester,
       batchYear: batchYear ? Number(batchYear) : undefined,
-      courseCd, branchCd,
+      courseCd, branchCd, section,
     });
   }
 
@@ -234,11 +238,12 @@ export class ObeController {
     @Query('batchYear') batchYear?: string,
     @Query('courseCd') courseCd?: string,
     @Query('branchCd') branchCd?: string,
+    @Query('section') section?: string,
   ) {
     return this.obeService.getCoAttainmentSheet(tenant, {
       subjectCode, semester,
       batchYear: batchYear ? Number(batchYear) : undefined,
-      courseCd, branchCd,
+      courseCd, branchCd, section,
     });
   }
 

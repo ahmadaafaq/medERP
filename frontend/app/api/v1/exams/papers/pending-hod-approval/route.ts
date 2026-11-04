@@ -15,12 +15,20 @@ function getTenantSlug(req: NextRequest): string {
 export async function GET(req: NextRequest) {
   const tenantSlug = getTenantSlug(req);
   const url = new URL(req.url);
-  const departmentId = url.searchParams.get('departmentId') || undefined;
+  const departmentId = url.searchParams.get('departmentId') || req.headers.get('x-department-id') || undefined;
+  const userId = url.searchParams.get('userId') || req.headers.get('x-user-id') || undefined;
+  const empId = url.searchParams.get('empId') || req.headers.get('x-emp-id') || undefined;
+  const courseCd = url.searchParams.get('courseCd') || undefined;
+  const role = url.searchParams.get('role') || 'HOD';
 
   try {
     const papers = await getExamPapersFromDb(tenantSlug, {
       status: 'PENDING_HOD_APPROVAL',
       departmentId,
+      userId,
+      empId,
+      courseCd,
+      role,
     });
     return NextResponse.json(papers);
   } catch (err: any) {

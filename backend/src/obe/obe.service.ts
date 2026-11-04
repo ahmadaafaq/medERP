@@ -36,6 +36,13 @@ export class ObeService {
           created_at TIMESTAMPTZ DEFAULT NOW(),
           updated_at TIMESTAMPTZ DEFAULT NOW()
         );
+
+        ALTER TABLE obe_targets ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE obe_targets ADD COLUMN IF NOT EXISTS subject_id VARCHAR(100);
+        ALTER TABLE co_attainment_results ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE po_attainment_results ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+        ALTER TABLE course_exit_surveys ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+
         CREATE UNIQUE INDEX IF NOT EXISTS uq_obe_targets
           ON obe_targets (faculty_id, subject_code, unit_code, COALESCE(semester,''), COALESCE(batch_year::text,''));
 
@@ -124,41 +131,133 @@ export class ObeService {
     return this.tenantSchemaService.resolveTenantSlug(tenantSlug || 'srms-cet-bareilly');
   }
 
+  normalizeSectionCode(val: any): string {
+    const v = String(val || '').trim().toLowerCase();
+    if (!v || v === 'all' || v === 'all sections') return 'all';
+    if (v === '1' || v === 'section a' || v === 'sec a' || v === 'a' || v === 'sec 1' || v === 'section 1') return '1';
+    if (v === '2' || v === 'section b' || v === 'sec b' || v === 'b' || v === 'sec 2' || v === 'section 2') return '2';
+    if (v === '3' || v === 'section c' || v === 'sec c' || v === 'c' || v === 'sec 3' || v === 'section 3') return '3';
+    if (v === '4' || v === 'section d' || v === 'sec d' || v === 'd' || v === 'sec 4' || v === 'section 4') return '4';
+    if (v === '5' || v === 'section e' || v === 'sec e' || v === 'e' || v === 'sec 5' || v === 'section 5') return '5';
+    const digitMatch = v.match(/\d+/);
+    if (digitMatch) return digitMatch[0];
+    return '1';
+  }
+
+
   // ─── 1. OBE TARGETS (Faculty Pre-Semester Declaration) ───────────────────────
 
   async saveTarget(dto: SaveObeTargetDto, tenantSlug?: string) {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
 
-    const isUUID = typeof dto.faculty_id === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(dto.faculty_id);
-    const facultyUuid = isUUID ? dto.faculty_id : null;
+    const rawFac = dto.faculty_id || dto.facultyId || null;
+    const isUUID = typeof rawFac === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawFac);
+    const facultyUuid = isUUID ? rawFac : null;
+    const subjectCode = dto.subject_code || dto.subjectCode || '';
+    const unitCode = dto.unit_code || dto.unitCode || 'CO1';
+    const semester = dto.semester != null ? String(dto.semester).trim() : null;
+    const rawBatchYear = dto.batch_year ?? dto.batchYear;
+    const batchYear = rawBatchYear != null && !isNaN(Number(rawBatchYear)) ? Number(rawBatchYear) : null;
+    const courseCd = dto.course_cd || dto.courseCd || null;
+    const branchCd = dto.branch_cd || dto.branchCd || null;
+    const rawSec = dto.section != null ? String(dto.section).trim() : null;
+    const section = rawSec && rawSec !== 'all' ? this.normalizeSectionCode(rawSec) : (rawSec === 'all' ? 'all' : null);
+    const targetLevel = Number(dto.target_level ?? 2);
+    const markThresholdPct = dto.mark_threshold_pct != null ? Number(dto.mark_threshold_pct) : 40;
+    const studentPassPctTarget = dto.student_pass_pct_target != null ? Number(dto.student_pass_pct_target) : 60;
+    const examType = dto.exam_type || 'COMBINED';
+    const correctiveAction = dto.corrective_action || null;
 
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM obe_targets
-       WHERE (faculty_id = $1 OR (faculty_id IS NULL AND $1 IS NULL)) AND subject_code = $2 AND unit_code = $3
-         AND COALESCE(semester,'') = COALESCE($4,'') AND COALESCE(batch_year::text,'') = COALESCE($5::text,'')
+       WHERE subject_code = $1 AND unit_code = $2
+         AND (COALESCE(semester,'') = COALESCE($3,'') OR semester IS NULL OR $3::text IS NULL)
+         AND (COALESCE(batch_year::text,'') = COALESCE($4::text,'') OR batch_year IS NULL OR $4::text IS NULL)
+         AND (course_cd = $5 OR course_cd IS NULL OR $5::text IS NULL)
+         AND (branch_cd = $6 OR branch_cd IS NULL OR $6::text IS NULL)
+         AND (
+           $7::text IS NULL
+           OR section = $7
+           OR section IS NULL
+           OR (section = 'Section A' AND $7 = '1')
+           OR (section = '1' AND $7 = 'Section A')
+         )
+         AND (faculty_id = $8 OR ($8::uuid IS NULL AND faculty_id IS NULL) OR faculty_id IS NULL)
+       ORDER BY
+         CASE WHEN faculty_id = $8 THEN 0 ELSE 1 END,
+         CASE WHEN section = $7 THEN 0 ELSE 1 END,
+         CASE WHEN course_cd = $5 THEN 0 ELSE 1 END,
+         updated_at DESC
        LIMIT 1`,
-      [facultyUuid, dto.subject_code, dto.unit_code, dto.semester || null, dto.batch_year || null],
+      [
+        subjectCode, unitCode, semester, batchYear ? String(batchYear) : null,
+        courseCd, branchCd, section, facultyUuid,
+      ],
     ).catch(() => []);
 
     if (existing?.length > 0) {
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
         `UPDATE obe_targets SET
-           exam_type = COALESCE($1, exam_type),
-           mark_threshold_pct = COALESCE($2, mark_threshold_pct),
-           student_pass_pct_target = COALESCE($3, student_pass_pct_target),
-           target_level = COALESCE($4, target_level),
-           corrective_action = COALESCE($5, corrective_action),
-           course_cd = COALESCE($6, course_cd),
-           branch_cd = COALESCE($7, branch_cd),
+           faculty_id = COALESCE($1, faculty_id),
+           exam_type = COALESCE($2, exam_type),
+           mark_threshold_pct = COALESCE($3, mark_threshold_pct),
+           student_pass_pct_target = COALESCE($4, student_pass_pct_target),
+           target_level = COALESCE($5, target_level),
+           corrective_action = COALESCE($6, corrective_action),
+           course_cd = COALESCE($7, course_cd),
+           branch_cd = COALESCE($8, branch_cd),
+           section = COALESCE($9, section),
+           semester = COALESCE($10, semester),
+           batch_year = COALESCE($11, batch_year),
            updated_at = NOW()
-         WHERE id = $8 RETURNING *`,
+         WHERE id = $12 RETURNING *`,
         [
-          dto.exam_type || null, dto.mark_threshold_pct || null, dto.student_pass_pct_target || null,
-          dto.target_level || null, dto.corrective_action || null,
-          dto.course_cd || null, dto.branch_cd || null, existing[0].id,
+          facultyUuid, examType, markThresholdPct,
+          studentPassPctTarget, targetLevel, correctiveAction,
+          courseCd, branchCd, section, semester, batchYear,
+          existing[0].id,
+        ],
+      );
+      return { success: true, data: rows[0], message: 'Target updated' };
+    }
+
+    // Safety fallback: Check if a record already matches the database unique index uq_obe_targets
+    const conflictCheck = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM obe_targets
+       WHERE (faculty_id = $1 OR (faculty_id IS NULL AND $1::uuid IS NULL))
+         AND subject_code = $2 AND unit_code = $3
+         AND COALESCE(semester,'') = COALESCE($4,'')
+         AND COALESCE(batch_year::text,'') = COALESCE($5::text,'')
+       LIMIT 1`,
+      [facultyUuid, subjectCode, unitCode, semester, batchYear ? String(batchYear) : null],
+    ).catch(() => []);
+
+    if (conflictCheck?.length > 0) {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE obe_targets SET
+           faculty_id = COALESCE($1, faculty_id),
+           exam_type = COALESCE($2, exam_type),
+           mark_threshold_pct = COALESCE($3, mark_threshold_pct),
+           student_pass_pct_target = COALESCE($4, student_pass_pct_target),
+           target_level = COALESCE($5, target_level),
+           corrective_action = COALESCE($6, corrective_action),
+           course_cd = COALESCE($7, course_cd),
+           branch_cd = COALESCE($8, branch_cd),
+           section = COALESCE($9, section),
+           semester = COALESCE($10, semester),
+           batch_year = COALESCE($11, batch_year),
+           updated_at = NOW()
+         WHERE id = $12 RETURNING *`,
+        [
+          facultyUuid, examType, markThresholdPct,
+          studentPassPctTarget, targetLevel, correctiveAction,
+          courseCd, branchCd, section, semester, batchYear,
+          conflictCheck[0].id,
         ],
       );
       return { success: true, data: rows[0], message: 'Target updated' };
@@ -167,14 +266,13 @@ export class ObeService {
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `INSERT INTO obe_targets
-         (faculty_id, subject_code, unit_code, semester, batch_year, course_cd, branch_cd,
+         (faculty_id, subject_code, unit_code, semester, batch_year, course_cd, branch_cd, section,
           exam_type, mark_threshold_pct, student_pass_pct_target, target_level)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
       [
-        facultyUuid, dto.subject_code, dto.unit_code,
-        dto.semester || null, dto.batch_year || null, dto.course_cd || null, dto.branch_cd || null,
-        dto.exam_type || 'COMBINED', dto.mark_threshold_pct ?? 40,
-        dto.student_pass_pct_target ?? 60, dto.target_level ?? 2,
+        facultyUuid, subjectCode, unitCode,
+        semester, batchYear, courseCd, branchCd, section,
+        examType, markThresholdPct, studentPassPctTarget, targetLevel,
       ],
     );
     return { success: true, data: rows[0], message: 'Target saved' };
@@ -182,7 +280,7 @@ export class ObeService {
 
   async getTargets(tenantSlug?: string, params?: {
     facultyId?: string; subjectCode?: string; semester?: string;
-    batchYear?: number; courseCd?: string; branchCd?: string;
+    batchYear?: number; courseCd?: string; branchCd?: string; section?: string;
   }) {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
@@ -194,6 +292,11 @@ export class ObeService {
     if (params?.batchYear) { p.push(params.batchYear); q += ` AND batch_year = $${p.length}`; }
     if (params?.courseCd) { p.push(params.courseCd); q += ` AND course_cd = $${p.length}`; }
     if (params?.branchCd) { p.push(params.branchCd); q += ` AND branch_cd = $${p.length}`; }
+    if (params?.section && params.section !== 'all') {
+      const normSec = this.normalizeSectionCode(params.section);
+      p.push(normSec);
+      q += ` AND (section = $${p.length} OR (section = 'Section A' AND $${p.length} = '1') OR (section = '1' AND $${p.length} = 'Section A') OR section IS NULL OR section = '')`;
+    }
     q += ` ORDER BY subject_code, unit_code`;
     const rows = await this.tenantSchemaService.queryInTenant(slug, q, p).catch(() => []);
     return { success: true, data: rows };
@@ -636,7 +739,7 @@ export class ObeService {
   // ─── 5. FACULTY DASHBOARD ────────────────────────────────────────────────────
 
   async getFacultyDashboard(tenantSlug: string, params: {
-    facultyId?: string; subjectCode?: string; semester?: string; batchYear?: number; courseCd?: string; branchCd?: string;
+    facultyId?: string; subjectCode?: string; semester?: string; batchYear?: number; courseCd?: string; branchCd?: string; section?: string;
   }) {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
@@ -668,6 +771,11 @@ export class ObeService {
       targetsP.push(params.batchYear);
       targetsQ += ` AND (batch_year = $${targetsP.length} OR batch_year IS NULL)`;
     }
+    if (params.section && params.section !== 'all') {
+      const normSec = this.normalizeSectionCode(params.section);
+      targetsP.push(normSec);
+      targetsQ += ` AND (section = $${targetsP.length} OR (section = 'Section A' AND $${targetsP.length} = '1') OR (section = '1' AND $${targetsP.length} = 'Section A') OR section IS NULL OR section = '')`;
+    }
     targetsQ += ` ORDER BY subject_code, unit_code`;
     const targets = await this.tenantSchemaService.queryInTenant(slug, targetsQ, targetsP).catch(() => []);
 
@@ -679,6 +787,11 @@ export class ObeService {
     if (params.batchYear) { attP.push(params.batchYear); attQ += ` AND (batch_year = $${attP.length} OR batch_year IS NULL)`; }
     if (params.courseCd) { attP.push(params.courseCd); attQ += ` AND (course_cd = $${attP.length} OR course_cd IS NULL)`; }
     if (params.branchCd) { attP.push(params.branchCd); attQ += ` AND (branch_cd = $${attP.length} OR branch_cd IS NULL)`; }
+    if (params.section && params.section !== 'all') {
+      const normSec = this.normalizeSectionCode(params.section);
+      attP.push(normSec);
+      attQ += ` AND (section = $${attP.length} OR (section = 'Section A' AND $${attP.length} = '1') OR (section = '1' AND $${attP.length} = 'Section A') OR section IS NULL OR section = '')`;
+    }
     attQ += ` ORDER BY computed_at DESC`;
     const attainments = await this.tenantSchemaService.queryInTenant(slug, attQ, attP).catch(() => []);
 
@@ -920,7 +1033,7 @@ export class ObeService {
   // ─── 8. REPORT: CO ATTAINMENT SHEET ─────────────────────────────────────────
 
   async getCoAttainmentSheet(tenantSlug: string, params: {
-    semester?: string; batchYear?: number; courseCd?: string; branchCd?: string; subjectCode?: string;
+    semester?: string; batchYear?: number; courseCd?: string; branchCd?: string; subjectCode?: string; section?: string;
   }) {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
@@ -940,6 +1053,11 @@ export class ObeService {
     if (params.batchYear) { p.push(params.batchYear); q += ` AND ca.batch_year = $${p.length}`; }
     if (params.courseCd) { p.push(params.courseCd); q += ` AND ca.course_cd = $${p.length}`; }
     if (params.branchCd) { p.push(params.branchCd); q += ` AND ca.branch_cd = $${p.length}`; }
+    if (params.section && params.section !== 'all') {
+      const normSec = this.normalizeSectionCode(params.section);
+      p.push(normSec);
+      q += ` AND (ca.section = $${p.length} OR (ca.section = 'Section A' AND $${p.length} = '1') OR (ca.section = '1' AND $${p.length} = 'Section A') OR ca.section IS NULL OR ca.section = '')`;
+    }
     q += ` ORDER BY ca.subject_code, ca.unit_code`;
     const rows = await this.tenantSchemaService.queryInTenant(slug, q, p).catch(() => []);
     return { success: true, data: rows };

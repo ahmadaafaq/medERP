@@ -4,8 +4,19 @@
   "description": "Shared TypeScript types and interfaces for MedERP",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./*": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    }
+  },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc -p tsconfig.build.json",
+    "test": "node test/run-tests.js"
   },
   "devDependencies": {
     "typescript": "^5.5.3"

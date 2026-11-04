@@ -589,6 +589,40 @@ export interface FacultySubjectLink {
 }
 
 /**
+ * Standard Academic Section Normalizer across UniCampus ERP.
+ * Converts 'Section A', 'sec a', 'A', '1' -> '1'
+ * Converts 'Section B', 'sec b', 'B', '2' -> '2'
+ * Converts 'Section C', 'sec c', 'C', '3' -> '3'
+ * Converts 'Section D', 'sec d', 'D', '4' -> '4'
+ */
+export function normalizeSection(val: any): string {
+  const v = String(val || '').trim().toLowerCase();
+  if (!v || v === 'all' || v === 'all sections') return 'all';
+  if (v === '1' || v === 'section a' || v === 'sec a' || v === 'a' || v === 'sec 1' || v === 'section 1') return '1';
+  if (v === '2' || v === 'section b' || v === 'sec b' || v === 'b' || v === 'sec 2' || v === 'section 2') return '2';
+  if (v === '3' || v === 'section c' || v === 'sec c' || v === 'c' || v === 'sec 3' || v === 'section 3') return '3';
+  if (v === '4' || v === 'section d' || v === 'sec d' || v === 'd' || v === 'sec 4' || v === 'section 4') return '4';
+  if (v === '5' || v === 'section e' || v === 'sec e' || v === 'e' || v === 'sec 5' || v === 'section 5') return '5';
+  const digitMatch = v.match(/\d+/);
+  if (digitMatch) return digitMatch[0];
+  return '1';
+}
+
+/**
+ * Clean Section Formatter. Prevents double-prefixes (never produces 'Section Section A').
+ */
+export function formatSectionLabel(sec: string): string {
+  const code = normalizeSection(sec);
+  if (code === '1') return 'Section A (1)';
+  if (code === '2') return 'Section B (2)';
+  if (code === '3') return 'Section C (3)';
+  if (code === '4') return 'Section D (4)';
+  if (code === '5') return 'Section E (5)';
+  const clean = String(sec).replace(/^section\s+/i, '').replace(/^sec\s+/i, '').trim();
+  return `Section ${clean}`;
+}
+
+/**
  * Fetch linked subjects for a faculty member.
  */
 export async function fetchFacultyLinkedSubjects(
@@ -627,7 +661,12 @@ export async function fetchFacultyLinkedSubjects(
       if (res?.ok) {
         const json = await res.json();
         const list = Array.isArray(json) ? json : (json.data || []);
-        if (list.length > 0) return list;
+        if (list.length > 0) {
+          return list.map((l: any) => ({
+            ...l,
+            section: normalizeSection(l.section || '1'),
+          }));
+        }
       }
     } catch (err) {
       console.warn('[useTenantAcademicData] fetchFacultyLinkedSubjects query error:', err);
@@ -659,7 +698,12 @@ export async function fetchFacultyLinkedSubjects(
 
           return false;
         });
-        if (matched.length > 0) return matched;
+        if (matched.length > 0) {
+          return matched.map((l: any) => ({
+            ...l,
+            section: normalizeSection(l.section || '1'),
+          }));
+        }
       }
     }
   } catch (err) {
@@ -678,7 +722,7 @@ export async function fetchFacultyLinkedSubjects(
       branch_cd: s.branch_cd,
       batch_cd: s.batch_cd,
       sem_cd: s.sem_cd,
-      section: s.section,
+      section: normalizeSection(s.section || '1'),
     }));
   }
 

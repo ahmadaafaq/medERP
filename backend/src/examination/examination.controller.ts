@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Put, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Put, Patch, Delete, Body, Param, Query, Headers, Req, UseGuards } from '@nestjs/common';
 import { ExaminationService } from './examination.service';
 import {
   CreateExamPaperDto, SubmitResultDto, CreateQuestionDto, PublishPaperDto,
   HodApproveQPDto, HodApproveTimetableDto, CreateTimetableDraftDto,
+  CalculatePaperScoreDto, AutoGenerateBlueprintDto, UpdateAssessmentSettingsDto, ValidatePaperDto,
 } from './dto/examination.dto';
 import { JwtAuthGuard } from '../common/guards/jwt-auth.guard';
 import { Tenant } from '../common/decorators/tenant.decorator';
@@ -12,7 +13,7 @@ import { Public } from '../common/decorators/public.decorator';
 @Controller('exams')
 @UseGuards(JwtAuthGuard)
 export class ExaminationController {
-  constructor(private readonly examinationService: ExaminationService) {}
+  constructor(private readonly examinationService: ExaminationService) { }
 
   // ─── Question Paper CRUD ─────────────────────────────────────────────────
 
@@ -50,6 +51,58 @@ export class ExaminationController {
     );
   }
 
+  // ─── Assessment Settings, Validation & Pure Scoring Endpoints ───────────
+
+  @Public()
+  @Post('papers/validate')
+  async validatePaper(@Body() dto: ValidatePaperDto) {
+    return this.examinationService.validatePaper(dto.paperSnapshot);
+  }
+
+  @Public()
+  @Post('score/calculate')
+  async calculateScore(
+    @Tenant() tenantSlug: string,
+    @Body() dto: CalculatePaperScoreDto,
+  ) {
+    return this.examinationService.calculateScore(tenantSlug, dto);
+  }
+
+  @Public()
+  @Post('blueprint/generate')
+  async autoGenerateBlueprint(
+    @Tenant() tenantSlug: string,
+    @Body() dto: AutoGenerateBlueprintDto,
+  ) {
+    return this.examinationService.autoGenerateBlueprint(tenantSlug, dto);
+  }
+
+  @Public()
+  @Get('settings')
+  async getAssessmentSettings(@Tenant() tenantSlug: string) {
+    return this.examinationService.getAssessmentSettings(tenantSlug);
+  }
+
+  @Public()
+  @Patch('settings')
+  async updateAssessmentSettings(
+    @Tenant() tenantSlug: string,
+    @Body() dto: UpdateAssessmentSettingsDto,
+  ) {
+    return this.examinationService.updateAssessmentSettings(tenantSlug, dto);
+  }
+
+  @Public()
+  @Post('papers/:id/duplicate')
+  async duplicatePaper(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @CurrentUser() user: any,
+    @Body() body?: { targetSet?: string; asTemplate?: boolean },
+  ) {
+    return this.examinationService.duplicatePaper(tenantSlug, id, user, body);
+  }
+
   // ─── HOD Approval — Question Papers ─────────────────────────────────────
 
   /** Clerk: Submit question paper for HOD approval */
@@ -58,9 +111,38 @@ export class ExaminationController {
   async submitQPForApproval(
     @Tenant() tenantSlug: string,
     @CurrentUser() user: any,
-    @Body() body: { paperId: string; notes?: string },
+    @Body() body: { paperId?: string; id?: string; notes?: string },
   ) {
-    return this.examinationService.submitQPForApproval(tenantSlug, user, body.paperId, body.notes);
+    const id = String(body.paperId || body.id || '');
+    return this.examinationService.submitQPForApproval(tenantSlug, user, id, body.notes);
+  }
+
+  /** Faculty: Submit question paper for DQAC Quality Audit */
+  @Public()
+  @Post('papers/submit-for-dqac')
+  async submitQPForDqac(
+    @Tenant() tenantSlug: string,
+    @CurrentUser() user: any,
+    @Body() body: { paperId?: string; id?: string; notes?: string },
+  ) {
+    const id = String(body.paperId || body.id || '');
+    return this.examinationService.submitQPForDqac(tenantSlug, user, id, body.notes);
+  }
+
+  private extractUserFromReq(req: any, fallbackUser?: any): any {
+    if (fallbackUser && (fallbackUser.sub || fallbackUser.id)) return fallbackUser;
+    const authHeader = req?.headers?.authorization || req?.headers?.Authorization;
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+      try {
+        const token = authHeader.split(' ')[1];
+        const payloadBase64 = token?.split('.')[1];
+        if (payloadBase64) {
+          const parsed = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf8'));
+          return parsed;
+        }
+      } catch { }
+    }
+    return fallbackUser || null;
   }
 
   /** HOD: Get pending question papers awaiting approval */
@@ -70,8 +152,25 @@ export class ExaminationController {
     @Tenant() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
     @Query('status') statusFilter?: string,
+    @Query('userId') queryUserId?: string,
+    @Query('empId') queryEmpId?: string,
+    @Query('courseCd') queryCourseCd?: string,
+    @CurrentUser() user?: any,
+    @Headers('x-user-id') headerUserId?: string,
+    @Headers('x-emp-id') headerEmpId?: string,
+    @Headers('x-department-id') headerDeptId?: string,
+    @Req() req?: any,
   ) {
-    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter);
+    const activeUser = this.extractUserFromReq(req, user);
+    const effectiveDeptId = (departmentId || headerDeptId || '').trim() || undefined;
+    const effectiveUserId = (queryUserId || headerUserId || activeUser?.sub || activeUser?.id || activeUser?.userId || '').trim() || undefined;
+    const effectiveEmpId = (queryEmpId || headerEmpId || activeUser?.emp_id || activeUser?.empId || '').trim() || undefined;
+    return this.examinationService.getPendingQPForHod(tenantSlug, effectiveDeptId, statusFilter, {
+      userId: effectiveUserId,
+      empId: effectiveEmpId,
+      courseCd: queryCourseCd,
+      user: activeUser,
+    });
   }
 
   /** HOD: Approve or reject a question paper */
@@ -93,7 +192,7 @@ export class ExaminationController {
     @Query('departmentId') departmentId?: string,
     @Query('status') statusFilter?: string,
   ) {
-    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter);
+    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter || 'PENDING_DQAC_APPROVAL');
   }
 
   /** DQAC: Quality audit action on question paper */
@@ -124,8 +223,23 @@ export class ExaminationController {
   async getApprovedPapers(
     @Tenant() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
+    @Query('userId') queryUserId?: string,
+    @Query('empId') queryEmpId?: string,
+    @Query('courseCd') queryCourseCd?: string,
+    @CurrentUser() user?: any,
+    @Headers('x-user-id') headerUserId?: string,
+    @Headers('x-emp-id') headerEmpId?: string,
+    @Headers('x-department-id') headerDeptId?: string,
   ) {
-    return this.examinationService.getApprovedPapers(tenantSlug, departmentId);
+    const effectiveDeptId = departmentId || headerDeptId;
+    const effectiveUserId = queryUserId || headerUserId || user?.sub || user?.id || user?.userId;
+    const effectiveEmpId = queryEmpId || headerEmpId || user?.emp_id || user?.empId;
+    return this.examinationService.getApprovedPapers(tenantSlug, effectiveDeptId, {
+      userId: effectiveUserId,
+      empId: effectiveEmpId,
+      courseCd: queryCourseCd,
+      user,
+    });
   }
 
   @Public()
@@ -189,8 +303,25 @@ export class ExaminationController {
   async getPendingTimetableForHod(
     @Tenant() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
+    @Query('userId') queryUserId?: string,
+    @Query('empId') queryEmpId?: string,
+    @Query('courseCd') queryCourseCd?: string,
+    @CurrentUser() user?: any,
+    @Headers('x-user-id') headerUserId?: string,
+    @Headers('x-emp-id') headerEmpId?: string,
+    @Headers('x-department-id') headerDeptId?: string,
+    @Req() req?: any,
   ) {
-    return this.examinationService.getPendingTimetableForHod(tenantSlug, departmentId);
+    const activeUser = this.extractUserFromReq(req, user);
+    const effectiveDeptId = (departmentId || headerDeptId || '').trim() || undefined;
+    const effectiveUserId = (queryUserId || headerUserId || activeUser?.sub || activeUser?.id || activeUser?.userId || '').trim() || undefined;
+    const effectiveEmpId = (queryEmpId || headerEmpId || activeUser?.emp_id || activeUser?.empId || '').trim() || undefined;
+    return this.examinationService.getPendingTimetableForHod(tenantSlug, effectiveDeptId, {
+      userId: effectiveUserId,
+      empId: effectiveEmpId,
+      courseCd: queryCourseCd,
+      user: activeUser,
+    });
   }
 
   /** HOD: Approve or reject a timetable draft */
@@ -361,12 +492,37 @@ export class ExaminationController {
     @Query('batchCd') batchCd?: string,
     @Query('semester') semester?: string,
     @Query('section') section?: string,
+    @Query('includeInactive') includeInactive?: string,
+    @Query('status') status?: string,
   ) {
     return this.examinationService.getQuestions(tenantSlug, {
       departmentId, subjectId, mode, professionalPhase, topicId, topic, competencyId, competencyCode,
       unitId, unitCode,
       colgCd, courseCd, branchCd, batchCd, semester, section,
+      includeInactive, status,
     });
+  }
+
+  @Public()
+  @Put('question-bank/:id')
+  async updateQuestion(
+    @Tenant() tenantSlug: string,
+    @Param('id') id: string,
+    @Body() dto: any,
+  ) {
+    return this.examinationService.updateQuestion(tenantSlug, id, dto);
+  }
+
+  @Public()
+  @Post('question-bank/resume-all')
+  async resumeAllQuestions(@Tenant() tenantSlug: string) {
+    return this.examinationService.resumeAllQuestions(tenantSlug);
+  }
+
+  @Public()
+  @Post('question-bank/:id/resume')
+  async resumeQuestion(@Tenant() tenantSlug: string, @Param('id') id: string) {
+    return this.examinationService.resumeQuestion(tenantSlug, id);
   }
 
   @Public()

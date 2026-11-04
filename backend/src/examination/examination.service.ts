@@ -1,6 +1,18 @@
 import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
 import { TenantSchemaService } from '../database/tenant-schema.service';
 import { CreateExamPaperDto, SubmitResultDto } from './dto/examination.dto';
+import {
+  computePaperScore,
+  computeEffectiveMax,
+  validatePaperSnapshot,
+  generateQuestionsFromBlueprint,
+  PaperSnapshot,
+  StudentAttempt,
+  QuestionDefinition,
+  OverAttemptPolicy,
+  MarksMode,
+  DEFAULT_SCORING_SETTINGS,
+} from '@mederp/shared';
 
 @Injectable()
 export class ExaminationService {
@@ -31,6 +43,21 @@ export class ExaminationService {
         );
         if (foundDept && foundDept.length > 0) {
           validDeptId = foundDept[0].id;
+        }
+      } catch {}
+    }
+
+    // FIX: If department_id is still not resolved, fall back to the creating faculty's department_id.
+    // This ensures papers are always tagged to the correct department even if the frontend omits it.
+    if (!validDeptId && validUserId) {
+      try {
+        const facRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT department_id FROM faculty WHERE user_id::text = $1::text AND department_id IS NOT NULL LIMIT 1`,
+          [validUserId],
+        );
+        if (facRows && facRows.length > 0 && facRows[0].department_id) {
+          validDeptId = facRows[0].department_id;
         }
       } catch {}
     }
@@ -68,11 +95,25 @@ export class ExaminationService {
     }
 
     try {
+      // Validate paper structure & choice groups using shared engine
+      if (dto.sections && Array.isArray(dto.sections)) {
+        const validation = this.validatePaper({ ...dto, sections: dto.sections });
+        if (!validation.isValid) {
+          throw new BadRequestException(`Paper validation failed: ${validation.errors.join('; ')}`);
+        }
+        if (validation.effectiveMaxMarks > 0) {
+          dto.maxMarks = validation.effectiveMaxMarks;
+          if (!dto.passingMarks || dto.passingMarks === 0) {
+            dto.passingMarks = Math.round(validation.effectiveMaxMarks * 0.4);
+          }
+        }
+      }
+
       const validId = dto.id && this.isUUID(dto.id) ? dto.id : null;
       const existing = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, status, version, created_by FROM examination_papers WHERE ($1::uuid IS NOT NULL AND id = $1::uuid) OR code = $2 LIMIT 1`,
-        [validId, dto.code],
+        `SELECT id, status, version, created_by FROM examination_papers WHERE ($1::uuid IS NOT NULL AND id = $1::uuid) OR ($2::text IS NOT NULL AND code = $2) LIMIT 1`,
+        [validId, dto.code || null],
       );
 
       if (existing && existing.length > 0) {
@@ -93,6 +134,10 @@ export class ExaminationService {
         let nextVersion = dto.version ? Number(dto.version) : currentVersion;
         if (prevStatus === 'CHANGES_REQUESTED' && dto.status === 'PENDING_HOD_APPROVAL') {
           nextVersion = currentVersion + 1;
+        } else if ((prevStatus === 'PUBLISHED' || prevStatus === 'APPROVED') && dto.status !== 'ARCHIVED') {
+          // Published papers are immutable; edits create a new version with status DRAFT
+          nextVersion = currentVersion + 1;
+          nextStatus = 'DRAFT';
         }
 
         const paperSet = dto.paperSet || dto.paper_set || 'Set A';
@@ -102,27 +147,44 @@ export class ExaminationService {
         const res = await this.tenantSchemaService.queryInTenant(
           slug,
           `UPDATE examination_papers 
-           SET code = $1, name = $2, subject_id = $3, batch_id = $4, exam_date = $5, 
-               max_marks = $6, passing_marks = $7, type = $8, duration_minutes = $9, 
-               sections = $10::jsonb, status = $11, department_id = $12, colg_cd = $13,
-               course_cd = $14, branch_cd = $15, batch_cd = $16, semester = $17, section = $18,
-               academic_year = $19, version = $20, hod_remarks = COALESCE($21, hod_remarks),
+           SET code = COALESCE($1, code), 
+               name = COALESCE($2, name), 
+               subject_id = COALESCE($3, subject_id), 
+               batch_id = COALESCE($4, batch_id), 
+               exam_date = COALESCE($5, exam_date), 
+               max_marks = COALESCE($6, max_marks), 
+               passing_marks = COALESCE($7, passing_marks), 
+               type = COALESCE($8, type), 
+               duration_minutes = COALESCE($9, duration_minutes), 
+               sections = COALESCE($10::jsonb, sections), 
+               status = $11, 
+               department_id = COALESCE($12, department_id), 
+               colg_cd = COALESCE($13, colg_cd),
+               course_cd = COALESCE($14, course_cd), 
+               branch_cd = COALESCE($15, branch_cd), 
+               batch_cd = COALESCE($16, batch_cd), 
+               semester = COALESCE($17, semester), 
+               section = COALESCE($18, section),
+               academic_year = COALESCE($19, academic_year), 
+               version = $20, 
+               hod_remarks = COALESCE($21, hod_remarks),
                question_remarks = COALESCE($22::jsonb, question_remarks), 
                paper_set = COALESCE($23, paper_set),
                target_sections = COALESCE($24::jsonb, target_sections),
-               created_by = COALESCE($25::uuid, created_by), updated_at = NOW()
+               created_by = COALESCE($25::uuid, created_by), 
+               updated_at = NOW()
            WHERE id = $26 RETURNING *`,
           [
-            dto.code,
-            dto.name,
+            dto.code || null,
+            dto.name || null,
             validSubjId,
             validBatchId,
             dto.examDate || null,
-            Number(dto.maxMarks) || 0,
-            Number(dto.passingMarks) || 0,
-            dto.type || 'THEORY',
-            Number(dto.durationMinutes) || 60,
-            sectionsJson,
+            dto.maxMarks !== undefined ? Number(dto.maxMarks) : null,
+            dto.passingMarks !== undefined ? Number(dto.passingMarks) : null,
+            dto.type || null,
+            dto.durationMinutes !== undefined ? Number(dto.durationMinutes) : null,
+            (sectionsJson && sectionsJson !== "[]" && sectionsJson !== "{}") ? sectionsJson : (dto.sections ? JSON.stringify(dto.sections) : null),
             nextStatus,
             validDeptId,
             finalColgCd,
@@ -144,6 +206,9 @@ export class ExaminationService {
         return res[0];
       }
 
+      if (!dto.code || !dto.name) {
+        throw new BadRequestException("Paper code and name are required to create a new paper.");
+      }
       const initialStatus = dto.status || 'DRAFT';
       const initialVersion = dto.version ? Number(dto.version) : 1;
       const qRemarksJson = JSON.stringify(dto.questionRemarks || {});
@@ -233,6 +298,241 @@ export class ExaminationService {
       this.logger.error(`createPaper error: ${error.message}`, error.stack);
       throw error;
     }
+  }
+
+  // ─── Assessment Settings & Pure Scoring Extensions ─────────────────────────
+
+  /**
+   * Reads tenant assessment settings (or defaults)
+   */
+  async getAssessmentSettings(tenantSlug: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    try {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT settings FROM tenants WHERE slug = $1 LIMIT 1`,
+        [slug],
+      ).catch(() => []);
+
+      const raw = rows && rows[0]?.settings ? rows[0].settings : {};
+      const assessmentSettings = raw.assessment || {};
+
+      return {
+        defaultOverAttemptPolicy: assessmentSettings.defaultOverAttemptPolicy || DEFAULT_SCORING_SETTINGS.defaultOverAttemptPolicy,
+        defaultMarksMode: assessmentSettings.defaultMarksMode || DEFAULT_SCORING_SETTINGS.defaultMarksMode,
+        allowPartialCredit: assessmentSettings.allowPartialCredit !== undefined ? Boolean(assessmentSettings.allowPartialCredit) : DEFAULT_SCORING_SETTINGS.allowPartialCredit,
+        enforceUniformChoiceMarks: assessmentSettings.enforceUniformChoiceMarks !== undefined ? Boolean(assessmentSettings.enforceUniformChoiceMarks) : DEFAULT_SCORING_SETTINGS.enforceUniformChoiceMarks,
+      };
+    } catch {
+      return DEFAULT_SCORING_SETTINGS;
+    }
+  }
+
+  /**
+   * Updates tenant assessment settings
+   */
+  async updateAssessmentSettings(tenantSlug: string, dto: any) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    try {
+      const rows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, settings FROM tenants WHERE slug = $1 LIMIT 1`,
+        [slug],
+      ).catch(() => []);
+
+      if (rows && rows.length > 0) {
+        const id = rows[0].id;
+        const current = rows[0].settings || {};
+        const updated = {
+          ...current,
+          assessment: {
+            ...(current.assessment || {}),
+            ...dto,
+          },
+        };
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `UPDATE tenants SET settings = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+          [JSON.stringify(updated), id],
+        );
+      }
+      return await this.getAssessmentSettings(tenantSlug);
+    } catch (e: any) {
+      this.logger.error(`updateAssessmentSettings error: ${e.message}`);
+      return DEFAULT_SCORING_SETTINGS;
+    }
+  }
+
+  /**
+   * Validates paper structure and calculates effective max marks
+   */
+  validatePaper(paperSnapshot: any) {
+    const questionsMap: Record<string, QuestionDefinition> = {};
+    if (paperSnapshot.questions) {
+      if (Array.isArray(paperSnapshot.questions)) {
+        paperSnapshot.questions.forEach((q: any) => { questionsMap[q.id] = q; });
+      } else {
+        Object.assign(questionsMap, paperSnapshot.questions);
+      }
+    }
+
+    const normalizedSnapshot: PaperSnapshot = {
+      ...paperSnapshot,
+      questions: questionsMap,
+      sections: Array.isArray(paperSnapshot.sections) ? paperSnapshot.sections : [],
+      effectiveMaxMarks: 0,
+    };
+
+    const val = validatePaperSnapshot(normalizedSnapshot);
+    const eff = computeEffectiveMax(normalizedSnapshot);
+
+    return {
+      isValid: val.isValid,
+      errors: val.errors,
+      warnings: [...val.warnings, ...eff.warnings],
+      effectiveMaxMarks: eff.effectiveMax,
+    };
+  }
+
+  /**
+   * Authoritative scoring endpoint using pure shared scoring engine
+   */
+  async calculateScore(tenantSlug: string, dto: { paperSnapshot: any; studentAttempt: any; settings?: any }) {
+    const tenantSettings = await this.getAssessmentSettings(tenantSlug);
+    const mergedSettings = { ...tenantSettings, ...(dto.settings || {}) };
+
+    const questionsMap: Record<string, QuestionDefinition> = {};
+    if (dto.paperSnapshot.questions) {
+      if (Array.isArray(dto.paperSnapshot.questions)) {
+        dto.paperSnapshot.questions.forEach((q: any) => { questionsMap[q.id] = q; });
+      } else {
+        Object.assign(questionsMap, dto.paperSnapshot.questions);
+      }
+    }
+
+    const normalizedSnapshot: PaperSnapshot = {
+      ...dto.paperSnapshot,
+      questions: questionsMap,
+      sections: Array.isArray(dto.paperSnapshot.sections) ? dto.paperSnapshot.sections : [],
+      effectiveMaxMarks: Number(dto.paperSnapshot.max_marks || dto.paperSnapshot.maxMarks || 0),
+    };
+
+    return computePaperScore(normalizedSnapshot, dto.studentAttempt, mergedSettings);
+  }
+
+  /**
+   * Auto-generate questions from blueprint against tenant's question bank
+   */
+  async autoGenerateBlueprint(tenantSlug: string, dto: { criteria: any[]; seed?: number; subjectId?: string; subjectCode?: string; departmentId?: string }) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const whereClauses: string[] = [];
+    const params: any[] = [];
+
+    if (dto.subjectId) {
+      params.push(dto.subjectId);
+      whereClauses.push(`q.subject_id::text = $${params.length}::text`);
+    } else if (dto.subjectCode) {
+      params.push(dto.subjectCode);
+      whereClauses.push(`(q.subject_id IN (SELECT id FROM subjects WHERE code = $${params.length}))`);
+    }
+
+    if (dto.departmentId) {
+      params.push(dto.departmentId);
+      whereClauses.push(`q.department_id::text = $${params.length}::text`);
+    }
+
+    const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT q.*, 
+              u.name AS unit_name, u.code AS unit_code,
+              t.name AS topic_name, t.code AS topic_code
+       FROM question_bank q
+       LEFT JOIN units u ON q.unit_id = u.id
+       LEFT JOIN topics t ON q.topic_id = t.id
+       ${whereSql}`,
+      params,
+    );
+
+    const bank: QuestionDefinition[] = (rows || []).map((r: any) => ({
+      id: r.id,
+      code: r.code,
+      text: r.question_text || r.text || '',
+      type: r.mode === 'MCQ' ? ('MCQ_SINGLE' as any) : (r.mode === 'DESC' ? ('LONG_ANSWER' as any) : (r.type || ('MCQ_SINGLE' as any))),
+      marks: Number(r.max_marks || r.marks || 1),
+      topicId: r.topic_id,
+      topicName: r.topic_name || r.topic,
+      unitId: r.unit_id,
+      unitCode: r.unit_code,
+      difficulty: r.difficulty_level ? (r.difficulty_level.toUpperCase() as any) : undefined,
+      bloomLevel: r.bloom_level ? (r.bloom_level.toUpperCase() as any) : undefined,
+      options: [
+        r.option_a ? { id: 'A', text: r.option_a, isCorrect: r.correct_option === 'A' } : null,
+        r.option_b ? { id: 'B', text: r.option_b, isCorrect: r.correct_option === 'B' } : null,
+        r.option_c ? { id: 'C', text: r.option_c, isCorrect: r.correct_option === 'C' } : null,
+        r.option_d ? { id: 'D', text: r.option_d, isCorrect: r.correct_option === 'D' } : null,
+      ].filter(Boolean) as any,
+    }));
+
+    return generateQuestionsFromBlueprint(bank, dto.criteria, dto.seed);
+  }
+
+  /**
+   * Duplicate paper as next set or template
+   */
+  async duplicatePaper(tenantSlug: string, paperId: string, user: any, options?: { targetSet?: string; asTemplate?: boolean }) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM examination_papers WHERE id::text = $1 LIMIT 1`,
+      [paperId],
+    );
+
+    if (!existing || existing.length === 0) {
+      throw new NotFoundException(`Paper with ID ${paperId} not found.`);
+    }
+
+    const p = existing[0];
+    const targetSet = options?.targetSet || (p.paper_set === 'Set A' ? 'Set B' : (p.paper_set === 'Set B' ? 'Set C' : 'Set D'));
+    const isTemplate = Boolean(options?.asTemplate);
+    const newCode = `${p.code}-${targetSet.replace(/\s+/g, '')}-${Date.now().toString().slice(-4)}`;
+    const newName = `${p.name} (${targetSet})`;
+
+    const insertRes = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO examination_papers (
+        code, name, subject_id, batch_id, exam_date, max_marks, passing_marks, 
+        type, duration_minutes, sections, status, department_id, colg_cd, course_cd, 
+        branch_cd, batch_cd, semester, section, academic_year, version, paper_set, 
+        target_sections, created_by, created_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, 'DRAFT', $11, $12, $13, $14, $15, $16, $17, $18, 1, $19, $20::jsonb, $21, NOW(), NOW())
+      RETURNING *`,
+      [
+        newCode,
+        newName,
+        p.subject_id,
+        p.batch_id,
+        p.exam_date,
+        p.max_marks,
+        p.passing_marks,
+        p.type,
+        p.duration_minutes,
+        JSON.stringify(p.sections || []),
+        p.department_id,
+        p.colg_cd,
+        p.course_cd,
+        p.branch_cd,
+        p.batch_cd,
+        p.semester,
+        p.section,
+        p.academic_year,
+        targetSet,
+        JSON.stringify(p.target_sections || ['All']),
+        user?.userId || user?.id || p.created_by,
+      ],
+    );
+
+    return insertRes[0];
   }
 
   async getPapers(
@@ -490,11 +790,13 @@ export class ExaminationService {
       // 2. Resolve paper UUID from database (by UUID, Code, or Name)
       let realPaperId: string | null = null;
       let passingMarks = 32;
+      let paperMaxMarks = 80;
+      let paperSections: any[] = [];
       const paperCodeOrId = dto.paperCode || dto.paperId || '';
 
       const paperRes = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id, max_marks, passing_marks FROM examination_papers 
+        `SELECT id, code, name, sections, max_marks, passing_marks FROM examination_papers 
          WHERE (id::text = $1 AND $1 ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$')
             OR code = $2 
             OR code = $1
@@ -506,6 +808,12 @@ export class ExaminationService {
       if (paperRes && paperRes.length > 0) {
         realPaperId = paperRes[0].id;
         passingMarks = paperRes[0]?.passing_marks ? Number(paperRes[0].passing_marks) : 32;
+        paperMaxMarks = paperRes[0]?.max_marks ? Number(paperRes[0].max_marks) : 80;
+        if (paperRes[0].sections) {
+          paperSections = typeof paperRes[0].sections === 'string'
+            ? JSON.parse(paperRes[0].sections)
+            : paperRes[0].sections;
+        }
       }
 
       // Auto-create paper if not yet in database
@@ -521,7 +829,124 @@ export class ExaminationService {
         passingMarks = 32;
       }
 
-      const isPass = Number(dto.marksObtained) >= passingMarks;
+      // ── Single Source of Truth Scoring Calculation ─────────────────────────
+      let scoringBreakdown: any[] = [];
+      let countedQuestionIds: string[] = [];
+      let ignoredQuestionIds: string[] = [];
+      let finalMarksObtained = Number(dto.marksObtained) || 0;
+      let effectiveMax = paperMaxMarks;
+      let finalPercentage = effectiveMax > 0 ? (finalMarksObtained / effectiveMax) * 100 : 0;
+      const skippedIdsList = Array.isArray(dto.skippedQuestionIds) ? dto.skippedQuestionIds : [];
+      const skippedIds = new Set(skippedIdsList);
+
+      const hasChoiceRules = Array.isArray(paperSections) && paperSections.some(
+        s => (Array.isArray(s.choiceGroups) && s.choiceGroups.length > 0) ||
+             s.attemptRule === 'CHOICE' ||
+             (Number(s.requiredToAttempt) > 0 && Number(s.requiredToAttempt) < (s.questions?.length || 0))
+      );
+
+      if (hasChoiceRules) {
+        const qMarks = dto.questionMarks || {};
+        const subMarks = dto.subPartMarks || {};
+        const studentAnswers: Record<string, any> = {};
+        const normalizedSections: any[] = [];
+        const normalizedQuestions: Record<string, any> = {};
+        let orderIdx = 0;
+
+        for (const sec of paperSections) {
+          const secQIds: string[] = [];
+          for (const q of (sec.questions || [])) {
+            const qId = q.questionId || q.id;
+            secQIds.push(qId);
+            const qMax = Number(q.customMarks || q.defaultMarks || q.max_marks || q.marks || 2);
+            normalizedQuestions[qId] = {
+              id: qId,
+              marks: qMax,
+              type: q.mode || 'DESC',
+            };
+
+            const isExplicitlySkipped = skippedIds.has(qId) || qMarks[qId] === 'SKIPPED' || qMarks[qId] === null;
+            let scored = 0;
+            let isAttempted = false;
+
+            if (!isExplicitlySkipped) {
+              if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
+                let subSum = 0;
+                let anySubAttempted = false;
+                for (const sq of q.subQuestions) {
+                  const sqKey = `${qId}_${sq.id}`;
+                  const val = subMarks[sqKey] ?? subMarks[sq.id];
+                  if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+                    subSum += Number(val);
+                    anySubAttempted = true;
+                  }
+                }
+                if (anySubAttempted) {
+                  isAttempted = true;
+                  scored = Math.min(qMax, subSum);
+                }
+              } else {
+                const val = qMarks[qId];
+                if (val !== undefined && val !== null && val !== '' && !isNaN(Number(val))) {
+                  isAttempted = true;
+                  scored = Math.min(qMax, Math.max(0, Number(val)));
+                }
+              }
+            }
+
+            studentAnswers[qId] = {
+              questionId: qId,
+              attempted: isAttempted,
+              rawScore: scored,
+              paperOrderIndex: orderIdx++,
+            };
+          }
+
+          normalizedSections.push({
+            ...sec,
+            questionIds: secQIds,
+          });
+        }
+
+        const studentAttempt: StudentAttempt = {
+          studentId: realStudentId || 'unknown',
+          paperId: realPaperId || 'unknown',
+          answers: studentAnswers,
+        };
+
+        const tenantSettings = await this.getAssessmentSettings(tenantSlug);
+        const scoreRes = computePaperScore(
+          {
+            id: realPaperId || 'unknown',
+            code: paperRes?.[0]?.code || paperCodeOrId,
+            name: paperRes?.[0]?.name || 'Exam Paper',
+            durationMinutes: 60,
+            passingMarksPercentage: 40,
+            status: 'PUBLISHED' as any,
+            version: 1,
+            sections: normalizedSections,
+            questions: normalizedQuestions,
+            effectiveMaxMarks: paperMaxMarks,
+          },
+          studentAttempt,
+          tenantSettings,
+        );
+
+        if (scoreRes.isRejected) {
+          throw new BadRequestException(
+            `Submission rejected by Over-Attempt Policy: ${scoreRes.errors.join('; ')}`,
+          );
+        }
+
+        finalMarksObtained = scoreRes.obtained;
+        effectiveMax = scoreRes.effectiveMax;
+        finalPercentage = scoreRes.percentage;
+        scoringBreakdown = scoreRes.perGroupBreakdown;
+        countedQuestionIds = scoreRes.countedQuestionIds;
+        ignoredQuestionIds = scoreRes.ignoredQuestionIds;
+      }
+
+      const isPass = finalMarksObtained >= passingMarks;
 
       // Ensure missing student_results table columns and unique constraint exist in active tenant schema
       try {
@@ -529,16 +954,27 @@ export class ExaminationService {
           slug,
           `ALTER TABLE student_results ADD COLUMN IF NOT EXISTS question_marks JSONB DEFAULT '{}'::jsonb;
            ALTER TABLE student_results ADD COLUMN IF NOT EXISTS sub_part_marks JSONB DEFAULT '{}'::jsonb;
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS skipped_question_ids JSONB DEFAULT '[]'::jsonb;
            ALTER TABLE student_results ADD COLUMN IF NOT EXISTS practical_mark NUMERIC(6,2) DEFAULT 0;
            ALTER TABLE student_results ADD COLUMN IF NOT EXISTS eval_status VARCHAR(50) DEFAULT 'EVALUATED';
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS scoring_breakdown JSONB DEFAULT '[]'::jsonb;
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS counted_question_ids JSONB DEFAULT '[]'::jsonb;
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS ignored_question_ids JSONB DEFAULT '[]'::jsonb;
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS effective_max NUMERIC(6,2);
+           ALTER TABLE student_results ADD COLUMN IF NOT EXISTS percentage NUMERIC(6,2);
            CREATE UNIQUE INDEX IF NOT EXISTS uq_student_results_stud_paper_attempt ON student_results (student_id, paper_id, attempt_number);`
         );
       } catch (e) {}
 
       const res = await this.tenantSchemaService.queryInTenant(
         slug,
-        `INSERT INTO student_results (student_id, paper_id, marks_obtained, is_pass, attempt_number, entered_by, question_marks, sub_part_marks, practical_mark)
-         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9)
+        `INSERT INTO student_results (
+           student_id, paper_id, marks_obtained, is_pass, attempt_number, entered_by, 
+           question_marks, sub_part_marks, practical_mark, scoring_breakdown, 
+           counted_question_ids, ignored_question_ids, effective_max, percentage,
+           skipped_question_ids
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, $10::jsonb, $11::jsonb, $12::jsonb, $13, $14, $15::jsonb)
          ON CONFLICT (student_id, paper_id, attempt_number)
          DO UPDATE SET 
            marks_obtained = EXCLUDED.marks_obtained, 
@@ -546,18 +982,30 @@ export class ExaminationService {
            question_marks = EXCLUDED.question_marks,
            sub_part_marks = EXCLUDED.sub_part_marks,
            practical_mark = EXCLUDED.practical_mark,
+           scoring_breakdown = EXCLUDED.scoring_breakdown,
+           counted_question_ids = EXCLUDED.counted_question_ids,
+           ignored_question_ids = EXCLUDED.ignored_question_ids,
+           effective_max = EXCLUDED.effective_max,
+           percentage = EXCLUDED.percentage,
+           skipped_question_ids = EXCLUDED.skipped_question_ids,
            created_at = NOW()
          RETURNING *`,
         [
           realStudentId,
           realPaperId,
-          Number(dto.marksObtained) || 0,
+          finalMarksObtained,
           isPass,
           dto.attemptNumber || 1,
           validUserId,
           qMarksJson,
           subMarksJson,
           practicalMark,
+          JSON.stringify(scoringBreakdown),
+          JSON.stringify(countedQuestionIds),
+          JSON.stringify(ignoredQuestionIds),
+          effectiveMax,
+          finalPercentage,
+          JSON.stringify(skippedIdsList),
         ],
       );
       return res[0];
@@ -915,9 +1363,13 @@ export class ExaminationService {
   async getQuestions(tenantSlug: string, query: {
     departmentId?: string; subjectId?: string; mode?: string; professionalPhase?: string; topicId?: string; topic?: string; competencyId?: string; competencyCode?: string; unitCode?: string; unitId?: string;
     colgCd?: string; courseCd?: string; branchCd?: string; batchCd?: string; semester?: string; section?: string;
+    includeInactive?: string | boolean; status?: string;
   } = {}) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const params: any[] = [];
+    const isArchived = query.status === 'archived';
+    const isAll = query.status === 'all' || query.includeInactive === 'true' || query.includeInactive === true;
+    const activeCondition = isArchived ? 'q.is_active = false' : (isAll ? '1=1' : 'q.is_active = true');
     let sql = `
       SELECT q.*, 
              d.name AS department_name, 
@@ -926,7 +1378,7 @@ export class ExaminationService {
       FROM question_bank q
       LEFT JOIN departments d ON d.id::text = q.department_id::text
       LEFT JOIN subjects s ON s.id::text = q.subject_id::text
-      WHERE q.is_active = true
+      WHERE ${activeCondition}
     `;
     if (query.colgCd && query.colgCd !== 'ALL') {
       params.push(query.colgCd);
@@ -1068,6 +1520,106 @@ export class ExaminationService {
     }));
   }
 
+  async updateQuestion(tenantSlug: string, id: string, dto: any) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const existing = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM question_bank WHERE id::text = $1 LIMIT 1`,
+      [id],
+    );
+    if (!existing || existing.length === 0) {
+      throw new NotFoundException(`Question with id ${id} not found`);
+    }
+
+    const current = existing[0];
+    const subQuestionsJson = (dto.subQuestions !== undefined || dto.sub_questions !== undefined)
+      ? JSON.stringify(dto.subQuestions || dto.sub_questions || [])
+      : (current.sub_questions ? JSON.stringify(current.sub_questions) : '[]');
+
+    const questionText = dto.questionText ?? dto.question_text ?? current.question_text;
+    const maxMarks = Number(dto.maxMarks ?? dto.max_marks ?? current.max_marks ?? 1.0);
+    const mode = dto.mode ?? current.mode;
+    const optionA = dto.optionA ?? dto.option_a ?? current.option_a;
+    const optionB = dto.optionB ?? dto.option_b ?? current.option_b;
+    const optionC = dto.optionC ?? dto.option_c ?? current.option_c;
+    const optionD = dto.optionD ?? dto.option_d ?? current.option_d;
+    const correctOption = dto.correctOption ?? dto.correct_option ?? current.correct_option;
+    const difficultyLevel = dto.difficultyLevel ?? dto.difficulty_level ?? current.difficulty_level;
+    const hasSubQuestions = dto.hasSubQuestions ?? dto.has_sub_questions ?? current.has_sub_questions;
+    const imageUrl = dto.imageUrl ?? dto.image_url ?? dto.image ?? dto.diagramUrl ?? dto.diagram_url ?? current.image_url;
+    const isActive = dto.isActive ?? dto.is_active ?? current.is_active ?? true;
+    const topic = dto.topic ?? current.topic;
+    const competencyCode = dto.competencyCode ?? dto.competency_code ?? current.competency_code;
+
+    const res = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE question_bank SET
+         question_text = $1,
+         max_marks = $2,
+         mode = $3,
+         option_a = $4,
+         option_b = $5,
+         option_c = $6,
+         option_d = $7,
+         correct_option = $8,
+         difficulty_level = $9,
+         has_sub_questions = $10,
+         sub_questions = $11::jsonb,
+         image_url = $12,
+         is_active = $13,
+         topic = COALESCE($14, topic),
+         competency_code = COALESCE($15, competency_code),
+         updated_at = NOW()
+       WHERE id::text = $16
+       RETURNING *`,
+      [
+        questionText,
+        maxMarks,
+        mode,
+        optionA,
+        optionB,
+        optionC,
+        optionD,
+        correctOption,
+        difficultyLevel,
+        hasSubQuestions,
+        subQuestionsJson,
+        imageUrl,
+        isActive,
+        topic,
+        competencyCode,
+        id,
+      ],
+    );
+    return res[0];
+  }
+
+  async resumeAllQuestions(tenantSlug: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const res = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE question_bank SET is_active = true WHERE is_active = false RETURNING id`,
+    );
+    const count = res ? res.length : 0;
+    return {
+      success: true,
+      resumedCount: count,
+      message: count > 0
+        ? `Successfully resumed ${count} archived question(s) into active Question Bank!`
+        : `All questions in Question Bank are already active.`,
+    };
+  }
+
+  async resumeQuestion(tenantSlug: string, id: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE question_bank SET is_active = true WHERE id::text = $1`,
+      [id],
+    );
+    return { success: true, message: 'Question resumed successfully' };
+  }
+
   async deleteQuestion(tenantSlug: string, id: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     await this.tenantSchemaService.queryInTenant(
@@ -1191,19 +1743,220 @@ export class ExaminationService {
     } catch { return { success: true, message: 'Submitted for HOD approval' }; }
   }
 
-  async getPendingQPForHod(tenantSlug: string, departmentId?: string, statusFilter?: string) {
+  async submitQPForDqac(tenantSlug: string, user: any, paperId: string, notes?: string) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     try {
+      const res = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE examination_papers 
+         SET status = 'PENDING_DQAC_APPROVAL', 
+             dqac_status = 'PENDING',
+             dqac_remarks = COALESCE($2, dqac_remarks), 
+             updated_at = NOW() 
+         WHERE id::text = $1 RETURNING *`,
+        [paperId, notes || null],
+      );
+      return res[0] || { success: true, message: 'Submitted for DQAC Quality Audit' };
+    } catch { return { success: true, message: 'Submitted for DQAC Quality Audit' }; }
+  }
+
+  async resolveHodScope(
+    slug: string,
+    options: {
+      departmentId?: string;
+      userId?: string;
+      empId?: string;
+      courseCd?: string;
+      user?: any;
+    },
+  ): Promise<{
+    departmentIds: string[];
+    courseCds: string[];
+    isRestricted: boolean;
+  }> {
+    const rawDeptId = options.departmentId;
+    const rawUserId = (options.userId || options.user?.sub || options.user?.userId || options.user?.id || '').toString().trim() || null;
+    const rawEmpId = (options.empId || options.user?.emp_id || options.user?.empId || '').toString().trim() || null;
+    const rawRole = (options.user?.role || '').toUpperCase();
+
+    const result = {
+      departmentIds: [] as string[],
+      courseCds: [] as string[],
+      isRestricted: true,
+    };
+
+    try {
+      let userRow: any = null;
+      if (rawUserId || rawEmpId) {
+        const uRes = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT u.id, u.emp_id, u.department, u.role, u.assigned_roles,
+                  f.id as faculty_id, f.department_id as fac_dept_id
+           FROM users u
+           LEFT JOIN faculty f ON (f.user_id::text = u.id::text OR (f.emp_id IS NOT NULL AND f.emp_id = u.emp_id))
+           WHERE ($1::text IS NOT NULL AND u.id::text = $1::text)
+              OR ($2::text IS NOT NULL AND (u.emp_id = $2::text OR u.username = $2::text))
+           LIMIT 1`,
+          [rawUserId, rawEmpId],
+        );
+        userRow = uRes[0] || null;
+      }
+
+      const facDeptId = userRow?.fac_dept_id;
+      const dbRole = (userRow?.role || '').toUpperCase();
+      const dbAssignedRoles = (userRow?.assigned_roles || '').toUpperCase();
+      const isHodUser = rawRole.includes('HOD') || dbRole.includes('HOD') || dbAssignedRoles.includes('HOD');
+
+      // Fetch all departments in tenant to dynamically group disciplines
+      const allDepts = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, code, name, course_cd, branch_cd, hod_user_id FROM departments`,
+      ).catch(() => []);
+
+      // Dynamic discipline classifier to map sister academic departments without hardcoding
+      const getDisciplineKey = (dept: any): string => {
+        const raw = ((dept?.name || '') + ' ' + (dept?.code || '')).toUpperCase();
+        const clean = raw.replace(/[()&,.-]/g, ' ').replace(/\s+/g, ' ').trim();
+        if (/COMPUTER\s*SCI|CSE|B\.TECH\.\s*\(?CS|\bCS\b/i.test(clean) && !/APPLICATION|MCA|BCA/i.test(clean)) {
+          return 'CSE';
+        }
+        if (/\bBCA\b|BACHELOR.*COMPUTER.*APP/i.test(clean)) {
+          return 'BCA';
+        }
+        if (/\bMCA\b|MASTER.*COMPUTER.*APP/i.test(clean)) {
+          return 'MCA';
+        }
+        if (/COMPUTER\s*APP/i.test(clean)) {
+          return 'COMP_APP';
+        }
+        if (/MECHANICAL|\bME\b/i.test(clean) && !/ELECTRICAL/i.test(clean)) {
+          return 'ME';
+        }
+        if (/ELECTRONIC|\bECE?\b|\bEC\b/i.test(clean)) {
+          return 'ECE';
+        }
+        if (/ELECTRICAL|\bEE\b|\bEN\b/i.test(clean)) {
+          return 'EE';
+        }
+        if (/INFORMATION\s*TECH|\bIT\b/i.test(clean)) {
+          return 'IT';
+        }
+        if (/PHARM/i.test(clean)) {
+          return 'PHARMACY';
+        }
+        if (/MANAGEMENT|\bMBA\b|\bBBA\b/i.test(clean)) {
+          return 'MANAGEMENT';
+        }
+        if (/LAW|LL\.?B/i.test(clean)) {
+          return 'LAW';
+        }
+        return clean;
+      };
+
+      // PRIMARY: Collect departments where this user is explicitly set as hod_user_id
+      const hodLinkedDepts = userRow?.id
+        ? allDepts.filter((d: any) => d.hod_user_id && d.hod_user_id === userRow.id)
+        : [];
+
+      // SECONDARY: Anchor on faculty.department_id (the dept this person teaches in)
+      const facDept = facDeptId ? allDepts.find((d: any) => d.id === facDeptId) : null;
+
+      // Build anchor set: hod-linked depts + faculty dept
+      const anchorDeptIds = new Set<string>(hodLinkedDepts.map((d: any) => d.id));
+      if (facDept) anchorDeptIds.add(facDept.id);
+
+      // If user wasn't linked to a dept directly but rawDeptId was supplied, use as fallback anchor
+      if (anchorDeptIds.size === 0 && rawDeptId && this.isUUID(rawDeptId)) {
+        anchorDeptIds.add(rawDeptId);
+      }
+
+      // Compute discipline keys from anchors only
+      const activeDisciplines = new Set<string>();
+      for (const id of anchorDeptIds) {
+        const d = allDepts.find((x: any) => x.id === id);
+        if (d) activeDisciplines.add(getDisciplineKey(d));
+      }
+
+      // Add all departments that share the same discipline as the anchors
+      for (const d of allDepts) {
+        const dKey = getDisciplineKey(d);
+        const isAnchor = anchorDeptIds.has(d.id);
+        const matchesDiscipline = activeDisciplines.size > 0 && activeDisciplines.has(dKey);
+
+        if (isAnchor || matchesDiscipline) {
+          if (!result.departmentIds.includes(d.id)) {
+            result.departmentIds.push(d.id);
+          }
+          const dCourse = d.course_cd ? String(d.course_cd) : '';
+          if (dCourse && !result.courseCds.includes(dCourse)) {
+            result.courseCds.push(dCourse);
+          }
+        }
+      }
+
+      if (options.courseCd && !isHodUser) {
+        result.courseCds.push(options.courseCd);
+      }
+    } catch (e) {
+      console.warn('Error resolving HOD scope:', e);
+    }
+
+    return result;
+  }
+
+  async getPendingQPForHod(
+    tenantSlug: string, 
+    departmentId?: string, 
+    statusFilter?: string,
+    userContext?: { userId?: string; empId?: string; courseCd?: string; user?: any },
+  ) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    try {
+      const scope = await this.resolveHodScope(slug, {
+        departmentId,
+        userId: userContext?.userId,
+        empId: userContext?.empId,
+        courseCd: userContext?.courseCd,
+        user: userContext?.user,
+      });
+
       const params: any[] = [];
       let whereClause: string;
       if (statusFilter && statusFilter !== 'ALL') {
         params.push(statusFilter);
         whereClause = `WHERE p.status = $1`;
+      } else if (statusFilter === 'ALL') {
+        whereClause = `WHERE 1=1`;
       } else {
-        whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'PENDING_DQAC_APPROVAL', 'CHANGES_REQUESTED', 'RESUBMITTED', 'DQAC_APPROVED')`;
+        // Default pending queue for HOD review
+        whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'RESUBMITTED')`;
       }
 
-      if (departmentId && this.isUUID(departmentId)) {
+      if (scope.departmentIds.length > 0) {
+        params.push(scope.departmentIds);
+        const deptParamIdx = params.length;
+        whereClause += ` AND (
+          p.department_id::text = ANY($${deptParamIdx}::text[])
+          OR EXISTS (
+            SELECT 1 FROM departments d_scope
+            WHERE d_scope.id::text = ANY($${deptParamIdx}::text[])
+              AND (
+                (p.department_id::text = d_scope.id::text)
+                OR (
+                  p.course_cd IS NOT NULL AND d_scope.course_cd IS NOT NULL AND p.course_cd = d_scope.course_cd
+                  AND p.branch_cd IS NOT NULL AND d_scope.branch_cd IS NOT NULL AND p.branch_cd = d_scope.branch_cd
+                )
+              )
+          )
+          OR EXISTS (
+            SELECT 1 FROM faculty f2
+            WHERE f2.user_id::text = p.created_by::text
+              AND f2.department_id::text = ANY($${deptParamIdx}::text[])
+          )
+        )`;
+      } else if (scope.isRestricted) {
+        whereClause += ` AND 1 = 0`;
+      } else if (departmentId && this.isUUID(departmentId)) {
         params.push(departmentId);
         whereClause += ` AND p.department_id::text = $${params.length}`;
       }
@@ -1218,12 +1971,16 @@ export class ExaminationService {
                 s.semester as subject_semester,
                 b.code as batch_code,
                 d.name as department_name,
+                f.name as creator_name,
+                fd.name as creator_dept_name,
                 p.sections
          FROM examination_papers p 
          LEFT JOIN courses c ON p.course_cd = c.course_cd OR p.course_cd = c.code
          LEFT JOIN subjects s ON p.subject_id::text = s.id::text 
          LEFT JOIN batches b ON p.batch_id::text = b.id::text 
          LEFT JOIN departments d ON p.department_id::text = d.id::text
+         LEFT JOIN faculty f ON f.user_id::text = p.created_by::text
+         LEFT JOIN departments fd ON fd.id::text = f.department_id::text
          ${whereClause} 
          ORDER BY COALESCE(p.updated_at, p.created_at, '1970-01-01'::timestamptz) DESC, p.id DESC`,
         params,
@@ -1257,7 +2014,19 @@ export class ExaminationService {
     const targetSections = dto.targetSections || dto.target_sections || null;
     const targetSectionsJson = targetSections ? JSON.stringify(Array.isArray(targetSections) ? targetSections : [targetSections]) : null;
 
-    if (dto.action === 'approve') {
+    if (dto.action === 'unapprove') {
+      const res = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE examination_papers 
+         SET status = 'PENDING_HOD_APPROVAL', 
+             dqac_status = NULL,
+             hod_remarks = COALESCE($1, 'HOD approval reverted back to pending'), 
+             updated_at = NOW() 
+         WHERE id::text = $2 RETURNING *`,
+        [actionRemarks, dto.paperId],
+      );
+      return res[0] || { success: true, status: 'PENDING_HOD_APPROVAL' };
+    } else if (dto.action === 'approve') {
       const res = await this.tenantSchemaService.queryInTenant(
         slug,
         `UPDATE examination_papers 
@@ -1354,12 +2123,42 @@ export class ExaminationService {
     }
   }
 
-  async getApprovedPapers(tenantSlug: string, departmentId?: string) {
+  async getApprovedPapers(
+    tenantSlug: string, 
+    departmentId?: string,
+    userContext?: { userId?: string; empId?: string; courseCd?: string; user?: any },
+  ) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     try {
+      const scope = await this.resolveHodScope(slug, {
+        departmentId,
+        userId: userContext?.userId,
+        empId: userContext?.empId,
+        courseCd: userContext?.courseCd,
+        user: userContext?.user,
+      });
+
       const params: any[] = [];
       let deptFilter = '';
-      if (departmentId && this.isUUID(departmentId)) { deptFilter = `AND p.department_id::text = $1`; params.push(departmentId); }
+
+      if (scope.departmentIds.length > 0 || scope.courseCds.length > 0) {
+        const subConditions: string[] = [];
+        if (scope.departmentIds.length > 0) {
+          params.push(scope.departmentIds);
+          subConditions.push(`p.department_id::text = ANY($${params.length}::text[])`);
+        }
+        if (scope.courseCds.length > 0) {
+          params.push(scope.courseCds);
+          subConditions.push(`p.course_cd = ANY($${params.length}::text[])`);
+        }
+        deptFilter = `AND (${subConditions.join(' OR ')})`;
+      } else if (scope.isRestricted) {
+        deptFilter = `AND 1 = 0`;
+      } else if (departmentId && this.isUUID(departmentId)) { 
+        deptFilter = `AND p.department_id::text = $1`; 
+        params.push(departmentId); 
+      }
+
       return await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT p.*, 
@@ -1465,6 +2264,32 @@ export class ExaminationService {
     const rawSlots = Array.isArray(dto.slots) ? dto.slots : [];
     const slotsJson = JSON.stringify(rawSlots);
 
+    let validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
+    if (!validDeptId && (dto.branchCd || dto.courseCd)) {
+      try {
+        const foundDept = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM departments WHERE (code = $1 OR branch_cd = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 1`,
+          [String(dto.branchCd || ''), String(dto.courseCd || '')],
+        );
+        if (foundDept && foundDept.length > 0) {
+          validDeptId = foundDept[0].id;
+        }
+      } catch {}
+    }
+    if (!validDeptId && createdBy && this.isUUID(createdBy)) {
+      try {
+        const facRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT department_id FROM faculty WHERE user_id::text = $1::text AND department_id IS NOT NULL LIMIT 1`,
+          [createdBy],
+        );
+        if (facRows && facRows.length > 0 && facRows[0].department_id) {
+          validDeptId = facRows[0].department_id;
+        }
+      } catch {}
+    }
+
     try {
       // If updating an existing draft by ID
       if (dto.id && this.isUUID(dto.id)) {
@@ -1489,7 +2314,7 @@ export class ExaminationService {
            WHERE id::text = $13 RETURNING *, week_start::text AS week_start, week_end::text AS week_end`,
           [
             dto.title || null,
-            this.isUUID(dto.departmentId) ? dto.departmentId : null,
+            validDeptId,
             this.isUUID(dto.batchId) ? dto.batchId : null,
             dto.semester || null,
             dto.academicYear || null,
@@ -1519,7 +2344,7 @@ export class ExaminationService {
          ) VALUES ($1, $2::uuid, $3::uuid, $4, $5, $6::jsonb, 'DRAFT', $7, $8::uuid, $9, $10, $11, $12, $13, $14, $15, NOW(), NOW()) RETURNING *, week_start::text AS week_start, week_end::text AS week_end`,
         [
           dto.title,
-          this.isUUID(dto.departmentId) ? dto.departmentId : null,
+          validDeptId,
           this.isUUID(dto.batchId) ? dto.batchId : null,
           dto.semester || null,
           dto.academicYear || null,
@@ -1588,13 +2413,54 @@ export class ExaminationService {
     } catch { return []; }
   }
 
-  async getPendingTimetableForHod(tenantSlug: string, departmentId?: string) {
+  async getPendingTimetableForHod(
+    tenantSlug: string, 
+    departmentId?: string,
+    userContext?: { userId?: string; empId?: string; courseCd?: string; user?: any },
+  ) {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     await this.ensureTimetableDraftsTable(slug);
     try {
+      const scope = await this.resolveHodScope(slug, {
+        departmentId,
+        userId: userContext?.userId,
+        empId: userContext?.empId,
+        courseCd: userContext?.courseCd,
+        user: userContext?.user,
+      });
+
       const params: any[] = ['PENDING_HOD_APPROVAL'];
       let deptFilter = '';
-      if (departmentId && this.isUUID(departmentId)) { deptFilter = `AND department_id::text = $2`; params.push(departmentId); }
+
+      if (scope.departmentIds.length > 0) {
+        params.push(scope.departmentIds);
+        const deptParamIdx = params.length;
+        deptFilter = `AND (
+          timetable_drafts.department_id::text = ANY($${deptParamIdx}::text[])
+          OR EXISTS (
+            SELECT 1 FROM departments d_scope
+            WHERE d_scope.id::text = ANY($${deptParamIdx}::text[])
+              AND (
+                (timetable_drafts.department_id::text = d_scope.id::text)
+                OR (
+                  timetable_drafts.course_cd IS NOT NULL AND d_scope.course_cd IS NOT NULL AND timetable_drafts.course_cd = d_scope.course_cd
+                  AND timetable_drafts.branch_cd IS NOT NULL AND d_scope.branch_cd IS NOT NULL AND timetable_drafts.branch_cd = d_scope.branch_cd
+                )
+              )
+          )
+          OR EXISTS (
+            SELECT 1 FROM faculty f_tt
+            WHERE f_tt.user_id::text = timetable_drafts.created_by::text
+              AND f_tt.department_id::text = ANY($${deptParamIdx}::text[])
+          )
+        )`;
+      } else if (scope.isRestricted) {
+        deptFilter = `AND 1 = 0`;
+      } else if (departmentId && this.isUUID(departmentId)) { 
+        deptFilter = `AND department_id::text = $2`; 
+        params.push(departmentId); 
+      }
+
       return await this.tenantSchemaService.queryInTenant(
         slug,
         `SELECT *, week_start::text AS week_start, week_end::text AS week_end FROM timetable_drafts 

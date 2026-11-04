@@ -7,12 +7,12 @@ export class CreateExamPaperDto {
   id?: string;
 
   @IsString()
-  @IsNotEmpty()
-  code: string;
+  @IsOptional()
+  code?: string;
 
   @IsString()
-  @IsNotEmpty()
-  name: string;
+  @IsOptional()
+  name?: string;
 
   @IsString()
   @IsOptional()
@@ -27,10 +27,12 @@ export class CreateExamPaperDto {
   examDate?: string;
 
   @IsNumber()
-  maxMarks: number;
+  @IsOptional()
+  maxMarks?: number;
 
   @IsNumber()
-  passingMarks: number;
+  @IsOptional()
+  passingMarks?: number;
 
   @IsString()
   @IsOptional()
@@ -195,6 +197,9 @@ export class SubmitResultDto {
   @IsOptional()
   @IsString()
   studentName?: string;
+
+  @IsOptional()
+  skippedQuestionIds?: string[];
 
   @IsOptional()
   @IsBoolean()
@@ -733,3 +738,133 @@ export class CreateTimetableDraftDto {
   section?: string;
 }
 
+
+// ─── Assessment & Q-Bank Paper Designer DTOs ───────────────────────────────
+
+export class ChoiceGroupDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsString()
+  @IsNotEmpty()
+  sectionId: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  questionIds: string[];
+
+  @IsNumber()
+  totalQuestions: number;
+
+  @IsNumber()
+  requiredToAttempt: number;
+
+  @IsString()
+  @IsOptional()
+  overAttemptPolicy?: string;
+
+  @IsString()
+  @IsOptional()
+  marksMode?: string;
+
+  @IsNumber()
+  @IsOptional()
+  uniformMarks?: number;
+
+  @IsString()
+  @IsOptional()
+  instructions?: string;
+}
+
+export class PaperSectionDto {
+  @IsString()
+  @IsNotEmpty()
+  id: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsNumber()
+  order: number;
+
+  @IsString()
+  type: string;
+
+  @IsString()
+  @IsOptional()
+  instructions?: string;
+
+  @IsArray()
+  @IsString({ each: true })
+  questionIds: string[];
+
+  @IsArray()
+  @IsOptional()
+  choiceGroups?: ChoiceGroupDto[];
+
+  @IsNumber()
+  @IsOptional()
+  practicalMarks?: number;
+}
+
+export class CalculatePaperScoreDto {
+  @IsNotEmpty()
+  paperSnapshot: any;
+
+  @IsNotEmpty()
+  studentAttempt: any;
+
+  @IsOptional()
+  settings?: any;
+}
+
+export class AutoGenerateBlueprintDto {
+  @IsArray()
+  @IsNotEmpty()
+  criteria: any[];
+
+  @IsNumber()
+  @IsOptional()
+  seed?: number;
+
+  @IsString()
+  @IsOptional()
+  subjectId?: string;
+
+  @IsString()
+  @IsOptional()
+  subjectCode?: string;
+
+  @IsString()
+  @IsOptional()
+  departmentId?: string;
+}
+
+export class UpdateAssessmentSettingsDto {
+  @IsString()
+  @IsOptional()
+  defaultOverAttemptPolicy?: string;
+
+  @IsString()
+  @IsOptional()
+  defaultMarksMode?: string;
+
+  @IsBoolean()
+  @IsOptional()
+  allowPartialCredit?: boolean;
+
+  @IsBoolean()
+  @IsOptional()
+  enforceUniformChoiceMarks?: boolean;
+}
+
+export class ValidatePaperDto {
+  @IsNotEmpty()
+  paperSnapshot: any;
+}

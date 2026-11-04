@@ -741,6 +741,30 @@ export default function LoginPage() {
           if (authData.user) {
             localStorage.setItem('user', JSON.stringify(authData.user));
 
+            // Clear any stale department and user caching from previous sessions
+            localStorage.removeItem('department_name');
+            localStorage.removeItem('departmentName');
+            localStorage.removeItem('department_id');
+            localStorage.removeItem('departmentId');
+            localStorage.removeItem('userId');
+
+            if (authData.user.id) {
+              localStorage.setItem('userId', authData.user.id);
+            }
+            if (authData.user.name) {
+              localStorage.setItem('name', authData.user.name);
+            }
+            const deptName = authData.user.departmentName || authData.user.department || '';
+            if (deptName) {
+              localStorage.setItem('department_name', deptName);
+              localStorage.setItem('departmentName', deptName);
+            }
+            const deptId = authData.user.departmentId || '';
+            if (deptId) {
+              localStorage.setItem('department_id', deptId);
+              localStorage.setItem('departmentId', deptId);
+            }
+
             if (authData.user.usr_id) {
               localStorage.setItem('usr_id', authData.user.usr_id);
               document.cookie = `usr_id=${authData.user.usr_id}; path=/; max-age=604800; SameSite=Lax`;

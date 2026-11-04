@@ -388,6 +388,17 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
       localStorage.removeItem('user');
       localStorage.removeItem('role');
       localStorage.removeItem('isOwner');
+      localStorage.removeItem('department_name');
+      localStorage.removeItem('departmentName');
+      localStorage.removeItem('department_id');
+      localStorage.removeItem('departmentId');
+      localStorage.removeItem('department');
+      localStorage.removeItem('name');
+      localStorage.removeItem('username');
+      localStorage.removeItem('emp_id');
+      localStorage.removeItem('userId');
+      localStorage.removeItem('course_cd');
+      localStorage.removeItem('courseCd');
       document.cookie = 'auth_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
       document.cookie = 'auth_role=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
 

@@ -3306,6 +3306,7 @@ export class AdminMasterService {
     const rows = await this.ds.query(sql, params).catch(() => []);
     return rows.map((r: any) => ({
       ...r,
+      section: this.normalizeSectionCode(r.section),
       college_id: currentCollege?.id,
       college_name: currentCollege?.name,
       college_code: currentCollege?.code,
@@ -3372,7 +3373,7 @@ export class AdminMasterService {
 
     const batchCd = dto.batchCd || dto.batch_cd || sub.batch_cd || null;
     const semCd = dto.semCd || dto.sem_cd || sub.sem_cd || sub.semester || null;
-    const section = dto.section || '1';
+    const section = this.normalizeSectionCode(dto.section || '1');
 
     // Check if an existing link exists for this exact faculty, subject, and academic scope
     const existingRows = await this.ds.query(
@@ -4287,6 +4288,28 @@ export class AdminMasterService {
     };
   }
 
+  normalizeSectionCode(val: any): string {
+    const v = String(val || '').trim().toLowerCase();
+    if (!v || v === 'all' || v === 'all sections') return 'all';
+    if (v === '1' || v === 'section a' || v === 'sec a' || v === 'a' || v === 'sec 1' || v === 'section 1') return '1';
+    if (v === '2' || v === 'section b' || v === 'sec b' || v === 'b' || v === 'sec 2' || v === 'section 2') return '2';
+    if (v === '3' || v === 'section c' || v === 'sec c' || v === 'c' || v === 'sec 3' || v === 'section 3') return '3';
+    if (v === '4' || v === 'section d' || v === 'sec d' || v === 'd' || v === 'sec 4' || v === 'section 4') return '4';
+    if (v === '5' || v === 'section e' || v === 'sec e' || v === 'e' || v === 'sec 5' || v === 'section 5') return '5';
+    const digitMatch = v.match(/\d+/);
+    if (digitMatch) return digitMatch[0];
+    return '1';
+  }
+
+  getSectionLegacyLabel(norm: string): string {
+    if (norm === '1') return 'Section A';
+    if (norm === '2') return 'Section B';
+    if (norm === '3') return 'Section C';
+    if (norm === '4') return 'Section D';
+    if (norm === '5') return 'Section E';
+    return `Section ${norm}`;
+  }
+
   // ─── 12. CO - PO MATRIX ─────────────────────────────────────────────────────
   async getCoPoMatrix(
     tenantSlug?: string,
@@ -4325,20 +4348,43 @@ export class AdminMasterService {
       qParams.push(params.semCd);
       query += ` AND (sem_cd = $${qParams.length} OR sem_cd IS NULL)`;
     }
+    if (params.batchYear) {
+      qParams.push(params.batchYear);
+      query += ` AND (batch_year = $${qParams.length} OR batch_year IS NULL)`;
+    }
     if (params.section && params.section !== 'all') {
-      qParams.push(params.section);
-      query += ` AND (section = $${qParams.length} OR section IS NULL)`;
+      const normSec = this.normalizeSectionCode(params.section);
+      const legacySec = this.getSectionLegacyLabel(normSec);
+      qParams.push(normSec);
+      qParams.push(legacySec);
+      query += ` AND (section = $${qParams.length - 1} OR section = $${qParams.length} OR section IS NULL)`;
     }
 
-    query += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`;
+    query += ` ORDER BY 
+      CASE WHEN matrix_data IS NOT NULL AND matrix_data::text != '{}' AND matrix_data::text != 'null' THEN 0 ELSE 1 END ASC,
+      updated_at DESC NULLS LAST,
+      created_at DESC
+      LIMIT 1`;
 
     const rows = await this.tenantSchemaService.queryInTenant(slug, query, qParams).catch(() => []);
-    return { success: true, data: rows[0] || null };
+    if (rows && rows.length > 0) {
+      return {
+        success: true,
+        data: {
+          ...rows[0],
+          section: this.normalizeSectionCode(rows[0].section),
+        },
+      };
+    }
+    return { success: true, data: null };
   }
 
   async saveCoPoMatrix(dto: SaveCoPoMatrixDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
     await this.ensureAdminMasterTables(slug);
+
+    const normSec = this.normalizeSectionCode(dto.section || '1');
+    const legacySec = this.getSectionLegacyLabel(normSec);
 
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -4346,9 +4392,9 @@ export class AdminMasterService {
        WHERE (subject_id = $1 OR subject_code = $2) 
          AND (course_cd = $3 OR ($3 IS NULL AND course_cd IS NULL) OR course_cd IS NULL)
          AND (sem_cd = $4 OR ($4 IS NULL AND sem_cd IS NULL) OR sem_cd IS NULL)
-         AND (section = $5 OR ($5 IS NULL AND section IS NULL) OR section IS NULL)
+         AND (section = $5 OR section = $6 OR ($5 IS NULL AND section IS NULL) OR section IS NULL)
        ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
-      [dto.subject_id, dto.subject_code || dto.subject_id, dto.course_cd || null, dto.sem_cd || null, (dto as any).section || null],
+      [dto.subject_id, dto.subject_code || dto.subject_id, dto.course_cd || null, dto.sem_cd || null, normSec, legacySec],
     ).catch(() => []);
 
     let savedRow: any;
@@ -4363,7 +4409,7 @@ export class AdminMasterService {
              branch_cd = COALESCE($5, branch_cd),
              batch_year = COALESCE($6, batch_year),
              sem_cd = COALESCE($7, sem_cd),
-             section = COALESCE($8, section),
+             section = $8,
              updated_at = NOW()
          WHERE id = $9
          RETURNING *`,
@@ -4375,7 +4421,7 @@ export class AdminMasterService {
           dto.branch_cd || null,
           dto.batch_year || null,
           dto.sem_cd || null,
-          (dto as any).section || null,
+          normSec,
           existing[0].id,
         ],
       );
@@ -4393,7 +4439,7 @@ export class AdminMasterService {
           dto.branch_cd || null,
           dto.batch_year || null,
           dto.sem_cd || null,
-          (dto as any).section || null,
+          normSec,
           dto.subject_id,
           dto.subject_code || null,
           dto.subject_name || null,
@@ -4406,7 +4452,10 @@ export class AdminMasterService {
     return {
       success: true,
       message: 'CO - PO Matrix saved successfully',
-      data: savedRow,
+      data: {
+        ...savedRow,
+        section: this.normalizeSectionCode(savedRow.section),
+      },
     };
   }
 
@@ -4439,20 +4488,59 @@ export class AdminMasterService {
       qParams.push(params.semCd);
       query += ` AND (sem_cd = $${qParams.length} OR sem_cd IS NULL)`;
     }
+    if (params?.batchYear) {
+      qParams.push(params.batchYear);
+      query += ` AND (batch_year = $${qParams.length} OR batch_year IS NULL)`;
+    }
     if (params?.section && params.section !== 'all') {
-      qParams.push(params.section);
-      query += ` AND (section = $${qParams.length} OR section IS NULL)`;
+      const normSec = this.normalizeSectionCode(params.section);
+      const legacySec = this.getSectionLegacyLabel(normSec);
+      qParams.push(normSec);
+      qParams.push(legacySec);
+      query += ` AND (section = $${qParams.length - 1} OR section = $${qParams.length} OR section IS NULL)`;
     }
 
-    query += ` ORDER BY updated_at DESC NULLS LAST, created_at DESC LIMIT 1`;
+    query += ` ORDER BY 
+      CASE WHEN matrix_data IS NOT NULL AND matrix_data::text != '{}' AND matrix_data::text != 'null' THEN 0 ELSE 1 END ASC,
+      updated_at DESC NULLS LAST,
+      created_at DESC
+      LIMIT 1`;
 
     const rows = await this.tenantSchemaService.queryInTenant(slug, query, qParams).catch(() => []);
-    return { success: true, data: rows[0] || null };
+    if (rows && rows.length > 0) {
+      let finalRow = { ...rows[0] };
+      if (!finalRow.matrix_data || Object.keys(finalRow.matrix_data).length === 0) {
+        const allQuery = query.replace(/LIMIT\s+\d+/i, '');
+        const allRows = await this.tenantSchemaService.queryInTenant(slug, allQuery, qParams).catch(() => []);
+        const aggregated: Record<string, Record<string, number>> = {};
+        allRows.forEach((r: any) => {
+          if (r.po_code && r.peo_code && r.po_code !== 'ALL') {
+            if (!aggregated[r.po_code]) aggregated[r.po_code] = {};
+            aggregated[r.po_code][r.peo_code] = Number(r.correlation_level) || 0;
+          }
+        });
+        if (Object.keys(aggregated).length > 0) {
+          finalRow.matrix_data = aggregated;
+        }
+      }
+
+      return {
+        success: true,
+        data: {
+          ...finalRow,
+          section: this.normalizeSectionCode(finalRow.section),
+        },
+      };
+    }
+    return { success: true, data: null };
   }
 
   async savePoPeoMatrix(dto: SavePoPeoMatrixDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug || dto.college_slug || dto.college_id);
     await this.ensureAdminMasterTables(slug);
+
+    const normSec = this.normalizeSectionCode(dto.section || '1');
+    const legacySec = this.getSectionLegacyLabel(normSec);
 
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
@@ -4460,9 +4548,12 @@ export class AdminMasterService {
        WHERE (course_cd = $1 OR ($1 IS NULL AND course_cd IS NULL))
          AND (branch_cd = $2 OR ($2 IS NULL AND branch_cd IS NULL))
          AND (sem_cd = $3 OR ($3 IS NULL AND sem_cd IS NULL) OR sem_cd IS NULL)
-         AND (section = $4 OR ($4 IS NULL AND section IS NULL) OR section IS NULL)
-       ORDER BY updated_at DESC NULLS LAST LIMIT 1`,
-      [dto.course_cd || null, dto.branch_cd || null, (dto as any).sem_cd || null, (dto as any).section || null],
+         AND (section = $4 OR section = $5 OR ($4 IS NULL AND section IS NULL) OR section IS NULL)
+       ORDER BY 
+         CASE WHEN matrix_data IS NOT NULL AND matrix_data::text != '{}' AND matrix_data::text != 'null' THEN 0 ELSE 1 END ASC,
+         updated_at DESC NULLS LAST
+       LIMIT 1`,
+      [dto.course_cd || null, dto.branch_cd || null, (dto as any).sem_cd || null, normSec, legacySec],
     ).catch(() => []);
 
     let savedRow: any;
@@ -4473,11 +4564,11 @@ export class AdminMasterService {
          SET matrix_data = $1,
              batch_year = COALESCE($2, batch_year),
              sem_cd = COALESCE($3, sem_cd),
-             section = COALESCE($4, section),
+             section = $4,
              updated_at = NOW()
          WHERE id = $5
          RETURNING *`,
-        [dto.matrix_data || {}, dto.batch_year || null, (dto as any).sem_cd || null, (dto as any).section || null, existing[0].id],
+        [dto.matrix_data || {}, dto.batch_year || null, (dto as any).sem_cd || null, normSec, existing[0].id],
       );
       savedRow = rows[0];
     } else {
@@ -4493,7 +4584,7 @@ export class AdminMasterService {
           dto.branch_cd || null,
           dto.batch_year || null,
           (dto as any).sem_cd || null,
-          (dto as any).section || null,
+          normSec,
           dto.matrix_data || {},
         ],
       );
@@ -4503,8 +4594,10 @@ export class AdminMasterService {
     return {
       success: true,
       message: 'PO - PEO Matrix saved successfully',
-      data: savedRow,
+      data: {
+        ...savedRow,
+        section: this.normalizeSectionCode(savedRow.section),
+      },
     };
   }
 }
-

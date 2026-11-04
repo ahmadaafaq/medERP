@@ -5,10 +5,29 @@ import Header from '../../../../components/Header';
 
 const API_BASE = '/api/v1';
 function getH() {
-  if (typeof window === 'undefined') return { slug: '', headers: {} as any };
+  if (typeof window === 'undefined') return { slug: '', deptId: '', empId: '', userId: '', courseCd: '', headers: {} as any };
   const slug = (localStorage.getItem('tenantSlug') || '').replace(/^tenant_/, '') || 'default';
   const token = localStorage.getItem('token') || '';
-  return { slug, headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}), 'x-tenant-slug': slug } };
+  let u: any = {};
+  try { u = JSON.parse(localStorage.getItem('user') || '{}'); } catch {}
+  const deptId = localStorage.getItem('department_id') || localStorage.getItem('departmentId') || u?.departmentId || u?.department_id || '';
+  const empId = localStorage.getItem('emp_id') || u?.empId || u?.emp_id || localStorage.getItem('username') || '';
+  const userId = localStorage.getItem('userId') || u?.id || u?.sub || '';
+  const courseCd = localStorage.getItem('course_cd') || u?.courseCd || u?.course_cd || '';
+  return { 
+    slug, 
+    deptId, 
+    empId, 
+    userId, 
+    courseCd,
+    headers: { 
+      ...(token ? { Authorization: `Bearer ${token}` } : {}), 
+      'x-tenant-slug': slug,
+      'x-user-id': userId,
+      'x-emp-id': empId,
+      'x-department-id': deptId
+    } 
+  };
 }
 
 const STATUS_BADGE: Record<string, string> = {
@@ -69,13 +88,22 @@ export default function HODTimetableApprovalsPage() {
     setLoading(true);
     setDrafts([]);
     try {
-      const { slug, headers } = getH();
+            const { slug, deptId, empId, userId, courseCd, headers } = getH();
       const ts = Date.now();
+      const qp = new URLSearchParams({ tenant: slug, _: String(ts) });
+      if (userId) qp.set('userId', userId);
+      if (empId) qp.set('empId', empId);
+      if (courseCd) qp.set('courseCd', courseCd);
+
+      // Only pass departmentId for general list; for HOD-specific endpoints backend resolves scope
+      const qpWithDept = new URLSearchParams(qp);
+      if (deptId) qpWithDept.set('departmentId', deptId);
+
       const url = activeFilter === 'PENDING_HOD_APPROVAL'
-        ? `${API_BASE}/exams/timetable-drafts/pending-hod-approval?tenant=${slug}&_=${ts}`
+        ? `${API_BASE}/exams/timetable-drafts/pending-hod-approval?${qp.toString()}`
         : activeFilter === 'HOD_APPROVED'
-        ? `${API_BASE}/exams/timetable-drafts/approved?tenant=${slug}&_=${ts}`
-        : `${API_BASE}/exams/timetable-drafts?tenant=${slug}&status=${activeFilter}&_=${ts}`;
+        ? `${API_BASE}/exams/timetable-drafts/approved?${qp.toString()}`
+        : `${API_BASE}/exams/timetable-drafts?status=${activeFilter}&${qpWithDept.toString()}`;
       const r = await fetch(url, { 
         headers: {
           ...headers,

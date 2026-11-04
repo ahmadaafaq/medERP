@@ -977,7 +977,19 @@ export default function StaffAdminPage() {
                           </td>
 
                           <td className="py-4 font-semibold text-slate-700 dark:text-slate-300">
-                            {fac.designation || 'Faculty Member'}
+                            {(() => {
+                              const desig = (fac.designation || '').trim();
+                              if (staffRoles.includes('HOD') && (!desig || desig.toLowerCase().includes('clerk') || desig.toLowerCase() === 'faculty' || desig.toLowerCase() === 'staff member')) {
+                                return 'Head of Department';
+                              }
+                              if (desig.toLowerCase().includes('clerk') && !staffRoles.includes('CLERK')) {
+                                if (staffRoles.includes('HOD')) return 'Head of Department';
+                                if (staffRoles.includes('COLLEGE_ADMIN')) return 'College Administrator';
+                                if (staffRoles.includes('DQAC')) return 'DQAC Member';
+                                return 'Assistant Professor';
+                              }
+                              return desig || (staffRoles.includes('HOD') ? 'Head of Department' : 'Faculty Member');
+                            })()}
                           </td>
 
                           <td className="py-4">

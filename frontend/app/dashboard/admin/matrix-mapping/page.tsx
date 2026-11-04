@@ -141,7 +141,8 @@ const formatSectionLabel = (sec: string) => {
   if (norm === '3') return 'Section C (3)';
   if (norm === '4') return 'Section D (4)';
   if (norm === '5') return 'Section E (5)';
-  return sec.startsWith('Section') ? sec : `Section ${sec}`;
+  const clean = String(sec).replace(/^section\s+/i, '').replace(/^sec\s+/i, '').trim();
+  return `Section ${clean}`;
 };
 
 export default function MatrixMappingPage() {
@@ -196,7 +197,7 @@ export default function MatrixMappingPage() {
     setSelectedBranch(brCd);
     setSelectedBatch(batCd);
     setSelectedSemester(semCd);
-    setSelectedSection(secCd);
+    setSelectedSection(secCd !== 'all' ? normalizeSection(secCd) : '1');
 
     if (state.allSubjects && state.allSubjects.length > 0) {
       setSubjects(
@@ -342,8 +343,8 @@ export default function MatrixMappingPage() {
     });
     const set = new Set<string>();
     filtered.forEach((l) => {
-      const sec = String(l.section || '1').trim();
-      if (sec) set.add(sec);
+      const sec = normalizeSection(String(l.section || '1'));
+      if (sec && sec !== 'all') set.add(sec);
     });
     const list = Array.from(set).sort().map((sec) => ({
       code: sec,
@@ -943,21 +944,7 @@ export default function MatrixMappingPage() {
     loadUnits();
   }, [selectedSubject, subjects, getActiveTenantSlug]);
 
-  // Local draft cache keys to guarantee numbers stay fixed & never disappear
-  const getCoPoDraftKey = useCallback(
-    (subjCode: string) => {
-      const slug = getActiveTenantSlug();
-      return `copo_draft_${slug}_${selectedCourse}_${selectedBranch}_${selectedSemester}_${selectedSection}_${subjCode}`;
-    },
-    [getActiveTenantSlug, selectedCourse, selectedBranch, selectedSemester, selectedSection]
-  );
-
-  const getPoPeoDraftKey = useCallback(() => {
-    const slug = getActiveTenantSlug();
-    return `popeo_draft_${slug}_${selectedCourse}_${selectedBranch}_${selectedBatch}`;
-  }, [getActiveTenantSlug, selectedCourse, selectedBranch, selectedBatch]);
-
-  // 5. Load Saved CO-PO Matrix for Selected Subject
+  // 5. Load Saved CO-PO Matrix for Selected Subject (Direct from Server Database)
   useEffect(() => {
     if (activeTab !== 'co-po' || !selectedSubject) return;
 
@@ -969,17 +956,8 @@ export default function MatrixMappingPage() {
       const subId = currentSub?.id || selectedSubject;
       const subCode = currentSub?.code || selectedSubject;
 
-      // Check local storage draft first
-      const draftKey = getCoPoDraftKey(subCode);
-      let draftData: Record<string, Record<string, number>> | null = null;
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = localStorage.getItem(draftKey);
-          if (raw) draftData = JSON.parse(raw);
-        } catch {}
-      }
-
       try {
+        const normSec = selectedSection !== 'all' ? normalizeSection(selectedSection) : '1';
         const q = new URLSearchParams({
           tenant,
           subjectId: subId,
@@ -989,13 +967,13 @@ export default function MatrixMappingPage() {
         if (selectedBranch !== 'all') q.append('branchCd', selectedBranch);
         if (selectedBatch !== 'all') q.append('batchYear', selectedBatch);
         if (selectedSemester !== 'all') q.append('semCd', selectedSemester);
-        if (selectedSection !== 'all') q.append('section', selectedSection);
+        if (selectedSection !== 'all') q.append('section', normSec);
 
-        let res = await fetch(`${API_BASE}/co-po-matrix?${q.toString()}`, { headers: getAuthHeaders() });
-        if (!res.ok) {
-          res = await fetch(`/api/v1/admin-master/co-po-matrix?${q.toString()}`, { headers: getAuthHeaders() });
+        let res = await fetch(`${API_BASE}/co-po-matrix?${q.toString()}`, { headers: getAuthHeaders() }).catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(`/api/v1/admin-master/co-po-matrix?${q.toString()}`, { headers: getAuthHeaders() }).catch(() => null);
         }
-        if (res.ok && isMounted) {
+        if (res?.ok && isMounted) {
           const json = await res.json();
           let serverMatrix: Record<string, Record<string, number>> = {};
           if (json.data?.matrix_data && typeof json.data.matrix_data === 'object') {
@@ -1005,23 +983,13 @@ export default function MatrixMappingPage() {
               }
             });
           }
-
-          if (Object.keys(serverMatrix).length > 0) {
-            setCoPoMatrix(serverMatrix);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(draftKey, JSON.stringify(serverMatrix));
-            }
-          } else if (draftData && Object.keys(draftData).length > 0) {
-            setCoPoMatrix(draftData);
-          } else {
-            setCoPoMatrix({});
-          }
-        } else if (draftData && isMounted) {
-          setCoPoMatrix(draftData);
+          setCoPoMatrix(serverMatrix);
+        } else if (isMounted) {
+          setCoPoMatrix({});
         }
       } catch (err) {
-        console.error('[MatrixMapping] Error loading CO-PO matrix:', err);
-        if (draftData && isMounted) setCoPoMatrix(draftData);
+        console.error('[MatrixMapping] Error loading CO-PO matrix from server database:', err);
+        if (isMounted) setCoPoMatrix({});
       } finally {
         if (isMounted) setLoadingMatrix(false);
       }
@@ -1031,9 +999,9 @@ export default function MatrixMappingPage() {
     return () => {
       isMounted = false;
     };
-  }, [activeTab, selectedSubject, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, getActiveTenantSlug, getCoPoDraftKey, subjects]);
+  }, [activeTab, selectedSubject, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, getActiveTenantSlug, subjects]);
 
-  // 6. Load Saved PO-PEO Matrix for Selected Program / Branch
+  // 6. Load Saved PO-PEO Matrix for Selected Program / Branch (Direct from Server Database)
   useEffect(() => {
     if (activeTab !== 'po-peo') return;
 
@@ -1042,26 +1010,20 @@ export default function MatrixMappingPage() {
       setLoadingMatrix(true);
       const tenant = getActiveTenantSlug();
 
-      const draftKey = getPoPeoDraftKey();
-      let draftData: Record<string, Record<string, number>> | null = null;
-      if (typeof window !== 'undefined') {
-        try {
-          const raw = localStorage.getItem(draftKey);
-          if (raw) draftData = JSON.parse(raw);
-        } catch {}
-      }
-
       try {
+        const normSec = selectedSection !== 'all' ? normalizeSection(selectedSection) : '1';
         const q = new URLSearchParams({ tenant });
         if (selectedCourse !== 'all') q.append('courseCd', selectedCourse);
         if (selectedBranch !== 'all') q.append('branchCd', selectedBranch);
         if (selectedBatch !== 'all') q.append('batchYear', selectedBatch);
+        if (selectedSemester !== 'all') q.append('semCd', selectedSemester);
+        if (selectedSection !== 'all') q.append('section', normSec);
 
-        let res = await fetch(`${API_BASE}/po-peo-matrix?${q.toString()}`, { headers: getAuthHeaders() });
-        if (!res.ok) {
-          res = await fetch(`/api/v1/admin-master/po-peo-matrix?${q.toString()}`, { headers: getAuthHeaders() });
+        let res = await fetch(`${API_BASE}/po-peo-matrix?${q.toString()}`, { headers: getAuthHeaders() }).catch(() => null);
+        if (!res || !res.ok) {
+          res = await fetch(`/api/v1/admin-master/po-peo-matrix?${q.toString()}`, { headers: getAuthHeaders() }).catch(() => null);
         }
-        if (res.ok && isMounted) {
+        if (res?.ok && isMounted) {
           const json = await res.json();
           let serverMatrix: Record<string, Record<string, number>> = {};
           if (json.data?.matrix_data && typeof json.data.matrix_data === 'object') {
@@ -1071,23 +1033,13 @@ export default function MatrixMappingPage() {
               }
             });
           }
-
-          if (Object.keys(serverMatrix).length > 0) {
-            setPoPeoMatrix(serverMatrix);
-            if (typeof window !== 'undefined') {
-              localStorage.setItem(draftKey, JSON.stringify(serverMatrix));
-            }
-          } else if (draftData && Object.keys(draftData).length > 0) {
-            setPoPeoMatrix(draftData);
-          } else {
-            setPoPeoMatrix({});
-          }
-        } else if (draftData && isMounted) {
-          setPoPeoMatrix(draftData);
+          setPoPeoMatrix(serverMatrix);
+        } else if (isMounted) {
+          setPoPeoMatrix({});
         }
       } catch (err) {
-        console.error('[MatrixMapping] Error loading PO-PEO matrix:', err);
-        if (draftData && isMounted) setPoPeoMatrix(draftData);
+        console.error('[MatrixMapping] Error loading PO-PEO matrix from server database:', err);
+        if (isMounted) setPoPeoMatrix({});
       } finally {
         if (isMounted) setLoadingMatrix(false);
       }
@@ -1097,7 +1049,7 @@ export default function MatrixMappingPage() {
     return () => {
       isMounted = false;
     };
-  }, [activeTab, selectedCourse, selectedBranch, selectedBatch, getActiveTenantSlug, getPoPeoDraftKey]);
+  }, [activeTab, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, getActiveTenantSlug]);
 
   // Seeding Handlers
   const handleSeedPos = async () => {
@@ -1178,18 +1130,7 @@ export default function MatrixMappingPage() {
       const current = row[poCode] || 0;
       const nextVal = specificVal !== undefined ? specificVal : cycleCellValue(current);
       row[poCode] = nextVal;
-      const next = { ...prev, [coCode]: row };
-
-      // Immediately cache to localStorage draft so chosen numbers never disappear
-      const currentSub = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
-      const subCode = currentSub?.code || selectedSubject;
-      if (subCode && typeof window !== 'undefined') {
-        const draftKey = getCoPoDraftKey(subCode);
-        try {
-          localStorage.setItem(draftKey, JSON.stringify(next));
-        } catch {}
-      }
-      return next;
+      return { ...prev, [coCode]: row };
     });
   };
 
@@ -1199,15 +1140,7 @@ export default function MatrixMappingPage() {
       const current = row[peoCode] || 0;
       const nextVal = specificVal !== undefined ? specificVal : cycleCellValue(current);
       row[peoCode] = nextVal;
-      const next = { ...prev, [poCode]: row };
-
-      if (typeof window !== 'undefined') {
-        const draftKey = getPoPeoDraftKey();
-        try {
-          localStorage.setItem(draftKey, JSON.stringify(next));
-        } catch {}
-      }
-      return next;
+      return { ...prev, [poCode]: row };
     });
   };
 
@@ -1222,15 +1155,7 @@ export default function MatrixMappingPage() {
       });
     });
     setCoPoMatrix(updated);
-    const currentSub = subjects.find((s) => s.id === selectedSubject || s.code === selectedSubject);
-    const subCode = currentSub?.code || selectedSubject;
-    if (subCode && typeof window !== 'undefined') {
-      const draftKey = getCoPoDraftKey(subCode);
-      try {
-        localStorage.setItem(draftKey, JSON.stringify(updated));
-      } catch {}
-    }
-    showToast(`Set all CO-PO correlations to ${level === 0 ? 'No correlation (-)' : `Level ${level}`}`, 'info');
+    showToast(`Set all CO-PO correlations to ${level === 0 ? 'No correlation (-)' : `Level ${level}`}. Click "Save CO-PO Matrix" to persist to database.`, 'info');
   };
 
   const handleBulkSetPoPeo = (level: number) => {
@@ -1242,13 +1167,7 @@ export default function MatrixMappingPage() {
       });
     });
     setPoPeoMatrix(updated);
-    if (typeof window !== 'undefined') {
-      const draftKey = getPoPeoDraftKey();
-      try {
-        localStorage.setItem(draftKey, JSON.stringify(updated));
-      } catch {}
-    }
-    showToast(`Set all PO-PEO correlations to ${level === 0 ? 'No correlation (-)' : `Level ${level}`}`, 'info');
+    showToast(`Set all PO-PEO correlations to ${level === 0 ? 'No correlation (-)' : `Level ${level}`}. Click "Save PO-PEO Matrix" to persist to database.`, 'info');
   };
 
   // Effective List of Units / Fallback COs if subject has no units yet
@@ -1383,7 +1302,7 @@ export default function MatrixMappingPage() {
         branch_cd: selectedBranch !== 'all' ? selectedBranch : currentSub?.branch_cd || undefined,
         batch_year: selectedBatch !== 'all' ? parseInt(selectedBatch, 10) : 2024,
         sem_cd: selectedSemester !== 'all' ? selectedSemester : currentSub?.sem_cd || undefined,
-        section: selectedSection !== 'all' ? selectedSection : undefined,
+        section: selectedSection !== 'all' ? normalizeSection(selectedSection) : '1',
         subject_id: subId,
         subject_code: subCode,
         subject_name: currentSub?.name || 'Subject',
@@ -1413,13 +1332,7 @@ export default function MatrixMappingPage() {
       }
 
       if (res.ok) {
-        if (typeof window !== 'undefined') {
-          const draftKey = getCoPoDraftKey(subCode);
-          try {
-            localStorage.setItem(draftKey, JSON.stringify(coPoMatrix));
-          } catch {}
-        }
-        showToast(`CO - PO Correlation Matrix for [${subCode}] saved successfully!`, 'success');
+        showToast(`CO - PO Correlation Matrix for [${subCode}] saved successfully to database!`, 'success');
       } else {
         showToast('Failed to save matrix. Server returned an error.', 'error');
       }
@@ -1450,7 +1363,7 @@ export default function MatrixMappingPage() {
         branch_cd: selectedBranch !== 'all' ? selectedBranch : undefined,
         batch_year: selectedBatch !== 'all' ? parseInt(selectedBatch, 10) : 2024,
         sem_cd: selectedSemester !== 'all' ? selectedSemester : undefined,
-        section: selectedSection !== 'all' ? selectedSection : undefined,
+        section: selectedSection !== 'all' ? normalizeSection(selectedSection) : '1',
         matrix_data: {
           ...poPeoMatrix,
           averages: {
@@ -1477,13 +1390,7 @@ export default function MatrixMappingPage() {
       }
 
       if (res.ok) {
-        if (typeof window !== 'undefined') {
-          const draftKey = getPoPeoDraftKey();
-          try {
-            localStorage.setItem(draftKey, JSON.stringify(poPeoMatrix));
-          } catch {}
-        }
-        showToast('PO - PEO Correlation Matrix saved successfully!', 'success');
+        showToast('PO - PEO Correlation Matrix saved successfully to database!', 'success');
       } else {
         showToast('Failed to save PO-PEO matrix. Server returned an error.', 'error');
       }
@@ -1826,8 +1733,8 @@ export default function MatrixMappingPage() {
                     6. Section
                   </label>
                   <select
-                    value={selectedSection}
-                    onChange={(e) => handleSectionChange(e.target.value)}
+                    value={normalizeSection(selectedSection)}
+                    onChange={(e) => handleSectionChange(normalizeSection(e.target.value))}
                     className="w-full h-10 px-3 text-xs bg-[#F6F8FC] dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl focus:ring-2 focus:ring-[#5B4BFF] outline-none font-medium"
                   >
                     <option value="all">All Sections</option>

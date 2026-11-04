@@ -8,6 +8,7 @@
     "allowSyntheticDefaultImports": true,
     "target": "ES2021",
     "sourceMap": true,
+    "rootDir": "src",
     "outDir": "./dist",
     "baseUrl": "./",
     "skipLibCheck": true,
@@ -22,7 +23,9 @@
       "@database/*": ["src/database/*"],
       "@auth/*": ["src/auth/*"],
       "@tenants/*": ["src/tenants/*"],
-      "@users/*": ["src/users/*"]
+      "@users/*": ["src/users/*"],
+      "@mederp/shared": ["src/shared/index"],
+      "@mederp/shared/*": ["src/shared/*"]
     }
   },
   "include": ["src/**/*"]
