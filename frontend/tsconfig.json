@@ -20,8 +20,8 @@
     ],
     "paths": {
       "@/*": ["./src/*", "./*"],
-      "@mederp/shared": ["../shared/dist/index.d.ts"],
-      "@mederp/shared/*": ["../shared/dist/*"]
+      "@mederp/shared": ["./shared/index.ts", "../shared/dist/index.d.ts"],
+      "@mederp/shared/*": ["./shared/*", "../shared/dist/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],

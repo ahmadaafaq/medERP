@@ -35,10 +35,15 @@ const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
   webpack: (config) => {
+    const fs = require('fs');
+    const localShared = path.resolve(__dirname, 'shared/index.ts');
+    const fallbackShared = path.resolve(__dirname, '../shared/dist/index.js');
+    const resolvedShared = fs.existsSync(localShared) ? localShared : fallbackShared;
+
     config.resolve.alias = {
       ...config.resolve.alias,
-      '@mederp/shared$': path.resolve(__dirname, '../shared/dist/index.js'),
-      '@mederp/shared': path.resolve(__dirname, '../shared/dist/index.js'),
+      '@mederp/shared$': resolvedShared,
+      '@mederp/shared': fs.existsSync(localShared) ? path.resolve(__dirname, 'shared') : path.resolve(__dirname, '../shared/dist'),
     };
     return config;
   },
