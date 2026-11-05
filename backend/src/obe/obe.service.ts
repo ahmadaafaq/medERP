@@ -158,7 +158,17 @@ export class ObeService {
     const unitCode = dto.unit_code || dto.unitCode || 'CO1';
     const semester = dto.semester != null ? String(dto.semester).trim() : null;
     const rawBatchYear = dto.batch_year ?? dto.batchYear;
-    const batchYear = rawBatchYear != null && !isNaN(Number(rawBatchYear)) ? Number(rawBatchYear) : null;
+    let batchYear = rawBatchYear != null && !isNaN(Number(rawBatchYear)) ? Number(rawBatchYear) : null;
+    if (batchYear && batchYear < 100) {
+      const bRow = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT year FROM batches WHERE (code = $1 OR batch_cd = $1) AND year IS NOT NULL LIMIT 1`,
+        [String(batchYear)]
+      ).catch(() => []);
+      if (bRow.length && bRow[0].year && !isNaN(Number(bRow[0].year))) {
+        batchYear = Number(bRow[0].year);
+      }
+    }
     const courseCd = dto.course_cd || dto.courseCd || null;
     const branchCd = dto.branch_cd || dto.branchCd || null;
     const rawSec = dto.section != null ? String(dto.section).trim() : null;
@@ -744,6 +754,19 @@ export class ObeService {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
 
+    // Normalize batchYear if it's a code (e.g. 17 -> 2024)
+    let resolvedBatchYear = params.batchYear;
+    if (params.batchYear && params.batchYear < 100) {
+      const bRow = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT year FROM batches WHERE (code = $1 OR batch_cd = $1) AND year IS NOT NULL LIMIT 1`,
+        [String(params.batchYear)]
+      ).catch(() => []);
+      if (bRow.length && bRow[0].year && !isNaN(Number(bRow[0].year))) {
+        resolvedBatchYear = Number(bRow[0].year);
+      }
+    }
+
     // Load targets for this faculty
     let targetsQ = `SELECT * FROM obe_targets WHERE 1=1`;
     const targetsP: any[] = [];
@@ -767,8 +790,8 @@ export class ObeService {
       targetsP.push(params.branchCd);
       targetsQ += ` AND (branch_cd = $${targetsP.length} OR branch_cd IS NULL)`;
     }
-    if (params.batchYear) {
-      targetsP.push(params.batchYear);
+    if (resolvedBatchYear) {
+      targetsP.push(resolvedBatchYear);
       targetsQ += ` AND (batch_year = $${targetsP.length} OR batch_year IS NULL)`;
     }
     if (params.section && params.section !== 'all') {
@@ -777,14 +800,88 @@ export class ObeService {
       targetsQ += ` AND (section = $${targetsP.length} OR (section = 'Section A' AND $${targetsP.length} = '1') OR (section = '1' AND $${targetsP.length} = 'Section A') OR section IS NULL OR section = '')`;
     }
     targetsQ += ` ORDER BY subject_code, unit_code`;
-    const targets = await this.tenantSchemaService.queryInTenant(slug, targetsQ, targetsP).catch(() => []);
+    let targets: any[] = await this.tenantSchemaService.queryInTenant(slug, targetsQ, targetsP).catch(() => []);
+
+    // Fallback 1: If 0 targets found with strict facultyId, try without facultyId filter for this subject
+    if ((!targets || targets.length === 0) && params.facultyId && params.subjectCode) {
+      let fallbackQ = `SELECT * FROM obe_targets WHERE 1=1`;
+      const fallbackP: any[] = [];
+      fallbackP.push(params.subjectCode);
+      fallbackQ += ` AND (subject_code = $${fallbackP.length} OR subject_code IS NULL)`;
+      if (params.semester) {
+        fallbackP.push(params.semester);
+        fallbackQ += ` AND (semester = $${fallbackP.length} OR semester IS NULL)`;
+      }
+      if (params.courseCd) {
+        fallbackP.push(params.courseCd);
+        fallbackQ += ` AND (course_cd = $${fallbackP.length} OR course_cd IS NULL)`;
+      }
+      if (params.branchCd) {
+        fallbackP.push(params.branchCd);
+        fallbackQ += ` AND (branch_cd = $${fallbackP.length} OR branch_cd IS NULL)`;
+      }
+      if (resolvedBatchYear) {
+        fallbackP.push(resolvedBatchYear);
+        fallbackQ += ` AND (batch_year = $${fallbackP.length} OR batch_year IS NULL)`;
+      }
+      fallbackQ += ` ORDER BY subject_code, unit_code`;
+      const fallbackTargets = await this.tenantSchemaService.queryInTenant(slug, fallbackQ, fallbackP).catch(() => []);
+      if (fallbackTargets && fallbackTargets.length > 0) {
+        targets = fallbackTargets;
+      }
+    }
+
+    // Fallback 2: Auto-Default Baseline Targets (Level 2)
+    // If no custom targets exist for this subject, automatically synthesize standard CO1-CO5 baseline Level 2 targets
+    if ((!targets || targets.length === 0) && params.subjectCode) {
+      const subjectUnits = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT code, name, description FROM units WHERE subject_code = $1 AND (code ILIKE 'CO%' OR name ILIKE 'CO%') ORDER BY unit_order, code`,
+        [params.subjectCode]
+      ).catch(() => []);
+
+      const coList = subjectUnits.length > 0
+        ? subjectUnits.map((u: any) => ({ code: u.code || u.name, description: u.description || '' }))
+        : ['CO1', 'CO2', 'CO3', 'CO4', 'CO5'].map((c) => ({ code: c, description: '' }));
+
+      targets = coList.map((item) => ({
+        id: null,
+        faculty_id: params.facultyId || null,
+        subject_code: params.subjectCode,
+        unit_code: item.code,
+        target_level: 2, // Standard NBA Level 2 default
+        mark_threshold_pct: 40,
+        student_pass_pct_target: 60,
+        corrective_action: null,
+        is_default_baseline: true,
+      }));
+    } else if (targets && targets.length > 0 && params.subjectCode) {
+      // Ensure all 5 COs (CO1-CO5) are present in the list
+      const existingCos = new Set(targets.map((t: any) => t.unit_code));
+      for (const co of ['CO1', 'CO2', 'CO3', 'CO4', 'CO5']) {
+        if (!existingCos.has(co)) {
+          targets.push({
+            id: null,
+            faculty_id: params.facultyId || null,
+            subject_code: params.subjectCode,
+            unit_code: co,
+            target_level: 2,
+            mark_threshold_pct: 40,
+            student_pass_pct_target: 60,
+            corrective_action: null,
+            is_default_baseline: true,
+          });
+        }
+      }
+      targets.sort((a: any, b: any) => String(a.unit_code).localeCompare(String(b.unit_code)));
+    }
 
     // Load CO attainment results for same scope
     let attQ = `SELECT * FROM co_attainment_results WHERE 1=1`;
     const attP: any[] = [];
     if (params.subjectCode) { attP.push(params.subjectCode); attQ += ` AND (subject_code = $${attP.length} OR subject_code IS NULL)`; }
     if (params.semester) { attP.push(params.semester); attQ += ` AND (semester = $${attP.length} OR semester IS NULL)`; }
-    if (params.batchYear) { attP.push(params.batchYear); attQ += ` AND (batch_year = $${attP.length} OR batch_year IS NULL)`; }
+    if (resolvedBatchYear) { attP.push(resolvedBatchYear); attQ += ` AND (batch_year = $${attP.length} OR batch_year IS NULL)`; }
     if (params.courseCd) { attP.push(params.courseCd); attQ += ` AND (course_cd = $${attP.length} OR course_cd IS NULL)`; }
     if (params.branchCd) { attP.push(params.branchCd); attQ += ` AND (branch_cd = $${attP.length} OR branch_cd IS NULL)`; }
     if (params.section && params.section !== 'all') {

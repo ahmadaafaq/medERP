@@ -536,9 +536,13 @@ export default function FacultyObePage() {
               ) : targets.length === 0 ? (
                 <div style={{ padding: 60, textAlign: 'center', color: '#9ca3af' }}>
                   <Info size={36} style={{ margin: '0 auto 12px', color: '#5B4BFF', opacity: 0.8 }} />
-                  <p style={{ fontWeight: 700, fontSize: 16, color: '#1B1E28' }}>No Targets Declared for this Scope</p>
+                  <p style={{ fontWeight: 700, fontSize: 16, color: '#1B1E28' }}>
+                    {selectedSubject ? 'No Targets for this Scope' : 'Select a Subject Above'}
+                  </p>
                   <p style={{ fontSize: 13, marginTop: 4, maxWidth: 460, margin: '6px auto 16px', color: '#4E5969' }}>
-                    Select a subject above to set faculty target attainment levels (CO1 - CO5), or initialize baseline Level 2 targets.
+                    {selectedSubject
+                      ? 'Select baseline Level 2 targets below to initialize OBE gap analysis for this subject.'
+                      : 'Choose a course, branch, semester, and subject from the cascading filter above to view OBE targets and gap analysis.'}
                   </p>
                   {selectedSubject && (
                     <button
@@ -573,7 +577,16 @@ export default function FacultyObePage() {
                           <td style={{ padding: '14px 16px' }}>
                             <span style={{ background: '#e8f4ff', color: '#1e5fa8', padding: '3px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{row.unit_code}</span>
                           </td>
-                          <td style={{ padding: '14px 16px' }}><LevelBadge level={row.target_level} /></td>
+                          <td style={{ padding: '14px 16px' }}>
+                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                              <LevelBadge level={row.target_level} />
+                              {row.is_default_baseline && (
+                                <span style={{ fontSize: 10, background: '#f0efff', color: '#5B4BFF', padding: '2px 6px', borderRadius: 6, fontWeight: 600 }}>
+                                  Baseline
+                                </span>
+                              )}
+                            </div>
+                          </td>
                           <td style={{ padding: '14px 16px' }}>
                             {row.achieved_attainment !== null
                               ? <span style={{ fontWeight: 700, color: '#1B1E28' }}>{row.achieved_attainment.toFixed(2)} / 3</span>
@@ -622,7 +635,7 @@ export default function FacultyObePage() {
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 {row.corrective_action
                                   ? <span style={{ fontSize: 12, color: '#4E5969', fontStyle: 'italic' }}>{row.corrective_action}</span>
-                                  : !row.met
+                                  : !row.met && row.target_id
                                   ? <button onClick={() => setEditingAction({ id: row.target_id, value: '' })}
                                       style={{ fontSize: 12, color: '#5B4BFF', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}>
                                       + Add Action
@@ -660,21 +673,41 @@ export default function FacultyObePage() {
                     </button>
                   </div>
                   <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                    {['CO1', 'CO2', 'CO3', 'CO4', 'CO5'].map(co => (
-                      <div key={co} style={{ background: '#fff', borderRadius: 12, padding: '12px 16px', border: '1.5px solid #E7EAF3', display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <span style={{ fontWeight: 700, fontSize: 13, color: '#1B1E28' }}>{co}</span>
-                        <span style={{ fontSize: 12, color: '#6b7280' }}>Target Level:</span>
-                        {[1, 2, 3].map(lvl => (
-                          <button key={lvl} onClick={() => saveTarget(selectedSubject, co, lvl)}
-                            disabled={loading}
-                            style={{ width: 30, height: 30, borderRadius: 8, border: '1.5px solid #E7EAF3', background: '#fff', color: '#4E5969', fontWeight: 700, fontSize: 13, cursor: loading ? 'not-allowed' : 'pointer', transition: 'all 0.15s' }}
-                            onMouseEnter={e => { if (!loading) { (e.target as any).style.background = '#5B4BFF'; (e.target as any).style.color = '#fff'; } }}
-                            onMouseLeave={e => { if (!loading) { (e.target as any).style.background = '#fff'; (e.target as any).style.color = '#4E5969'; } }}>
-                            {lvl}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
+                    {['CO1', 'CO2', 'CO3', 'CO4', 'CO5'].map(co => {
+                      const currentTarget = targets.find((t: any) => t.unit_code === co);
+                      const activeLvl = currentTarget ? Number(currentTarget.target_level) : 2;
+                      return (
+                        <div key={co} style={{ background: '#fff', borderRadius: 12, padding: '12px 16px', border: '1.5px solid #E7EAF3', display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <span style={{ fontWeight: 700, fontSize: 13, color: '#1B1E28' }}>{co}</span>
+                          <span style={{ fontSize: 12, color: '#6b7280' }}>Target:</span>
+                          {[1, 2, 3].map(lvl => {
+                            const isSelected = activeLvl === lvl;
+                            return (
+                              <button
+                                key={lvl}
+                                onClick={() => saveTarget(selectedSubject, co, lvl)}
+                                disabled={loading}
+                                style={{
+                                  width: 32,
+                                  height: 32,
+                                  borderRadius: 8,
+                                  border: isSelected ? '1.5px solid #5B4BFF' : '1.5px solid #E7EAF3',
+                                  background: isSelected ? '#5B4BFF' : '#fff',
+                                  color: isSelected ? '#fff' : '#4E5969',
+                                  fontWeight: 700,
+                                  fontSize: 13,
+                                  cursor: loading ? 'not-allowed' : 'pointer',
+                                  transition: 'all 0.15s',
+                                  boxShadow: isSelected ? '0 2px 6px rgba(91,75,255,0.3)' : 'none',
+                                }}
+                              >
+                                {lvl}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
