@@ -55,6 +55,7 @@ export default function DQACQPApprovalsPage() {
   const [postponeModalOpen, setPostponeModalOpen] = useState(false);
   const [postponePaper, setPostponePaper] = useState<any | null>(null);
   const [postponeReason, setPostponeReason] = useState('');
+  const [postponeDate, setPostponeDate] = useState('');
   const [postponeLoading, setPostponeLoading] = useState(false);
 
   const loadPapers = async () => {
@@ -285,6 +286,7 @@ export default function DQACQPApprovalsPage() {
   const handleOpenPostpone = (paper: any) => {
     setPostponePaper(paper);
     setPostponeReason(paper.dqac_remarks || 'Scheduled examination postponed by DQAC quality assurance.');
+    setPostponeDate(paper.exam_date ? new Date(paper.exam_date).toISOString().slice(0, 10) : '');
     setPostponeModalOpen(true);
   };
 
@@ -296,6 +298,7 @@ export default function DQACQPApprovalsPage() {
         paperId: postponePaper.id,
         action: 'postpone',
         remarks: postponeReason || 'Examination postponed by DQAC quality assurance.',
+        examDate: postponeDate || undefined,
         version: Number(postponePaper.version || 1),
       });
       if (data && data.success !== false) {
@@ -558,6 +561,21 @@ export default function DQACQPApprovalsPage() {
               >
                 ✕
               </button>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
+                <span>📅 New Rescheduled Exam Date (Optional):</span>
+                {postponePaper.exam_date && (
+                  <span className="text-[11px] text-slate-400">Current: {new Date(postponePaper.exam_date).toLocaleDateString()}</span>
+                )}
+              </label>
+              <input
+                type="date"
+                value={postponeDate}
+                onChange={(e) => setPostponeDate(e.target.value)}
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+              />
             </div>
 
             <div className="space-y-1.5">

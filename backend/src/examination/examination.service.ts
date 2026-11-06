@@ -2120,30 +2120,36 @@ export class ExaminationService {
         ).catch(() => null);
       }
       return res[0] || { success: true, status: 'DQAC_APPROVED' };
-    } else if (dto.action === 'postpone') {
+    } else if (dto.action === 'postpone' || dto.action === 'reschedule') {
+      const newExamDate = dto.examDate || dto.newExamDate || dto.exam_date || null;
       const res = await this.tenantSchemaService.queryInTenant(
         slug,
         `UPDATE examination_papers 
-         SET status = 'POSTPONED', 
-             dqac_status = 'POSTPONED',
-             dqac_remarks = COALESCE($1, dqac_remarks),
+         SET status = CASE WHEN $1 = 'reschedule' THEN status ELSE 'POSTPONED' END, 
+             dqac_status = CASE WHEN $1 = 'reschedule' THEN dqac_status ELSE 'POSTPONED' END,
+             exam_date = COALESCE($2, exam_date),
+             dqac_remarks = COALESCE($3, dqac_remarks),
              updated_at = NOW() 
-         WHERE id::text = $2 RETURNING *`,
-        [actionRemarks || 'Examination postponed by DQAC.', dto.paperId],
+         WHERE id::text = $4 RETURNING *`,
+        [dto.action, newExamDate ? new Date(newExamDate) : null, actionRemarks || (dto.action === 'reschedule' ? 'Examination rescheduled by DQAC.' : 'Examination postponed by DQAC.'), dto.paperId],
       );
       if (paper.created_by) {
+        const notifTitle = dto.action === 'reschedule' ? 'Examination Rescheduled by DQAC' : 'Examination Postponed by DQAC';
+        const notifMsg = newExamDate
+          ? `DQAC has ${dto.action === 'reschedule' ? 'rescheduled' : 'postponed and rescheduled'} examination paper "${paper.name || paper.code}" to ${new Date(newExamDate).toLocaleDateString()}. Directive: ${actionRemarks || 'No directives.'}`
+          : `DQAC has postponed examination paper "${paper.name || paper.code}". Reason: ${actionRemarks || 'Examination rescheduled by Quality Assurance Cell.'}`;
         await this.tenantSchemaService.queryInTenant(
           slug,
           `INSERT INTO notifications (recipient_id, title, message, type, category, is_read, created_at)
            VALUES ($1, $2, $3, 'warning', 'assessment', false, NOW())`,
           [
             String(paper.created_by),
-            'Examination Postponed by DQAC',
-            `DQAC has postponed examination paper "${paper.name || paper.code}". Reason: ${actionRemarks || 'Examination rescheduled by Quality Assurance Cell.'}`,
+            notifTitle,
+            notifMsg,
           ],
         ).catch(() => null);
       }
-      return res[0] || { success: true, status: 'POSTPONED' };
+      return res[0] || { success: true, status: dto.action === 'reschedule' ? paper.status : 'POSTPONED' };
     } else {
       // Changes requested or rejected
       const newStatus = dto.action === 'reject' ? 'REJECTED' : 'CHANGES_REQUESTED';

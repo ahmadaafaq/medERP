@@ -38,6 +38,15 @@ import {
   Target,
   AlertTriangle,
   PauseCircle,
+  ChevronDown,
+  ChevronUp,
+  Maximize2,
+  Minimize2,
+  Calendar,
+  CheckCircle2,
+  Info,
+  Sparkles,
+  Check,
 } from 'lucide-react';
 
 interface SubQuestion {
@@ -473,6 +482,19 @@ export default function FacultyAssessmentMasterPage() {
   const [paperTotalMarks, setPaperTotalMarks] = useState<number | ''>('');
   const [paperSet, setPaperSet] = useState<string>('Set A');
   const [targetSections, setTargetSections] = useState<string[]>(['All']);
+  const [examDate, setExamDate] = useState<string>('');
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
+
+  const toggleSectionCollapse = (secId: string) => {
+    setCollapsedSections(prev => ({ ...prev, [secId]: !prev[secId] }));
+  };
+  const expandAllSections = () => setCollapsedSections({});
+  const collapseAllSections = () => {
+    const allCol: Record<string, boolean> = {};
+    paperSections.forEach(s => { allCol[s.id] = true; });
+    setCollapsedSections(allCol);
+  };
   const [designedPapers, setDesignedPapers] = useState<any[]>([]);
 
   // Pending custom marks and subquestion marks in question bank drawer before adding
@@ -889,6 +911,8 @@ export default function FacultyAssessmentMasterPage() {
     setPaperDuration(paper.duration_minutes ?? paper.duration_mins ?? '');
     setPaperTotalMarks(paper.max_marks ?? '');
     setPaperSet(paper.paper_set || paper.paperSet || 'Set A');
+    const rawExamDate = paper.exam_date || paper.examDate;
+    setExamDate(rawExamDate ? new Date(rawExamDate).toISOString().slice(0, 10) : '');
 
     let targetSecs = paper.target_sections || paper.targetSections || ['All'];
     if (typeof targetSecs === 'string') {
@@ -986,6 +1010,8 @@ export default function FacultyAssessmentMasterPage() {
     setPaperDuration(Number(paper.duration_minutes || paper.duration_mins || 60));
     setPaperTotalMarks(Number(paper.max_marks || 40));
     setPaperSet(nextSet);
+    const origDate = paper.exam_date || paper.examDate;
+    setExamDate(origDate ? new Date(origDate).toISOString().slice(0, 10) : '');
 
     // If original was for Section A, suggest Section B; otherwise default to All
     const prevSecs = Array.isArray(paper.target_sections) ? paper.target_sections : ['All'];
@@ -1098,6 +1124,21 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   const handleToggleQuestionCheck = (secId: string, qId: string) => {
+    const targetSection = paperSections.find(s => s.id === secId);
+    const rawTargetM = targetSection?.targetQuestionsCount;
+    const hasTargetM = rawTargetM !== '' && rawTargetM !== undefined && rawTargetM !== null && !isNaN(Number(rawTargetM)) && Number(rawTargetM) > 0;
+    const targetM = hasTargetM ? Number(rawTargetM) : 999;
+    const currentCount = targetSection ? targetSection.questions.length : 0;
+    const currentChecked = secCheckedQIds[secId] || [];
+
+    if (!currentChecked.includes(qId) && hasTargetM && (currentCount + currentChecked.length) >= targetM) {
+      setAlert({
+        type: 'error',
+        message: `⚠️ Section target capacity reached (${targetM}/${targetM} questions). To add this question, please remove an existing question from ${targetSection?.name || 'Section'} first.`
+      });
+      return;
+    }
+
     setSecCheckedQIds(prev => {
       const current = prev[secId] || [];
       const updated = current.includes(qId) ? current.filter(id => id !== qId) : [...current, qId];
@@ -1135,6 +1176,23 @@ export default function FacultyAssessmentMasterPage() {
   const handleBatchAddQuestionsToSection = (secId: string) => {
     const checkedIds = secCheckedQIds[secId] || [];
     if (checkedIds.length === 0) return;
+
+    const targetSection = paperSections.find(s => s.id === secId);
+    if (!targetSection) return;
+
+    const rawTargetM = targetSection.targetQuestionsCount;
+    const hasTargetM = rawTargetM !== '' && rawTargetM !== undefined && rawTargetM !== null && !isNaN(Number(rawTargetM)) && Number(rawTargetM) > 0;
+    const targetM = hasTargetM ? Number(rawTargetM) : 999;
+    const currentCount = targetSection.questions.length;
+    const remainingSlots = hasTargetM ? Math.max(0, targetM - currentCount) : 999;
+
+    if (hasTargetM && remainingSlots <= 0) {
+      setAlert({
+        type: 'error',
+        message: `⚠️ Section target reached (${targetM}/${targetM} questions). To add a new question, please remove an existing question from this section first or increase planned questions count.`
+      });
+      return;
+    }
 
     const targetQuestions = masterBankQuestions.filter(q => checkedIds.includes(q.id));
 
@@ -1183,6 +1241,18 @@ export default function FacultyAssessmentMasterPage() {
   };
 
   const handleSingleAddQuestionToSection = (secId: string, targetQ: QuestionItem) => {
+    const targetSection = paperSections.find(s => s.id === secId);
+    if (targetSection) {
+      const rawTargetM = targetSection.targetQuestionsCount;
+      const hasTargetM = rawTargetM !== '' && rawTargetM !== undefined && rawTargetM !== null && !isNaN(Number(rawTargetM)) && Number(rawTargetM) > 0;
+      if (hasTargetM && targetSection.questions.length >= Number(rawTargetM)) {
+        setAlert({
+          type: 'error',
+          message: `⚠️ Section target reached (${rawTargetM}/${rawTargetM} questions). To add this question, please remove an existing question from this section first.`
+        });
+        return;
+      }
+    }
     setPaperSections(prev => prev.map(sec => {
       if (sec.id !== secId) return sec;
       if (sec.questions.some((q: any) => q.questionId === targetQ.id)) return sec;
@@ -2421,6 +2491,20 @@ export default function FacultyAssessmentMasterPage() {
       }
       const statusToSave = targetStatus || currentPaper?.status || 'DRAFT';
 
+      // Required Exam Date Validation
+      if (!examDate) {
+        setAlert({
+          type: 'error',
+          message: '⚠️ Examination Date is required. Please choose the scheduled date for this paper before saving or submitting.'
+        });
+        const el = document.getElementById('paper-exam-date-input');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          el.focus();
+        }
+        return;
+      }
+
       // Resolve Department dynamically matching the selected course/branch
       const courseCd = academicCascade?.course?.course_cd || '';
       const branchCd = academicCascade?.branch?.branch_cd || '';
@@ -2444,6 +2528,8 @@ export default function FacultyAssessmentMasterPage() {
         maxMarks: Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40,
         passingMarks: Math.round((Number(computedEffectiveMax > 0 ? computedEffectiveMax : paperTotalMarks) || 40) * 0.33),
         durationMinutes: Number(paperDuration) || 60,
+        examDate: examDate ? new Date(examDate).toISOString() : null,
+        exam_date: examDate ? new Date(examDate).toISOString() : null,
         type: paperType,
         sections: paperSections,
         status: statusToSave,
@@ -3295,7 +3381,7 @@ export default function FacultyAssessmentMasterPage() {
                       if (typeof rawSecs === 'string') {
                         try { rawSecs = JSON.parse(rawSecs); } catch (e) { rawSecs = []; }
                       }
-                      const secCount = Array.isArray(rawSecs) && rawSecs.length > 0 ? rawSecs.length : 3;
+                      const secCount = Array.isArray(rawSecs) ? rawSecs.length : 0;
 
                       return (
                         <div
@@ -3667,30 +3753,30 @@ export default function FacultyAssessmentMasterPage() {
                     </div>
 
                     {/* Paper Header Inputs */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-7 gap-3.5">
                       <div className="lg:col-span-2">
                         <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">
-                          Exam Paper Title
+                          Exam Paper Title *
                         </label>
                         <input
                           type="text"
                           value={paperTitle}
                           onChange={(e) => setPaperTitle(e.target.value)}
                           placeholder="Enter exam paper title (e.g. Sessional Exam)..."
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-sm transition-all"
                         />
                       </div>
 
                       <div>
                         <label className="block text-xs font-black uppercase text-[#1B1E28] dark:text-white mb-1.5">
-                          Paper Code
+                          Paper Code *
                         </label>
                         <input
                           type="text"
                           value={paperCode}
                           onChange={(e) => setPaperCode(e.target.value)}
                           placeholder="e.g. BCS503-2026-T1"
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-mono font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-mono font-black text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-sm transition-all"
                         />
                       </div>
 
@@ -3702,7 +3788,7 @@ export default function FacultyAssessmentMasterPage() {
                         <select
                           value={paperSet}
                           onChange={(e) => setPaperSet(e.target.value)}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#F36C21]/50 text-[#F36C21] font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#F36C21]/50 text-[#F36C21] font-black text-xs focus:ring-2 focus:ring-[#F36C21] focus:border-[#F36C21] outline-none shadow-sm transition-all"
                         >
                           <option value="Set A">📑 Set A</option>
                           <option value="Set B">📑 Set B</option>
@@ -3723,7 +3809,7 @@ export default function FacultyAssessmentMasterPage() {
                             const val = e.target.value;
                             setTargetSections(val === 'All' ? ['All'] : [val]);
                           }}
-                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/50 text-[#5B4BFF] font-black text-xs focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 shadow-sm"
+                          className="w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/50 text-[#5B4BFF] font-black text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-sm transition-all"
                         >
                           <option value="All">🌐 All Sections (Common Exam)</option>
                           <option value="Section A">🎯 Section A Only</option>
@@ -3733,6 +3819,28 @@ export default function FacultyAssessmentMasterPage() {
                         </select>
                       </div>
 
+                      {/* Required Exam Date Selector */}
+                      <div>
+                        <label className="block text-xs font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1.5 flex items-center gap-1">
+                          <span>📅</span>
+                          <span>Exam Date *</span>
+                        </label>
+                        <input
+                          id="paper-exam-date-input"
+                          type="date"
+                          required
+                          value={examDate}
+                          onChange={(e) => setExamDate(e.target.value)}
+                          className={`w-full px-3.5 py-2.5 rounded-xl bg-white dark:bg-slate-900 border text-[#1B1E28] dark:text-white font-bold text-xs focus:ring-2 focus:ring-[#00C48C] focus:border-[#00C48C] outline-none shadow-sm transition-all ${
+                            !examDate ? 'border-[#00C48C]/60 ring-1 ring-[#00C48C]/20' : 'border-[#00C48C]'
+                          }`}
+                        />
+                        {!examDate && (
+                          <span className="text-[9.5px] text-[#F04438] font-bold block mt-1">Required to schedule</span>
+                        )}
+                      </div>
+
+                      {/* Time & Marks */}
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
                           <label className="text-xs font-black uppercase text-[#1B1E28] dark:text-slate-300">
@@ -3745,8 +3853,8 @@ export default function FacultyAssessmentMasterPage() {
                             title="Duration Minutes"
                             value={paperDuration === '' ? '' : paperDuration}
                             onChange={(e) => setPaperDuration(e.target.value === '' ? '' : Number(e.target.value))}
-                            className="w-full px-2 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#F36C21] shadow-sm"
-                            placeholder="Mins (e.g. 60)"
+                            className="w-full px-2 py-2.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-sm transition-all"
+                            placeholder="Mins (60)"
                           />
                           <div className="relative">
                             <input
@@ -3767,10 +3875,11 @@ export default function FacultyAssessmentMasterPage() {
 
                     {/* Dynamic Paper Sections List */}
                     <div className="space-y-6 pt-4 border-t border-[#E7EAF3] dark:border-slate-800">
+                      {/* Sections Top Bar */}
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-[#EEF2FF] dark:bg-slate-800/90 p-4 rounded-2xl border border-[#5B4BFF]/30">
                         <div>
                           <h4 className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider flex items-center gap-2">
-                            <span>📂</span> EXAMINATION PAPER SECTIONS ({paperSections.length} SECTIONS CONFIGURED)
+                            <span>📂</span> EXAMINATION PAPER SECTIONS ({paperSections.length} {paperSections.length === 1 ? 'SECTION' : 'SECTIONS'} CONFIGURED)
                           </h4>
                           <p className="text-[11px] text-[#4E5969] dark:text-slate-300 font-medium mt-0.5">
                             Manage Section A (MCQs), Section B (Descriptive), Section C (Practical / OSPE). Click Add New Section to create more sections.
@@ -3780,8 +3889,26 @@ export default function FacultyAssessmentMasterPage() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <button
                             type="button"
+                            onClick={expandAllSections}
+                            className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 text-[#2D2575] dark:text-white border border-[#E7EAF3] dark:border-slate-700 font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                            title="Expand all sections"
+                          >
+                            <Maximize2 className="w-3.5 h-3.5 text-[#5B4BFF]" />
+                            <span>Expand All</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={collapseAllSections}
+                            className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 hover:bg-slate-100 text-[#2D2575] dark:text-white border border-[#E7EAF3] dark:border-slate-700 font-black text-xs shadow-xs transition-all flex items-center gap-1.5 cursor-pointer"
+                            title="Minimize all sections"
+                          >
+                            <Minimize2 className="w-3.5 h-3.5 text-[#F36C21]" />
+                            <span>Minimize All</span>
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => setShowScoringSimulation(true)}
-                            className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap"
+                            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                             title="Simulate paper scoring and choice group rules"
                           >
                             <span>📊</span>
@@ -3790,15 +3917,18 @@ export default function FacultyAssessmentMasterPage() {
                           <button
                             type="button"
                             onClick={handleAddSection}
-                            className="px-4 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap"
+                            className="px-4 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all flex items-center gap-1.5 whitespace-nowrap cursor-pointer"
                           >
                             <span>➕</span>
-                            <span>Add New Section (A, B, C...)</span>
+                            <span>Add New Section</span>
                           </button>
                         </div>
                       </div>
 
                       {paperSections.map((sec, secIdx) => {
+                        const isCollapsed = Boolean(collapsedSections[sec.id]);
+                        const isActive = activeSectionId === sec.id;
+
                         const secMarks = sec.questions.reduce((acc: number, q: any) => {
                           const subQs = q.subQuestions || q.sub_questions || [];
                           if (subQs.length > 0) {
@@ -3810,6 +3940,7 @@ export default function FacultyAssessmentMasterPage() {
                         const rawTargetM = sec.targetQuestionsCount;
                         const hasTargetM = rawTargetM !== '' && rawTargetM !== undefined && rawTargetM !== null && !isNaN(Number(rawTargetM)) && Number(rawTargetM) > 0;
                         const targetM = hasTargetM ? Number(rawTargetM) : sec.questions.length;
+                        const isCapacityReached = hasTargetM && sec.questions.length >= targetM;
 
                         const isChoiceMode = sec.attemptRule === 'CHOICE';
                         const rawReqN = sec.requiredToAttempt;
@@ -3833,7 +3964,6 @@ export default function FacultyAssessmentMasterPage() {
                           const countToTake = isChoiceMode && requiredN > 0 ? Math.min(requiredN, marksList.length) : marksList.length;
                           effectiveSecMarks = marksList.slice(0, countToTake).reduce((acc: number, v: number) => acc + v, 0);
                         } else {
-                          // If questions are not added yet, only compute planned weightage if user specifically typed planned values
                           if (isChoiceMode && hasReqN && hasMarksPerQ) {
                             effectiveSecMarks = requiredN * marksPerQ;
                           } else if (!isChoiceMode && hasTargetM && hasMarksPerQ) {
@@ -3847,20 +3977,51 @@ export default function FacultyAssessmentMasterPage() {
                         }
 
                         return (
-                          <div key={sec.id} className="p-5 rounded-[22px] bg-[#F8FAFC] dark:bg-slate-800/80 border border-[#E7EAF3] dark:border-slate-700 space-y-4">
+                          <div
+                            key={sec.id}
+                            id={`section-container-${sec.id}`}
+                            tabIndex={0}
+                            onFocus={() => setActiveSectionId(sec.id)}
+                            className={`p-5 rounded-[22px] transition-all duration-200 border ${
+                              isActive
+                                ? 'bg-white dark:bg-slate-900 border-[#5B4BFF] ring-2 ring-[#5B4BFF]/25 shadow-md'
+                                : 'bg-[#F8FAFC] dark:bg-slate-800/80 border-[#E7EAF3] dark:border-slate-700 shadow-soft'
+                            } space-y-4`}
+                          >
                             {/* Section Header Controls */}
                             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-700 pb-3">
-                              <div className="flex items-center gap-3 flex-1 flex-wrap">
+                              <div className="flex items-center gap-2.5 flex-1 flex-wrap">
+                                {/* Accordion Toggle Button */}
+                                <button
+                                  type="button"
+                                  onClick={() => toggleSectionCollapse(sec.id)}
+                                  className="p-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF] text-[#5B4BFF] shadow-xs cursor-pointer transition-all flex items-center gap-1.5"
+                                  title={isCollapsed ? 'Expand Section Details' : 'Minimize / Collapse Section'}
+                                >
+                                  {isCollapsed ? (
+                                    <ChevronDown className="w-4 h-4 text-[#5B4BFF]" />
+                                  ) : (
+                                    <ChevronUp className="w-4 h-4 text-[#F36C21]" />
+                                  )}
+                                  <span className="text-[11px] font-black uppercase text-[#2D2575] dark:text-white pr-1">
+                                    {isCollapsed ? 'Expand' : 'Minimize'}
+                                  </span>
+                                </button>
+
+                                {/* Section Name Input with Focus Ring */}
                                 <input
                                   type="text"
                                   value={sec.name}
                                   onChange={(e) => handleUpdateSectionMeta(sec.id, 'name', e.target.value)}
-                                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs uppercase w-44 focus:outline-none focus:border-[#F36C21]"
+                                  placeholder="Section Name"
+                                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs uppercase w-36 focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
                                 />
+
+                                {/* Section Type Selector */}
                                 <select
                                   value={sec.type}
                                   onChange={(e) => handleUpdateSectionMeta(sec.id, 'type', e.target.value)}
-                                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs focus:outline-none focus:border-[#F36C21]"
+                                  className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
                                 >
                                   <option value="DESC">Section Type: Descriptive / Theory</option>
                                   <option value="MCQ">Section Type: MCQs</option>
@@ -3869,16 +4030,19 @@ export default function FacultyAssessmentMasterPage() {
                               </div>
 
                               <div className="flex items-center gap-2 flex-wrap">
-                                <button
-                                  type="button"
-                                  onClick={() => setBlueprintModalSecId(sec.id)}
-                                  className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] hover:from-[#241d63] hover:to-[#4e3eff] text-white font-black text-xs shadow-sm flex items-center gap-1 cursor-pointer transition-all"
-                                  title="Auto-generate questions from blueprint rules"
-                                >
-                                  <span>✨</span>
-                                  <span>Blueprint Auto-Gen</span>
-                                </button>
+                                {!isCollapsed && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setBlueprintModalSecId(sec.id)}
+                                    className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-[#2D2575] to-[#5B4BFF] hover:from-[#241d63] hover:to-[#4e3eff] text-white font-black text-xs shadow-xs flex items-center gap-1.5 cursor-pointer transition-all"
+                                    title="Auto-generate questions from blueprint rules"
+                                  >
+                                    <Sparkles className="w-3.5 h-3.5 text-amber-300" />
+                                    <span>Blueprint Auto-Gen</span>
+                                  </button>
+                                )}
 
+                                {/* Move Up / Down Buttons */}
                                 <div className="flex items-center bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 rounded-xl overflow-hidden shadow-xs">
                                   <button
                                     type="button"
@@ -3900,6 +4064,18 @@ export default function FacultyAssessmentMasterPage() {
                                   </button>
                                 </div>
 
+                                {/* Questions Counter Pill */}
+                                <span className={`text-xs font-black px-2.5 py-1 rounded-full border flex items-center gap-1 ${
+                                  isCapacityReached
+                                    ? 'bg-emerald-50 dark:bg-emerald-950/50 text-[#00C48C] border-[#00C48C]/40'
+                                    : 'bg-white dark:bg-slate-900 text-[#1B1E28] dark:text-slate-200 border-[#E7EAF3] dark:border-slate-700'
+                                }`}>
+                                  <span>Questions:</span>
+                                  <span className="font-mono">{sec.questions.length}{hasTargetM ? `/${targetM}` : ''}</span>
+                                  {isCapacityReached && <CheckCircle2 className="w-3.5 h-3.5 text-[#00C48C]" />}
+                                </span>
+
+                                {/* Section Weightage Pill */}
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="text-xs font-black text-[#5B4BFF] bg-[#EEF2FF] dark:bg-indigo-950/60 border border-[#5B4BFF]/30 px-3 py-1 rounded-full flex items-center gap-1.5">
                                     <span>Weightage:</span>
@@ -3922,7 +4098,8 @@ export default function FacultyAssessmentMasterPage() {
                                   <button
                                     type="button"
                                     onClick={() => handleRemoveSection(sec.id)}
-                                    className="text-xs text-[#F04438] hover:text-rose-600 font-extrabold px-2.5 py-1 rounded-lg bg-[#FEECEB] border border-[#F04438]/20"
+                                    className="text-xs text-[#F04438] hover:text-rose-600 font-extrabold px-2.5 py-1 rounded-lg bg-[#FEECEB] border border-[#F04438]/20 cursor-pointer"
+                                    title="Remove Section"
                                   >
                                     ✕ Remove
                                   </button>
@@ -3930,1096 +4107,1178 @@ export default function FacultyAssessmentMasterPage() {
                               </div>
                             </div>
 
-                            {/* Section Description */}
-                            <div>
-                              <input
-                                type="text"
-                                value={sec.description || ''}
-                                placeholder="Section instructions or description (optional)..."
-                                onChange={(e) => handleUpdateSectionMeta(sec.id, 'description', e.target.value)}
-                                className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-slate-200 font-bold text-xs focus:outline-none focus:border-[#F36C21]"
-                              />
-                            </div>
-
-                            {/* Practical Marks Input for Practical Section */}
-                            {sec.type === 'PRACTICAL' && (
-                              <div className="p-4 rounded-2xl bg-[#F5F3FF] dark:bg-purple-950/20 border border-[#7867FF]/30 flex items-center justify-between gap-4">
-                                <div>
-                                  <h4 className="text-xs font-black text-[#7867FF]">🧪 Practical &amp; OSPE Viva Voce Station Marks</h4>
-                                  <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">Set overall practical performance and table viva allocation marks</p>
+                            {/* Accordion Collapsed State View */}
+                            {isCollapsed ? (
+                              <div
+                                onClick={() => toggleSectionCollapse(sec.id)}
+                                className="p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-dashed border-[#5B4BFF]/40 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 cursor-pointer hover:border-[#5B4BFF] hover:bg-[#EEF2FF]/20 transition-all shadow-xs"
+                              >
+                                <div className="flex items-center gap-3 flex-wrap">
+                                  <span className="font-mono text-xs font-black text-[#5B4BFF] bg-[#EEF2FF] px-2 py-0.5 rounded-md">
+                                    {sec.name}
+                                  </span>
+                                  <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-200">
+                                    {sec.description || 'Section configured. Click to expand and edit questions.'}
+                                  </span>
+                                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                    {sec.type}
+                                  </span>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-300">Practical Marks:</span>
-                                  <input
-                                    type="number"
-                                    value={sec.practicalMarks || ''}
-                                    onChange={(e) => handleUpdateSectionMeta(sec.id, 'practicalMarks', e.target.value === '' ? '' : Number(e.target.value))}
-                                    placeholder="e.g. 20"
-                                    className="w-24 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#7867FF]/50 text-[#7867FF] font-black text-xs text-center"
-                                  />
+                                <div className="flex items-center gap-3 shrink-0">
+                                  <span className="text-xs font-bold text-[#00C48C]">
+                                    {sec.questions.length} question(s) added {hasTargetM ? `(${Math.round((sec.questions.length / targetM) * 100)}% capacity)` : ''}
+                                  </span>
+                                  <span className="text-xs font-black text-[#5B4BFF] flex items-center gap-1 bg-[#EEF2FF] px-2.5 py-1 rounded-lg">
+                                    <span>Expand Section</span>
+                                    <ChevronDown className="w-3.5 h-3.5" />
+                                  </span>
                                 </div>
                               </div>
-                            )}
-
-                            {/* Section Question Planning & Attempt Configuration Card */}
-                            <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-xs space-y-3.5">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7EAF3] dark:border-slate-800 pb-2.5">
-                                <span className="text-xs font-black text-[#2D2575] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
-                                  <span>⚙️</span> Section Question Planning &amp; Attempt Rules
-                                </span>
-                                <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
-                                  Questions in Section: <span className="text-[#5B4BFF] font-black">{sec.questions.length}</span>
-                                  {hasTargetM ? ` / ${targetM} planned` : ' questions added'}
-                                </span>
-                              </div>
-
-                              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                {/* Planned Question Count M */}
+                            ) : (
+                              <>
+                                {/* Section Description */}
                                 <div>
-                                  <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                    1. Questions to Add in Section (M)
-                                  </label>
                                   <input
-                                    type="number"
-                                    min={1}
-                                    max={100}
-                                    value={sec.targetQuestionsCount !== undefined && sec.targetQuestionsCount !== null ? sec.targetQuestionsCount : ''}
-                                    onChange={(e) => handleUpdateSectionMeta(sec.id, 'targetQuestionsCount', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
-                                    className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#5B4BFF]"
-                                    placeholder="e.g. 5 (or leave blank)"
+                                    type="text"
+                                    value={sec.description || ''}
+                                    placeholder="Section instructions or description (optional)..."
+                                    onChange={(e) => handleUpdateSectionMeta(sec.id, 'description', e.target.value)}
+                                    className="w-full px-3.5 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-slate-200 font-bold text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
                                   />
-                                  <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-medium">Planned question count (or leave blank)</span>
                                 </div>
 
-                                {/* Marks Per Question Mode (Condition-Based) */}
-                                <div>
-                                  <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                    2. Marks Allocation Condition *
-                                  </label>
-                                  <div className="grid grid-cols-2 gap-1 p-0.5 bg-[#F8FAFC] dark:bg-slate-800 rounded-xl border border-[#E7EAF3] dark:border-slate-700 mb-1.5">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUpdateSectionMeta(sec.id, 'marksCondition', 'UNIFORM')}
-                                      className={`py-1 px-1.5 rounded-lg text-[10px] font-black transition-all ${sec.marksCondition !== 'VARIABLE'
-                                          ? 'bg-[#5B4BFF] text-white shadow-xs'
-                                          : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                      Uniform Marks
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUpdateSectionMeta(sec.id, 'marksCondition', 'VARIABLE')}
-                                      className={`py-1 px-1.5 rounded-lg text-[10px] font-black transition-all ${sec.marksCondition === 'VARIABLE'
-                                          ? 'bg-[#F36C21] text-white shadow-xs'
-                                          : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                      Variable / Subparts
-                                    </button>
-                                  </div>
-
-                                  {sec.marksCondition === 'VARIABLE' ? (
-                                    <div className="space-y-1">
+                                {/* Practical Marks Input for Practical Section */}
+                                {sec.type === 'PRACTICAL' && (
+                                  <div className="p-4 rounded-2xl bg-[#F5F3FF] dark:bg-purple-950/20 border border-[#7867FF]/30 flex items-center justify-between gap-4">
+                                    <div>
+                                      <h4 className="text-xs font-black text-[#7867FF]">🧪 Practical &amp; OSPE Viva Voce Station Marks</h4>
+                                      <p className="text-[11px] text-[#4E5969] dark:text-slate-400 font-medium">Set overall practical performance and table viva allocation marks</p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-300">Practical Marks:</span>
                                       <input
                                         type="number"
-                                        min={1}
-                                        value={sec.defaultMarksPerQuestion !== undefined && sec.defaultMarksPerQuestion !== null ? sec.defaultMarksPerQuestion : ''}
-                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'defaultMarksPerQuestion', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
-                                        className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#5B4BFF]"
-                                        placeholder="Default pre-fill (optional)"
+                                        value={sec.practicalMarks || ''}
+                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'practicalMarks', e.target.value === '' ? '' : Number(e.target.value))}
+                                        placeholder="e.g. 20"
+                                        className="w-24 px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-[#7867FF]/50 text-[#7867FF] font-black text-xs text-center focus:ring-2 focus:ring-[#7867FF] focus:border-[#7867FF] outline-none"
                                       />
-                                      <span className="text-[9.5px] text-[#4E5969] dark:text-slate-400 font-medium block leading-tight">
-                                        Multiple parts or questions have different marks. Set on each question &amp; sub-part.
-                                      </span>
                                     </div>
-                                  ) : (
-                                    <div className="space-y-1">
+                                  </div>
+                                )}
+
+                                {/* Section Question Planning & Attempt Configuration Card */}
+                                <div className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-xs space-y-3.5">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7EAF3] dark:border-slate-800 pb-2.5">
+                                    <span className="text-xs font-black text-[#2D2575] dark:text-indigo-400 uppercase tracking-wider flex items-center gap-1.5">
+                                      <span>⚙️</span> Section Question Planning &amp; Attempt Rules
+                                    </span>
+                                    <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
+                                      Questions in Section: <span className="text-[#5B4BFF] font-black">{sec.questions.length}</span>
+                                      {hasTargetM ? ` / ${targetM} planned` : ' questions added'}
+                                    </span>
+                                  </div>
+
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    {/* Planned Question Count M */}
+                                    <div>
+                                      <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                        1. Questions to Add in Section (M)
+                                      </label>
                                       <input
                                         type="number"
                                         min={1}
                                         max={100}
-                                        value={sec.defaultMarksPerQuestion !== undefined && sec.defaultMarksPerQuestion !== null ? sec.defaultMarksPerQuestion : ''}
-                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'defaultMarksPerQuestion', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
-                                        className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:outline-none focus:border-[#5B4BFF]"
-                                        placeholder="e.g. 5"
+                                        value={sec.targetQuestionsCount !== undefined && sec.targetQuestionsCount !== null ? sec.targetQuestionsCount : ''}
+                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'targetQuestionsCount', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                        className="w-full px-3 py-2 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
+                                        placeholder="e.g. 5 (or leave blank)"
                                       />
-                                      <span className="text-[9.5px] text-[#4E5969] dark:text-slate-400 font-medium block leading-tight">
-                                        All questions in this section carry the same marks.
+                                      <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-medium">Planned question count (or leave blank)</span>
+                                    </div>
+
+                                    {/* Marks Per Question Mode (Condition-Based) */}
+                                    <div>
+                                      <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                        2. Marks Allocation Condition *
+                                      </label>
+                                      <div className="grid grid-cols-2 gap-1 p-0.5 bg-[#F8FAFC] dark:bg-slate-800 rounded-xl border border-[#E7EAF3] dark:border-slate-700 mb-1.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSectionMeta(sec.id, 'marksCondition', 'UNIFORM')}
+                                          className={`py-1 px-1.5 rounded-lg text-[10px] font-black transition-all ${
+                                            sec.marksCondition !== 'VARIABLE'
+                                              ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                              : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                          }`}
+                                        >
+                                          Uniform Marks
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSectionMeta(sec.id, 'marksCondition', 'VARIABLE')}
+                                          className={`py-1 px-1.5 rounded-lg text-[10px] font-black transition-all ${
+                                            sec.marksCondition === 'VARIABLE'
+                                              ? 'bg-[#F36C21] text-white shadow-xs'
+                                              : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                          }`}
+                                        >
+                                          Variable / Subparts
+                                        </button>
+                                      </div>
+
+                                      {sec.marksCondition === 'VARIABLE' ? (
+                                        <div className="space-y-1">
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            value={sec.defaultMarksPerQuestion !== undefined && sec.defaultMarksPerQuestion !== null ? sec.defaultMarksPerQuestion : ''}
+                                            onChange={(e) => handleUpdateSectionMeta(sec.id, 'defaultMarksPerQuestion', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                            className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
+                                            placeholder="Default pre-fill (optional)"
+                                          />
+                                          <span className="text-[9.5px] text-[#4E5969] dark:text-slate-400 font-medium block leading-tight">
+                                            Multiple parts or questions have different marks. Set on each question &amp; sub-part.
+                                          </span>
+                                        </div>
+                                      ) : (
+                                        <div className="space-y-1">
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={100}
+                                            value={sec.defaultMarksPerQuestion !== undefined && sec.defaultMarksPerQuestion !== null ? sec.defaultMarksPerQuestion : ''}
+                                            onChange={(e) => handleUpdateSectionMeta(sec.id, 'defaultMarksPerQuestion', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                            className="w-full px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-black text-xs text-center focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
+                                            placeholder="e.g. 5"
+                                          />
+                                          <span className="text-[9.5px] text-[#4E5969] dark:text-slate-400 font-medium block leading-tight">
+                                            All questions in this section carry the same marks.
+                                          </span>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Attempt Requirement Mode */}
+                                    <div>
+                                      <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                        3. Student Attempt Rule *
+                                      </label>
+                                      <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#F8FAFC] dark:bg-slate-800 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSectionMeta(sec.id, 'attemptRule', 'ALL')}
+                                          className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all ${
+                                            !isChoiceMode
+                                              ? 'bg-[#5B4BFF] text-white shadow-xs'
+                                              : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                          }`}
+                                        >
+                                          All Mandatory
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => handleUpdateSectionMeta(sec.id, 'attemptRule', 'CHOICE')}
+                                          className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all ${
+                                            isChoiceMode
+                                              ? 'bg-[#F36C21] text-white shadow-xs'
+                                              : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                                          }`}
+                                        >
+                                          Choice (N of M)
+                                        </button>
+                                      </div>
+                                      <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-medium">
+                                        {isChoiceMode ? 'Students attempt any N of M questions' : 'All questions mandatory'}
                                       </span>
+                                    </div>
+                                  </div>
+
+                                  {/* Choice Rule Specific Parameters (when CHOICE is active) */}
+                                  {isChoiceMode && (
+                                    <div className="p-4 rounded-xl bg-gradient-to-r from-orange-50/80 to-amber-50/50 dark:from-orange-950/20 dark:to-amber-950/10 border border-orange-200 dark:border-orange-800/50 space-y-3.5">
+                                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                        {/* Required to Attempt (N) */}
+                                        <div>
+                                          <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
+                                            Required to Attempt (N) *
+                                          </label>
+                                          <input
+                                            type="number"
+                                            min={1}
+                                            max={Math.max(1, targetM > 1 ? targetM - 1 : 99)}
+                                            value={sec.requiredToAttempt !== undefined && sec.requiredToAttempt !== null ? sec.requiredToAttempt : ''}
+                                            onChange={(e) => handleUpdateSectionMeta(sec.id, 'requiredToAttempt', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
+                                            className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-orange-950 dark:text-orange-200 font-black text-xs text-center focus:ring-2 focus:ring-[#F36C21] focus:border-[#F36C21] outline-none shadow-xs"
+                                            placeholder="e.g. 2"
+                                          />
+                                          <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">
+                                            {sec.requiredToAttempt ? `Students only evaluated for ${sec.requiredToAttempt} questions` : 'Enter required questions'}
+                                          </span>
+                                        </div>
+
+                                        {/* Over-Attempt Policy Visual Cards / Selector */}
+                                        <div>
+                                          <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1 flex items-center justify-between">
+                                            <span>Over-Attempt Policy *</span>
+                                            <span className="text-[9px] font-bold text-orange-600 dark:text-orange-400">If student does extra</span>
+                                          </label>
+                                          <select
+                                            value={sec.overAttemptPolicy || OverAttemptPolicy.BEST_N}
+                                            onChange={(e) => handleUpdateSectionMeta(sec.id, 'overAttemptPolicy', e.target.value)}
+                                            className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-[#1B1E28] dark:text-white font-black text-xs focus:ring-2 focus:ring-[#F36C21] focus:border-[#F36C21] outline-none shadow-xs"
+                                          >
+                                            <option value="BEST_N">🏆 BEST_N (Score top {requiredN} highest answers)</option>
+                                            <option value="FIRST_N">🔢 FIRST_N (Score first {requiredN} in paper order)</option>
+                                            <option value="REJECT">🚫 REJECT (Strict block if &gt; {requiredN} answered)</option>
+                                          </select>
+                                          <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">
+                                            {sec.overAttemptPolicy === 'BEST_N' ? 'Awards highest scoring answers' : sec.overAttemptPolicy === 'FIRST_N' ? 'Evaluates first N in sequence' : 'Strict disallow of extra answers'}
+                                          </span>
+                                        </div>
+
+                                        {/* Rule Max Policy */}
+                                        <div>
+                                          <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
+                                            Rule Max Policy *
+                                          </label>
+                                          <select
+                                            value={sec.ruleMaxPolicy || 'EQUAL_MARKS_REQUIRED'}
+                                            onChange={(e) => handleUpdateSectionMeta(sec.id, 'ruleMaxPolicy', e.target.value)}
+                                            className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-[#1B1E28] dark:text-white font-black text-xs focus:ring-2 focus:ring-[#F36C21] focus:border-[#F36C21] outline-none shadow-xs"
+                                          >
+                                            <option value="EQUAL_MARKS_REQUIRED">⚖️ Equal Marks Required (Standard)</option>
+                                            <option value="TOP_N_MAX">📈 Top-N Max Marks (Highest Subset)</option>
+                                            <option value="STUDENT_WISE">🎯 Student-Wise Max (Per Chosen)</option>
+                                          </select>
+                                          <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">Section max calculation policy</span>
+                                        </div>
+                                      </div>
+
+                                      {/* Plain-Language Interactive Evaluation Explanation */}
+                                      <div className="p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-orange-200 dark:border-orange-800 text-xs text-orange-950 dark:text-orange-200 space-y-1.5 shadow-xs">
+                                        <div className="flex items-center gap-2">
+                                          <Sparkles className="w-4 h-4 text-[#F36C21]" />
+                                          <span className="font-black uppercase text-[11px] text-[#F36C21]">
+                                            Evaluation Rule for {sec.name}:
+                                          </span>
+                                        </div>
+                                        <p className="text-[11px] leading-relaxed text-[#1B1E28] dark:text-slate-200 font-medium">
+                                          Students answer any <b>{requiredN}</b> of <b>{targetM || sec.questions.length}</b> questions.
+                                          {sec.overAttemptPolicy === 'BEST_N' && (
+                                            <span> If a student attempts extra questions, the system automatically scores their <strong>top {requiredN} highest-scoring answers</strong>.</span>
+                                          )}
+                                          {sec.overAttemptPolicy === 'FIRST_N' && (
+                                            <span> If a student attempts extra questions, only the <strong>first {requiredN} questions in paper order</strong> will be evaluated.</span>
+                                          )}
+                                          {sec.overAttemptPolicy === 'REJECT' && (
+                                            <span> Students must not attempt more than {requiredN} questions; any extra attempts are <strong>disqualified</strong>.</span>
+                                          )}
+                                          <span> Leaving the other {Math.max(0, targetM - requiredN)} optional question(s) unattempted will NEVER reduce their percentage.</span>
+                                        </p>
+                                      </div>
+
+                                      {/* Unequal marks check under EQUAL_MARKS_REQUIRED */}
+                                      {(() => {
+                                        const secQs = sec.questions || [];
+                                        if (secQs.length < 2 || sec.ruleMaxPolicy === 'STUDENT_WISE' || sec.ruleMaxPolicy === 'TOP_N_MAX') return null;
+                                        const marksArray = secQs.map((q: any) => {
+                                          const subQs = q.subQuestions || q.sub_questions || [];
+                                          if (subQs.length > 0) {
+                                            return subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || sq.defaultMarks || 0), 0);
+                                          }
+                                          return Number(q.customMarks || q.defaultMarks || marksPerQ);
+                                        });
+                                        const hasUnequal = marksArray.some((m: number) => m !== marksArray[0]);
+                                        if (!hasUnequal) return null;
+                                        return (
+                                          <div className="p-2.5 rounded-xl bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
+                                            <span>⚠️ Questions in this section have unequal marks. Equal Marks policy requires all questions to carry identical total marks.</span>
+                                            <button
+                                              type="button"
+                                              onClick={() => {
+                                                setPaperSections(prev => prev.map(s => {
+                                                  if (s.id !== sec.id) return s;
+                                                  return {
+                                                    ...s,
+                                                    questions: s.questions.map((q: any) => ({
+                                                      ...q,
+                                                      customMarks: marksPerQ,
+                                                      defaultMarks: marksPerQ,
+                                                    }))
+                                                  };
+                                                }));
+                                              }}
+                                              className="px-2.5 py-1 rounded bg-[#5B4BFF] text-white text-[10px] font-black hover:bg-[#4E3EFF] shrink-0 ml-2 shadow-xs cursor-pointer"
+                                            >
+                                              Make All Equal ({marksPerQ} Marks)
+                                            </button>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Weightage Guarantee Banner */}
+                                      <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-orange-200 dark:border-orange-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-base">🎯</span>
+                                          <div>
+                                            <span className="font-black text-[#1B1E28] dark:text-white">Section Weightage: </span>
+                                            <span className="font-extrabold text-[#5B4BFF] text-sm">
+                                              {sec.ruleMaxPolicy === 'STUDENT_WISE' ? 'Varies per student' : `${effectiveSecMarks} Marks`}
+                                            </span>
+                                            {sec.ruleMaxPolicy !== 'STUDENT_WISE' && (
+                                              <span className="text-[#4E5969] dark:text-slate-400 text-[11px] ml-1.5">
+                                                ({requiredN} required attempts × {marksPerQ} marks)
+                                              </span>
+                                            )}
+                                          </div>
+                                        </div>
+                                        <div className="text-[10px] text-[#4E5969] dark:text-slate-400 italic">
+                                          💡 Note: {Math.max(0, targetM - requiredN)} optional question(s) will NEVER reduce student percentage or inflate maximum marks.
+                                        </div>
+                                      </div>
                                     </div>
                                   )}
+
+                                  {/* Question Count Progress Bar & Target Capacity Lock Banner */}
+                                  <div className="p-3 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs">
+                                      <div className="flex items-center gap-2 flex-1">
+                                        <span className="font-bold text-[#1B1E28] dark:text-slate-200 whitespace-nowrap">
+                                          Progress: {sec.questions.length} {hasTargetM ? `/ ${targetM} Questions Added` : 'Questions Added'}
+                                        </span>
+                                        {hasTargetM && (
+                                          <div className="w-28 sm:w-44 h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                                            <div
+                                              className={`h-full transition-all duration-300 ${
+                                                isCapacityReached
+                                                  ? 'bg-[#00C48C]'
+                                                  : 'bg-gradient-to-r from-[#5B4BFF] to-[#00C48C]'
+                                              }`}
+                                              style={{ width: `${Math.min(100, (sec.questions.length / Math.max(1, targetM)) * 100)}%` }}
+                                            />
+                                          </div>
+                                        )}
+                                      </div>
+
+                                      {hasTargetM && sec.questions.length < targetM ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setBlueprintModalSecId(sec.id)}
+                                          className="px-2.5 py-1 rounded-lg bg-[#5B4BFF]/10 hover:bg-[#5B4BFF]/20 text-[#5B4BFF] font-black text-[11px] flex items-center gap-1 transition-all w-fit cursor-pointer"
+                                          title={`Auto-pick remaining ${targetM - sec.questions.length} questions`}
+                                        >
+                                          <span>✨</span>
+                                          <span>Add Remaining {targetM - sec.questions.length} via Blueprint</span>
+                                        </button>
+                                      ) : isCapacityReached ? (
+                                        <span className="text-[11px] font-black text-[#00C48C] flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2.5 py-0.5 rounded-full border border-[#00C48C]/30">
+                                          <CheckCircle2 className="w-3.5 h-3.5" />
+                                          <span>All {targetM} planned questions added (100%)</span>
+                                        </span>
+                                      ) : null}
+                                    </div>
+
+                                    {/* Capacity Reached Notice */}
+                                    {isCapacityReached && (
+                                      <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-[#00C48C]/30 text-[11px] text-[#00C48C] font-bold flex items-center justify-between gap-2">
+                                        <span>🔒 Capacity reached ({sec.questions.length}/{targetM}). You cannot add more questions to this section. To replace or add a new question, remove an existing question from the list below.</span>
+                                      </div>
+                                    )}
+                                  </div>
                                 </div>
 
-                                {/* Attempt Requirement Mode */}
-                                <div>
-                                  <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                    3. Student Attempt Rule *
-                                  </label>
-                                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-[#F8FAFC] dark:bg-slate-800 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUpdateSectionMeta(sec.id, 'attemptRule', 'ALL')}
-                                      className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all ${!isChoiceMode
-                                          ? 'bg-[#5B4BFF] text-white shadow-xs'
-                                          : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                      All Mandatory
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={() => handleUpdateSectionMeta(sec.id, 'attemptRule', 'CHOICE')}
-                                      className={`py-1.5 px-2 rounded-lg text-xs font-black transition-all ${isChoiceMode
-                                          ? 'bg-[#F36C21] text-white shadow-xs'
-                                          : 'text-[#4E5969] dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                                        }`}
-                                    >
-                                      Choice (N of M)
-                                    </button>
-                                  </div>
-                                  <span className="text-[10px] text-[#4E5969] dark:text-slate-400 font-medium">
-                                    {isChoiceMode ? 'Students attempt any N of M questions' : 'All questions mandatory'}
-                                  </span>
-                                </div>
-                              </div>
-
-                              {/* Choice Rule Specific Parameters (when CHOICE is active) */}
-                              {isChoiceMode && (
-                                <div className="p-3.5 rounded-xl bg-gradient-to-r from-orange-50/80 to-amber-50/50 dark:from-orange-950/20 dark:to-amber-950/10 border border-orange-200 dark:border-orange-800/50 space-y-2.5">
-                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                                    <div>
-                                      <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
-                                        Required to Attempt (N) *
-                                      </label>
-                                      <input
-                                        type="number"
-                                        min={1}
-                                        max={Math.max(1, targetM > 1 ? targetM - 1 : 99)}
-                                        value={sec.requiredToAttempt !== undefined && sec.requiredToAttempt !== null ? sec.requiredToAttempt : ''}
-                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'requiredToAttempt', e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}
-                                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-orange-950 dark:text-orange-200 font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
-                                        placeholder="e.g. 2"
-                                      />
-                                      <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">
-                                        {sec.requiredToAttempt ? `Students only evaluated for ${sec.requiredToAttempt} questions` : 'Enter required questions'}
-                                      </span>
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
-                                        Over-Attempt Policy *
-                                      </label>
-                                      <select
-                                        value={sec.overAttemptPolicy || OverAttemptPolicy.BEST_N}
-                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'overAttemptPolicy', e.target.value)}
-                                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-[#1B1E28] dark:text-white font-black text-xs focus:outline-none focus:border-[#F36C21]"
-                                      >
-                                        <option value="BEST_N">BEST_N (Score top {requiredN} highest answers)</option>
-                                        <option value="FIRST_N">FIRST_N (Score first {requiredN} in paper order)</option>
-                                        <option value="REJECT">REJECT (Block submission if &gt; {requiredN})</option>
-                                      </select>
-                                      <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">Rule if student attempts extra</span>
-                                    </div>
-
-                                    <div>
-                                      <label className="block text-[10px] font-black uppercase text-orange-900 dark:text-orange-300 mb-1">
-                                        Rule Max Policy *
-                                      </label>
-                                      <select
-                                        value={sec.ruleMaxPolicy || 'EQUAL_MARKS_REQUIRED'}
-                                        onChange={(e) => handleUpdateSectionMeta(sec.id, 'ruleMaxPolicy', e.target.value)}
-                                        className="w-full px-3 py-1.5 rounded-lg bg-white dark:bg-slate-900 border border-orange-300 dark:border-orange-700 text-[#1B1E28] dark:text-white font-black text-xs focus:outline-none focus:border-[#F36C21]"
-                                      >
-                                        <option value="EQUAL_MARKS_REQUIRED">Equal Marks Required (Standard)</option>
-                                        <option value="TOP_N_MAX">Top-N Max Marks (Fairness Notice)</option>
-                                        <option value="STUDENT_WISE">Student-Wise Max</option>
-                                      </select>
-                                      <span className="text-[10px] text-orange-700 dark:text-orange-400 font-medium">Section max calculation policy</span>
-                                    </div>
-                                  </div>
-
-                                  {/* Plain-language live helper line */}
-                                  <div className="p-2.5 rounded-lg bg-orange-100/70 dark:bg-orange-950/40 border border-orange-300 dark:border-orange-800 text-[11px] text-orange-900 dark:text-orange-200 font-semibold flex items-center gap-2">
-                                    <span className="text-sm shrink-0">ℹ️</span>
-                                    <span>
-                                      Students answer any <b>{requiredN}</b> of <b>{targetM}</b> questions. Marks are counted for {requiredN} questions only. Leaving the other {Math.max(0, targetM - requiredN)} unanswered will not reduce the percentage.
+                                {/* Step-by-Step Question Picker Card for Section */}
+                                <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-sm space-y-4">
+                                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+                                    <h4 className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider">
+                                      🔍 STEP-BY-STEP QUESTION BANK SELECTOR &amp; CHECKLIST FOR {sec.name}
+                                    </h4>
+                                    <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
+                                      Loaded Master Questions: {masterBankQuestions.length} Items
                                     </span>
                                   </div>
 
-                                  {/* Check for unequal marks under EQUAL_MARKS_REQUIRED */}
-                                  {(() => {
-                                    const secQs = sec.questions || [];
-                                    if (secQs.length < 2 || sec.ruleMaxPolicy === 'STUDENT_WISE' || sec.ruleMaxPolicy === 'TOP_N_MAX') return null;
-                                    const marksArray = secQs.map((q: any) => {
-                                      const subQs = q.subQuestions || q.sub_questions || [];
-                                      if (subQs.length > 0) {
-                                        return subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || sq.defaultMarks || 0), 0);
-                                      }
-                                      return Number(q.customMarks || q.defaultMarks || marksPerQ);
-                                    });
-                                    const hasUnequal = marksArray.some((m: number) => m !== marksArray[0]);
-                                    if (!hasUnequal) return null;
-                                    return (
-                                      <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
-                                        <span>⚠️ Questions in this section have unequal marks. Equal Marks policy requires all questions to carry identical total marks.</span>
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            setPaperSections(prev => prev.map(s => {
-                                              if (s.id !== sec.id) return s;
-                                              return {
-                                                ...s,
-                                                questions: s.questions.map((q: any) => ({
-                                                  ...q,
-                                                  customMarks: marksPerQ,
-                                                  defaultMarks: marksPerQ,
-                                                }))
-                                              };
-                                            }));
-                                          }}
-                                          className="px-2.5 py-1 rounded bg-[#5B4BFF] text-white text-[10px] font-black hover:bg-[#4E3EFF] shrink-0 ml-2"
-                                        >
-                                          Make All Equal ({marksPerQ} Marks)
-                                        </button>
-                                      </div>
-                                    );
-                                  })()}
-
-                                  {/* Weightage Guarantee Banner */}
-                                  <div className="p-2.5 rounded-lg bg-white/80 dark:bg-slate-900/80 border border-orange-200 dark:border-orange-900/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
-                                    <div className="flex items-center gap-2">
-                                      <span className="text-base">🎯</span>
-                                      <div>
-                                        <span className="font-black text-[#1B1E28] dark:text-white">Section Weightage: </span>
-                                        <span className="font-extrabold text-[#5B4BFF] text-sm">
-                                          {sec.ruleMaxPolicy === 'STUDENT_WISE' ? 'Varies per student' : `${effectiveSecMarks} Marks`}
-                                        </span>
-                                        {sec.ruleMaxPolicy !== 'STUDENT_WISE' && (
-                                          <span className="text-[#4E5969] dark:text-slate-400 text-[11px] ml-1.5">
-                                            ({requiredN} required attempts × {marksPerQ} marks)
-                                          </span>
-                                        )}
-                                      </div>
-                                    </div>
-                                    <div className="text-[10px] text-[#4E5969] dark:text-slate-400 italic">
-                                      💡 Note: {Math.max(0, targetM - requiredN)} optional question(s) will NEVER reduce student percentage or inflate maximum marks.
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-
-                              {/* Question Count Progress Bar */}
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs bg-[#F8FAFC] dark:bg-slate-800/60 px-3 py-2 rounded-xl border border-[#E7EAF3] dark:border-slate-800">
-                                <div className="flex items-center gap-2 flex-1">
-                                  <span className="font-bold text-[#1B1E28] dark:text-slate-200 whitespace-nowrap">
-                                    Progress: {sec.questions.length} {hasTargetM ? `/ ${targetM} Added` : 'Questions Added'}
-                                  </span>
-                                  {hasTargetM && (
-                                    <div className="w-24 sm:w-36 h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
-                                      <div
-                                        className="h-full bg-gradient-to-r from-[#5B4BFF] to-[#00C48C] transition-all duration-300"
-                                        style={{ width: `${Math.min(100, (sec.questions.length / Math.max(1, targetM)) * 100)}%` }}
-                                      />
-                                    </div>
-                                  )}
-                                </div>
-
-                                {hasTargetM && sec.questions.length < targetM ? (
-                                  <button
-                                    type="button"
-                                    onClick={() => setBlueprintModalSecId(sec.id)}
-                                    className="px-2.5 py-1 rounded-lg bg-[#5B4BFF]/10 hover:bg-[#5B4BFF]/20 text-[#5B4BFF] font-black text-[11px] flex items-center gap-1 transition-all w-fit"
-                                    title={`Auto-pick remaining ${targetM - sec.questions.length} questions`}
-                                  >
-                                    <span>✨</span>
-                                    <span>Add Remaining {targetM - sec.questions.length} via Blueprint</span>
-                                  </button>
-                                ) : hasTargetM && sec.questions.length >= targetM ? (
-                                  <span className="text-[11px] font-black text-[#00C48C] flex items-center gap-1">
-                                    <span>✓</span>
-                                    <span>All {targetM} planned questions added</span>
-                                  </span>
-                                ) : null}
-                              </div>
-                            </div>
-
-                            {/* Step-by-Step Question Picker Card for Section */}
-                            <div className="p-5 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 shadow-sm space-y-4">
-                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
-                                <h4 className="text-xs font-black uppercase text-[#5B4BFF] tracking-wider">
-                                  🔍 STEP-BY-STEP QUESTION BANK SELECTOR &amp; CHECKLIST FOR {sec.name}
-                                </h4>
-                                <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">
-                                  Loaded Master Questions: {masterBankQuestions.length} Items
-                                </span>
-                              </div>
-
-                              {/* Step 1, 2, 3, 4 Filters Bar */}
-                              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                                {/* Step 1: Type Filter */}
-                                <div>
-                                  <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                    1. SELECT QUESTION TYPE *
-                                  </label>
-                                  <select
-                                    value={secFilters[sec.id]?.type || sec.type || 'ALL'}
-                                    onChange={(e) => handleUpdateSectionFilter(sec.id, 'type', e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21]"
-                                  >
-                                    <option value="ALL">🌐 All Types (MCQs &amp; DESC)</option>
-                                    <option value="MCQ">🔘 MCQs Only</option>
-                                    <option value="DESC">📄 Descriptive Only</option>
-                                  </select>
-                                </div>
-
-                                {/* Step 2: Unit / Course Outcome (CO) Filter */}
-                                <div>
-                                  <label className="block text-[10px] font-black uppercase text-[#5B4BFF] dark:text-indigo-400 mb-1">
-                                    2. SELECT UNIT / COURSE OUTCOME (CO) *
-                                  </label>
-                                  <select
-                                    value={secFilters[sec.id]?.unit || 'ALL'}
-                                    onChange={(e) => handleUpdateSectionFilter(sec.id, 'unit', e.target.value)}
-                                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs focus:outline-none focus:border-[#F36C21]"
-                                  >
-                                    <option value="ALL">— All Units / COs ({availableUnits.length}) —</option>
-                                    {availableUnits.map(u => (
-                                      <option key={u.id || u.code} value={u.code || u.id}>
-                                        {u.code}: {u.name ? (u.name.length > 30 ? u.name.slice(0, 30) + '...' : u.name) : u.code}
-                                      </option>
-                                    ))}
-                                  </select>
-                                </div>
-
-                                {/* Step 3: Topic Filter (Cascaded from CO) */}
-                                {(() => {
-                                  const currentUnit = secFilters[sec.id]?.unit || 'ALL';
-                                  const filteredTopics = currentUnit !== 'ALL'
-                                    ? availableTopics.filter(t => !t.unit_code || t.unit_code === currentUnit || t.id.includes(currentUnit) || t.code?.includes(currentUnit))
-                                    : availableTopics;
-                                  const finalTopics = filteredTopics;
-
-                                  return (
+                                  {/* Step 1, 2, 3, 4 Filters Bar */}
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                                    {/* Step 1: Type Filter */}
                                     <div>
                                       <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                        3. SELECT TOPIC (CO CASCADE)
+                                        1. SELECT QUESTION TYPE *
                                       </label>
                                       <select
-                                        value={secFilters[sec.id]?.topic || 'ALL'}
-                                        onChange={(e) => handleUpdateSectionFilter(sec.id, 'topic', e.target.value)}
-                                        disabled={finalTopics.length === 0}
-                                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21] disabled:opacity-60 disabled:cursor-not-allowed"
+                                        value={secFilters[sec.id]?.type || sec.type || 'ALL'}
+                                        onChange={(e) => handleUpdateSectionFilter(sec.id, 'type', e.target.value)}
+                                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
                                       >
-                                        <option value="ALL">
-                                          {finalTopics.length === 0 ? '— No Topics Feeded in Master —' : `— All Topics (${finalTopics.length}) —`}
-                                        </option>
-                                        {finalTopics.map(t => (
-                                          <option key={t.id} value={t.name}>{t.name}</option>
-                                        ))}
+                                        <option value="ALL">🌐 All Types (MCQs &amp; DESC)</option>
+                                        <option value="MCQ">🔘 MCQs Only</option>
+                                        <option value="DESC">📄 Descriptive Only</option>
                                       </select>
                                     </div>
-                                  );
-                                })()}
 
-                                {/* Step 4: Competency / Subtopic Filter (Cascaded from Topic) */}
-                                {(() => {
-                                  const currentTopicName = secFilters[sec.id]?.topic || 'ALL';
-                                  const selTopicObj = availableTopics.find(t => t.name === currentTopicName || t.id === currentTopicName);
-                                  const sectionCompetencies = (currentTopicName !== 'ALL' && selTopicObj)
-                                    ? dbCompetencies.filter(c => c.topic_id === selTopicObj.id || (selTopicObj.code && c.code?.startsWith(selTopicObj.code)))
-                                    : (currentTopicName === 'ALL' ? availableCompetencies : []);
-
-                                  return (
+                                    {/* Step 2: Unit / Course Outcome (CO) Filter */}
                                     <div>
-                                      <label className="block text-[10px] font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1">
-                                        4. SELECT SUBTOPIC / COMPETENCY (TOPIC CASCADE)
+                                      <label className="block text-[10px] font-black uppercase text-[#5B4BFF] dark:text-indigo-400 mb-1">
+                                        2. SELECT UNIT / COURSE OUTCOME (CO) *
                                       </label>
                                       <select
-                                        value={secFilters[sec.id]?.competency || 'ALL'}
-                                        onChange={(e) => handleUpdateSectionFilter(sec.id, 'competency', e.target.value)}
-                                        disabled={sectionCompetencies.length === 0}
-                                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-black text-xs focus:outline-none focus:border-[#F36C21] disabled:opacity-60 disabled:cursor-not-allowed"
+                                        value={secFilters[sec.id]?.unit || 'ALL'}
+                                        onChange={(e) => handleUpdateSectionFilter(sec.id, 'unit', e.target.value)}
+                                        className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all"
                                       >
-                                        <option value="ALL">
-                                          {sectionCompetencies.length === 0 ? '— No Subtopics Feeded in Master —' : `— All Subtopics / COs (${sectionCompetencies.length}) —`}
-                                        </option>
-                                        {sectionCompetencies.map(c => (
-                                          <option key={c.id || c.code} value={c.code}>
-                                            {c.code}: {c.description ? (c.description.length > 30 ? c.description.slice(0, 30) + '...' : c.description) : c.code}
+                                        <option value="ALL">— All Units / COs ({availableUnits.length}) —</option>
+                                        {availableUnits.map(u => (
+                                          <option key={u.id || u.code} value={u.code || u.id}>
+                                            {u.code}: {u.name ? (u.name.length > 30 ? u.name.slice(0, 30) + '...' : u.name) : u.code}
                                           </option>
                                         ))}
                                       </select>
                                     </div>
-                                  );
-                                })()}
-                              </div>
 
-                              {/* Step 5: Questions Checklist Table */}
-                              {(() => {
-                                const secF = secFilters[sec.id] || { type: sec.type || 'ALL', unit: 'ALL', topic: 'ALL', competency: 'ALL' };
-                                const getRootCode = (s?: string) => {
-                                  if (!s) return '';
-                                  const m = s.match(/^([A-Za-z]+\s*\d+(?:\.\d+)?)/);
-                                  return m ? m[1].replace(/\s+/g, '').toLowerCase() : s.toLowerCase().trim();
-                                };
+                                    {/* Step 3: Topic Filter (Cascaded from CO) */}
+                                    {(() => {
+                                      const currentUnit = secFilters[sec.id]?.unit || 'ALL';
+                                      const filteredTopics = currentUnit !== 'ALL'
+                                        ? availableTopics.filter(t => !t.unit_code || t.unit_code === currentUnit || t.id.includes(currentUnit) || t.code?.includes(currentUnit))
+                                        : availableTopics;
+                                      const finalTopics = filteredTopics;
 
-                                const availableFiltered = masterBankQuestions.filter(q => {
-                                  const matchType = secF.type === 'ALL' || q.mode === secF.type;
-
-                                  let matchUnit = true;
-                                  if (secF.unit && secF.unit !== 'ALL') {
-                                    const uCode = secF.unit.toLowerCase().trim();
-                                    matchUnit = Boolean(
-                                      (q.unit_code && q.unit_code.toLowerCase().trim() === uCode) ||
-                                      (q.unit_id && q.unit_id === secF.unit) ||
-                                      (q.unit_name && q.unit_name.toLowerCase().includes(uCode)) ||
-                                      (q.topic_code && q.topic_code.toLowerCase().includes(uCode)) ||
-                                      (q.topic && q.topic.toLowerCase().includes(uCode)) ||
-                                      (q.competency_code && q.competency_code.toLowerCase().includes(uCode))
-                                    );
-                                  }
-
-                                  let matchTopic = true;
-                                  if (secF.topic && secF.topic !== 'ALL') {
-                                    const selTopicObj = availableTopics.find(t => t.name === secF.topic || t.id === secF.topic);
-                                    if (selTopicObj) {
-                                      matchTopic = Boolean(
-                                        (q.topic_id && q.topic_id === selTopicObj.id) ||
-                                        (q.topic && (
-                                          q.topic.toLowerCase() === selTopicObj.name.toLowerCase() ||
-                                          q.topic.toLowerCase().includes(selTopicObj.name.toLowerCase()) ||
-                                          selTopicObj.name.toLowerCase().includes(q.topic.toLowerCase())
-                                        ))
-                                      );
-                                    } else {
-                                      matchTopic = q.topic ? Boolean(
-                                        q.topic.toLowerCase() === secF.topic.toLowerCase() ||
-                                        q.topic.toLowerCase().includes(secF.topic.toLowerCase()) ||
-                                        secF.topic.toLowerCase().includes(q.topic.toLowerCase())
-                                      ) : true;
-                                    }
-                                  }
-
-                                  let matchComp = true;
-                                  if (secF.competency && secF.competency !== 'ALL') {
-                                    const rootQ = getRootCode(q.competency_code);
-                                    const rootFilter = getRootCode(secF.competency);
-                                    matchComp = Boolean(
-                                      (q.competency_code && (
-                                        q.competency_code.toLowerCase() === secF.competency.toLowerCase() ||
-                                        rootQ === rootFilter ||
-                                        (rootQ && rootFilter && (rootQ.includes(rootFilter) || rootFilter.includes(rootQ)))
-                                      )) || (q.competency_id && secF.competency === q.competency_id)
-                                    );
-                                  }
-
-                                  return matchType && matchUnit && matchTopic && matchComp;
-                                });
-
-                                const checkedList = secCheckedQIds[sec.id] || [];
-
-                                return (
-                                  <div className="space-y-3 pt-2">
-                                    <div className="flex items-center justify-between">
-                                      <span className="text-xs font-black text-[#5B4BFF]">
-                                        Step 5: Check questions to add to {sec.name} ({availableFiltered.length} Questions for {secF.unit === 'ALL' ? 'All Units / COs' : secF.unit})
-                                      </span>
-                                      {checkedList.length > 0 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => handleBatchAddQuestionsToSection(sec.id)}
-                                          className="px-3.5 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white font-black text-xs shadow transition-all"
-                                        >
-                                          ➕ Add Selected ({checkedList.length} Questions) to {sec.name}
-                                        </button>
-                                      )}
-                                    </div>
-
-                                    {availableFiltered.length === 0 ? (
-                                      <div className="py-6 text-center text-[#4E5969] dark:text-slate-400 text-xs font-bold bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 rounded-xl">
-                                        No questions match the selected unit, topic or competency filter. Try selecting a different Unit / CO or Topic dropdown.
-                                      </div>
-                                    ) : (
-                                      <div className="max-h-64 overflow-y-auto space-y-2 pr-1 border border-[#E7EAF3] dark:border-slate-800 rounded-xl p-2.5 bg-[#F8FAFC] dark:bg-slate-900/50">
-                                        {availableFiltered.map((q) => {
-                                          const isChecked = checkedList.includes(q.id);
-                                          const isAlreadyInSec = sec.questions.some((sq: any) => sq.questionId === q.id);
-
-                                          return (
-                                            <div
-                                              key={q.id}
-                                              className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs transition shadow-sm ${isAlreadyInSec
-                                                  ? 'bg-gray-50 dark:bg-slate-950/40 border-gray-200 dark:border-slate-800 opacity-60'
-                                                  : isChecked
-                                                    ? 'bg-[#EEF2FF] dark:bg-indigo-950/40 border-[#5B4BFF]/50'
-                                                    : 'bg-white dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
-                                                }`}
-                                            >
-                                              <div className="flex items-start gap-3 flex-1">
-                                                <input
-                                                  type="checkbox"
-                                                  disabled={isAlreadyInSec}
-                                                  checked={isChecked}
-                                                  onChange={() => handleToggleQuestionCheck(sec.id, q.id)}
-                                                  className="mt-1 rounded-md bg-white border-[#E7EAF3] text-[#5B4BFF] focus:ring-[#5B4BFF] w-4 h-4"
-                                                />
-                                                <div className="space-y-1.5 flex-1">
-                                                  <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-relaxed">{q.question_text}</p>
-                                                  {(q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url) && (
-                                                    <div className="mt-1.5 flex items-center gap-2">
-                                                      <img
-                                                        src={q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url}
-                                                        alt="Diagram"
-                                                        className="h-14 w-20 object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-0.5 shadow-xs cursor-pointer hover:scale-105 transition-transform"
-                                                        onClick={() => setViewingImageModal({
-                                                          src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
-                                                          title: q.question_text || '',
-                                                        })}
-                                                      />
-                                                      <button
-                                                        type="button"
-                                                        onClick={() => setViewingImageModal({
-                                                          src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
-                                                          title: q.question_text || '',
-                                                        })}
-                                                        className="text-[10px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
-                                                      >
-                                                        <span>📷</span>
-                                                        <span>View Diagram</span>
-                                                      </button>
-                                                    </div>
-                                                  )}
-                                                  <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                                                    <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">
-                                                      🏛️ {q.unit_code || 'CO1'}
-                                                    </span>
-                                                    <span className={`px-2 py-0.5 rounded-full font-black border ${q.mode === 'MCQ' ? 'bg-[#EEF2FF] text-[#5B4BFF] border-[#5B4BFF]/30' : 'bg-purple-100 text-purple-700 border-purple-300'
-                                                      }`}>
-                                                      {q.mode}
-                                                    </span>
-                                                    {q.competency_code && (
-                                                      <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                                                        🎯 {q.competency_code}
-                                                      </span>
-                                                    )}
-                                                    {q.topic && (
-                                                      <span className="px-2 py-0.5 rounded-full font-bold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">
-                                                        📚 {q.topic}
-                                                      </span>
-                                                    )}
-                                                  </div>
-
-                                                  {/* Subquestions breakdown tree in picker before adding */}
-                                                  {(() => {
-                                                    const qSubs = q.sub_questions || (q as any).subQuestions;
-                                                    const curMarks = pickerTotalMarks[q.id] !== undefined ? pickerTotalMarks[q.id] : Number(q.max_marks || 2);
-                                                    if (!Array.isArray(qSubs) || qSubs.length === 0) return null;
-                                                    return (
-                                                      <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700/60 space-y-1.5">
-                                                        <span className="text-[10px] font-black uppercase text-[#5B4BFF] tracking-wider block">
-                                                          Sub-Questions Marks (Sum: {Number(curMarks).toFixed(1)} Marks):
-                                                        </span>
-                                                        {qSubs.map((sq: any) => {
-                                                          const sqKey = sq.id || sq.label;
-                                                          const curSubMark = pickerSubMarks[q.id]?.[sqKey] !== undefined ? pickerSubMarks[q.id][sqKey] : Number(sq.marks || 1);
-                                                          return (
-                                                            <div key={sqKey} className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 dark:bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
-                                                              <div className="flex items-center gap-1.5 flex-1 min-w-0">
-                                                                <span className="font-mono font-black text-[#5B4BFF] text-[10px]">{sq.label || '•'}</span>
-                                                                <span className="text-slate-700 dark:text-slate-300 truncate text-[11px]">{sq.questionText}</span>
-                                                              </div>
-                                                              <div className="flex items-center gap-1 shrink-0">
-                                                                <span className="text-[9px] font-bold text-slate-500">Marks:</span>
-                                                                <input
-                                                                  type="number"
-                                                                  min={0.5}
-                                                                  step={0.5}
-                                                                  disabled={isAlreadyInSec}
-                                                                  value={curSubMark}
-                                                                  onChange={(e) => handlePickerSubMarkChange(q.id, sqKey, Number(e.target.value), qSubs)}
-                                                                  className="w-12 px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#00C48C]/50 text-[#00C48C] font-black text-[11px] text-center"
-                                                                />
-                                                              </div>
-                                                            </div>
-                                                          );
-                                                        })}
-                                                      </div>
-                                                    );
-                                                  })()}
-                                                </div>
-                                              </div>
-
-                                              <div className="flex items-center gap-2 shrink-0">
-                                                {/* Editable Total Marks before adding */}
-                                                <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
-                                                  <span className="text-[10px] font-bold text-slate-500">Marks:</span>
-                                                  <input
-                                                    type="number"
-                                                    min={0.5}
-                                                    step={0.5}
-                                                    disabled={isAlreadyInSec}
-                                                    value={pickerTotalMarks[q.id] !== undefined ? pickerTotalMarks[q.id] : Number(q.max_marks || 2)}
-                                                    onChange={(e) => handlePickerTotalMarksChange(q.id, Number(e.target.value), q.sub_questions || (q as any).subQuestions)}
-                                                    className="w-14 px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
-                                                    title="Change total question marks before adding"
-                                                  />
-                                                </div>
-
-                                                {isAlreadyInSec ? (
-                                                  <span className="text-[10px] font-black text-[#00C48C] bg-[#E6F9F3] px-2.5 py-1 rounded-full border border-[#00C48C]/30 whitespace-nowrap">
-                                                    ✓ Added
-                                                  </span>
-                                                ) : (
-                                                  <button
-                                                    type="button"
-                                                    onClick={() => handleSingleAddQuestionToSection(sec.id, q)}
-                                                    className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all whitespace-nowrap"
-                                                  >
-                                                    + Add
-                                                  </button>
-                                                )}
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
-                                  </div>
-                                );
-                              })()}
-                            </div>
-
-                            {/* Choice Groups Manager within Section */}
-                            {sec.choiceGroups && sec.choiceGroups.length > 0 && (
-                              <div className="pt-2">
-                                <ChoiceGroupManager
-                                  sectionId={sec.id}
-                                  choiceGroups={sec.choiceGroups}
-                                  questionsMap={allPaperQuestionsMap}
-                                  onUpdateGroup={(gId, updates) => handleUpdateChoiceGroup(sec.id, gId, updates)}
-                                  onRemoveGroup={(gId) => handleRemoveChoiceGroup(sec.id, gId)}
-                                  onRemoveQuestionFromGroup={(gId, qId) => handleRemoveQuestionFromChoiceGroup(sec.id, gId, qId)}
-                                />
-                              </div>
-                            )}
-
-                            {/* Group Selection Banner */}
-                            {(secGroupSelect[sec.id] || []).length > 0 && (
-                              <div className="p-3 bg-indigo-50 dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
-                                <span className="text-xs font-bold text-[#5B4BFF]">
-                                  ⌥ {(secGroupSelect[sec.id] || []).length} question(s) selected for Choice Group
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <button
-                                    type="button"
-                                    disabled={(secGroupSelect[sec.id] || []).length < 2}
-                                    onClick={() => handleCreateChoiceGroup(sec.id)}
-                                    className="px-3 py-1.5 bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all"
-                                  >
-                                    + Wrap in Choice Group
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setSecGroupSelect(prev => ({ ...prev, [sec.id]: [] }))}
-                                    className="px-2.5 py-1 text-slate-500 hover:text-slate-800 dark:hover:text-white text-xs font-semibold"
-                                  >
-                                    Clear
-                                  </button>
-                                </div>
-                              </div>
-                            )}
-
-                            {/* Added Questions List in Section */}
-                            {sec.questions.length === 0 ? (
-                              <div className="text-center py-5 text-[#4E5969] dark:text-slate-400 text-xs font-bold italic bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-xl">
-                                No questions added to {sec.name} yet. Use the question selector above to check and add questions.
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                {sec.questions.map((q: any, qIdx: number) => {
-                                  const isEditingThisQ = editingSectionQuestion?.secId === sec.id && editingSectionQuestion?.qId === (q.questionId || q.id);
-
-                                  if (isEditingThisQ && editingSectionQuestion) {
-                                    return (
-                                      <div key={q.questionId || q.id} className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-slate-800/90 border-2 border-[#5B4BFF] space-y-4 shadow-md animate-fadeIn">
-                                        <div className="flex items-center justify-between border-b border-indigo-200 dark:border-indigo-900 pb-2.5">
-                                          <div className="flex items-center gap-2">
-                                            <span className="w-6 h-6 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-xs">
-                                              {qIdx + 1}
-                                            </span>
-                                            <span className="text-xs font-black uppercase text-[#2D2575] dark:text-indigo-300">
-                                              ✏️ Edit Question Prompt &amp; Weightage (Q{qIdx + 1})
-                                            </span>
-                                          </div>
-                                          <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-[#5B4BFF]">
-                                            {editingSectionQuestion.mode || q.mode}
-                                          </span>
-                                        </div>
-
-                                        {/* 1. Question Prompt Textarea */}
+                                      return (
                                         <div>
-                                          <label className="block text-[11px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
-                                            Question Prompt / Text *
+                                          <label className="block text-[10px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                            3. SELECT TOPIC (CO CASCADE)
                                           </label>
-                                          <textarea
-                                            value={editingSectionQuestion.questionText}
-                                            onChange={(e) => setEditingSectionQuestion(prev => prev ? { ...prev, questionText: e.target.value } : null)}
-                                            rows={3}
-                                            placeholder="Type or refine question wording..."
-                                            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#1B1E28] dark:text-white font-bold text-xs focus:outline-none focus:border-[#F36C21]"
-                                          />
+                                          <select
+                                            value={secFilters[sec.id]?.topic || 'ALL'}
+                                            onChange={(e) => handleUpdateSectionFilter(sec.id, 'topic', e.target.value)}
+                                            disabled={finalTopics.length === 0}
+                                            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none shadow-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                          >
+                                            <option value="ALL">
+                                              {finalTopics.length === 0 ? '— No Topics Feeded in Master —' : `— All Topics (${finalTopics.length}) —`}
+                                            </option>
+                                            {finalTopics.map(t => (
+                                              <option key={t.id} value={t.name}>{t.name}</option>
+                                            ))}
+                                          </select>
                                         </div>
+                                      );
+                                    })()}
 
-                                        {/* 2. Weightage & Sub-parts Configuration */}
-                                        <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3">
-                                          <div className="flex items-center justify-between">
-                                            <label className="text-[11px] font-black uppercase text-[#5B4BFF]">
-                                              Weightage &amp; Sub-parts Structure
-                                            </label>
-                                            <div className="flex items-center gap-2">
-                                              <span className="text-[11px] font-extrabold text-[#4E5969] dark:text-slate-400">Total Question Marks:</span>
-                                              <span className="px-3 py-0.5 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-black text-xs border border-[#5B4BFF]/30">
-                                                {editingSectionQuestion.subQuestions && editingSectionQuestion.subQuestions.length > 0
-                                                  ? editingSectionQuestion.subQuestions.reduce((sum, sq) => sum + Number(sq.marks || 0), 0)
-                                                  : editingSectionQuestion.customMarks} Marks
-                                              </span>
-                                            </div>
-                                          </div>
+                                    {/* Step 4: Competency / Subtopic Filter (Cascaded from Topic) */}
+                                    {(() => {
+                                      const currentTopicName = secFilters[sec.id]?.topic || 'ALL';
+                                      const selTopicObj = availableTopics.find(t => t.name === currentTopicName || t.id === currentTopicName);
+                                      const sectionCompetencies = (currentTopicName !== 'ALL' && selTopicObj)
+                                        ? dbCompetencies.filter(c => c.topic_id === selTopicObj.id || (selTopicObj.code && c.code?.startsWith(selTopicObj.code)))
+                                        : (currentTopicName === 'ALL' ? availableCompetencies : []);
 
-                                          {/* Sub-parts List if present */}
-                                          {editingSectionQuestion.subQuestions && editingSectionQuestion.subQuestions.length > 0 ? (
-                                            <div className="space-y-2">
-                                              <div className="text-[10px] text-slate-500 font-bold uppercase">Editable Sub-Parts:</div>
-                                              {editingSectionQuestion.subQuestions.map((sq: any, sIdx: number) => (
-                                                <div key={sq.id || sIdx} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
-                                                  <input
-                                                    type="text"
-                                                    value={sq.label || `${String.fromCharCode(97 + sIdx)})`}
-                                                    onChange={(e) => {
-                                                      const val = e.target.value;
-                                                      setEditingSectionQuestion(prev => {
-                                                        if (!prev) return null;
-                                                        const newSubs = [...prev.subQuestions];
-                                                        newSubs[sIdx] = { ...newSubs[sIdx], label: val };
-                                                        return { ...prev, subQuestions: newSubs };
-                                                      });
-                                                    }}
-                                                    className="w-12 px-2 py-1 rounded bg-white dark:bg-slate-900 border text-center font-mono font-black text-xs text-[#5B4BFF]"
-                                                    placeholder="a)"
-                                                  />
-                                                  <input
-                                                    type="text"
-                                                    value={sq.questionText}
-                                                    onChange={(e) => {
-                                                      const val = e.target.value;
-                                                      setEditingSectionQuestion(prev => {
-                                                        if (!prev) return null;
-                                                        const newSubs = [...prev.subQuestions];
-                                                        newSubs[sIdx] = { ...newSubs[sIdx], questionText: val };
-                                                        return { ...prev, subQuestions: newSubs };
-                                                      });
-                                                    }}
-                                                    className="flex-1 px-3 py-1 rounded bg-white dark:bg-slate-900 border text-xs font-bold text-[#1B1E28] dark:text-white"
-                                                    placeholder="Subpart question text..."
-                                                  />
-                                                  <div className="flex items-center gap-1.5 shrink-0">
-                                                    <input
-                                                      type="number"
-                                                      step={0.5}
-                                                      min={0}
-                                                      value={sq.marks !== undefined ? sq.marks : ''}
-                                                      onChange={(e) => {
-                                                        const val = Number(e.target.value);
-                                                        setEditingSectionQuestion(prev => {
-                                                          if (!prev) return null;
-                                                          const newSubs = [...prev.subQuestions];
-                                                          newSubs[sIdx] = { ...newSubs[sIdx], marks: val };
-                                                          const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
-                                                          return { ...prev, subQuestions: newSubs, customMarks: newTotal };
-                                                        });
-                                                      }}
-                                                      className="w-16 px-2 py-1 rounded bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#00C48C] font-black text-xs text-center"
-                                                    />
-                                                    <span className="text-[10px] text-slate-400 font-bold">M</span>
-                                                    <button
-                                                      type="button"
-                                                      onClick={() => {
-                                                        setEditingSectionQuestion(prev => {
-                                                          if (!prev) return null;
-                                                          const newSubs = prev.subQuestions.filter((_, idx) => idx !== sIdx);
-                                                          const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
-                                                          return { ...prev, subQuestions: newSubs, customMarks: newTotal };
-                                                        });
-                                                      }}
-                                                      className="p-1 rounded hover:bg-rose-100 text-[#F04438] text-xs font-bold cursor-pointer"
-                                                      title="Remove sub-part"
-                                                    >
-                                                      ✕
-                                                    </button>
-                                                  </div>
-                                                </div>
-                                              ))}
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setEditingSectionQuestion(prev => {
-                                                    if (!prev) return null;
-                                                    const nextLabel = `${String.fromCharCode(97 + prev.subQuestions.length)})`;
-                                                    const newSubs = [...prev.subQuestions, { id: `sub-${Date.now()}`, label: nextLabel, questionText: '', marks: 5 }];
-                                                    const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
-                                                    return { ...prev, subQuestions: newSubs, customMarks: newTotal };
-                                                  });
-                                                }}
-                                                className="px-3 py-1 rounded-lg bg-[#EEF2FF] text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white text-xs font-black transition flex items-center gap-1 cursor-pointer"
-                                              >
-                                                <span>➕</span>
-                                                <span>Add Another Sub-part</span>
-                                              </button>
-                                            </div>
-                                          ) : (
-                                            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                              <div className="flex items-center gap-2">
-                                                <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-300">Marks for Question:</span>
-                                                <input
-                                                  type="number"
-                                                  min={0.5}
-                                                  step={0.5}
-                                                  value={editingSectionQuestion.customMarks}
-                                                  onChange={(e) => setEditingSectionQuestion(prev => prev ? { ...prev, customMarks: Number(e.target.value) } : null)}
-                                                  className="w-20 px-3 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center"
-                                                />
-                                                <span className="text-xs font-bold text-slate-400">Marks</span>
-                                              </div>
-                                              <button
-                                                type="button"
-                                                onClick={() => {
-                                                  setEditingSectionQuestion(prev => {
-                                                    if (!prev) return null;
-                                                    const half = Number((prev.customMarks / 2).toFixed(1)) || 5;
-                                                    return {
-                                                      ...prev,
-                                                      subQuestions: [
-                                                        { id: `sub-1`, label: 'a)', questionText: '', marks: half },
-                                                        { id: `sub-2`, label: 'b)', questionText: '', marks: half }
-                                                      ]
-                                                    };
-                                                  });
-                                                }}
-                                                className="px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 hover:bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30 text-xs font-black transition flex items-center gap-1 cursor-pointer"
-                                              >
-                                                <span>✨</span>
-                                                <span>Split into Sub-Parts (a, b...)</span>
-                                              </button>
-                                            </div>
+                                      return (
+                                        <div>
+                                          <label className="block text-[10px] font-black uppercase text-[#00C48C] dark:text-emerald-400 mb-1">
+                                            4. SELECT SUBTOPIC / COMPETENCY (TOPIC CASCADE)
+                                          </label>
+                                          <select
+                                            value={secFilters[sec.id]?.competency || 'ALL'}
+                                            onChange={(e) => handleUpdateSectionFilter(sec.id, 'competency', e.target.value)}
+                                            disabled={sectionCompetencies.length === 0}
+                                            className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#00C48C]/40 text-[#1B1E28] dark:text-emerald-300 font-black text-xs focus:ring-2 focus:ring-[#00C48C] focus:border-[#00C48C] outline-none shadow-xs transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+                                          >
+                                            <option value="ALL">
+                                              {sectionCompetencies.length === 0 ? '— No Subtopics Feeded in Master —' : `— All Subtopics / COs (${sectionCompetencies.length}) —`}
+                                            </option>
+                                            {sectionCompetencies.map(c => (
+                                              <option key={c.id || c.code} value={c.code}>
+                                                {c.code}: {c.description ? (c.description.length > 30 ? c.description.slice(0, 30) + '...' : c.description) : c.code}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                      );
+                                    })()}
+                                  </div>
+
+                                  {/* Step 5: Questions Checklist Table */}
+                                  {(() => {
+                                    const secF = secFilters[sec.id] || { type: sec.type || 'ALL', unit: 'ALL', topic: 'ALL', competency: 'ALL' };
+                                    const getRootCode = (s?: string) => {
+                                      if (!s) return '';
+                                      const m = s.match(/^([A-Za-z]+\s*\d+(?:\.\d+)?)/);
+                                      return m ? m[1].replace(/\s+/g, '').toLowerCase() : s.toLowerCase().trim();
+                                    };
+
+                                    const availableFiltered = masterBankQuestions.filter(q => {
+                                      const matchType = secF.type === 'ALL' || q.mode === secF.type;
+
+                                      let matchUnit = true;
+                                      if (secF.unit && secF.unit !== 'ALL') {
+                                        const uCode = secF.unit.toLowerCase().trim();
+                                        matchUnit = Boolean(
+                                          (q.unit_code && q.unit_code.toLowerCase().trim() === uCode) ||
+                                          (q.unit_id && q.unit_id === secF.unit) ||
+                                          (q.unit_name && q.unit_name.toLowerCase().includes(uCode)) ||
+                                          (q.topic_code && q.topic_code.toLowerCase().includes(uCode)) ||
+                                          (q.topic && q.topic.toLowerCase().includes(uCode)) ||
+                                          (q.competency_code && q.competency_code.toLowerCase().includes(uCode))
+                                        );
+                                      }
+
+                                      let matchTopic = true;
+                                      if (secF.topic && secF.topic !== 'ALL') {
+                                        const selTopicObj = availableTopics.find(t => t.name === secF.topic || t.id === secF.topic);
+                                        if (selTopicObj) {
+                                          matchTopic = Boolean(
+                                            (q.topic_id && q.topic_id === selTopicObj.id) ||
+                                            (q.topic && (
+                                              q.topic.toLowerCase() === selTopicObj.name.toLowerCase() ||
+                                              q.topic.toLowerCase().includes(selTopicObj.name.toLowerCase()) ||
+                                              selTopicObj.name.toLowerCase().includes(q.topic.toLowerCase())
+                                            ))
+                                          );
+                                        } else {
+                                          matchTopic = q.topic ? Boolean(
+                                            q.topic.toLowerCase() === secF.topic.toLowerCase() ||
+                                            q.topic.toLowerCase().includes(secF.topic.toLowerCase()) ||
+                                            secF.topic.toLowerCase().includes(q.topic.toLowerCase())
+                                          ) : true;
+                                        }
+                                      }
+
+                                      let matchComp = true;
+                                      if (secF.competency && secF.competency !== 'ALL') {
+                                        const rootQ = getRootCode(q.competency_code);
+                                        const rootFilter = getRootCode(secF.competency);
+                                        matchComp = Boolean(
+                                          (q.competency_code && (
+                                            q.competency_code.toLowerCase() === secF.competency.toLowerCase() ||
+                                            rootQ === rootFilter ||
+                                            (rootQ && rootFilter && (rootQ.includes(rootFilter) || rootFilter.includes(rootQ)))
+                                          )) || (q.competency_id && secF.competency === q.competency_id)
+                                        );
+                                      }
+
+                                      return matchType && matchUnit && matchTopic && matchComp;
+                                    });
+
+                                    const checkedList = secCheckedQIds[sec.id] || [];
+
+                                    return (
+                                      <div className="space-y-3 pt-2">
+                                        <div className="flex items-center justify-between">
+                                          <span className="text-xs font-black text-[#5B4BFF]">
+                                            Step 5: Check questions to add to {sec.name} ({availableFiltered.length} Questions for {secF.unit === 'ALL' ? 'All Units / COs' : secF.unit})
+                                          </span>
+                                          {checkedList.length > 0 && !isCapacityReached && (
+                                            <button
+                                              type="button"
+                                              onClick={() => handleBatchAddQuestionsToSection(sec.id)}
+                                              className="px-3.5 py-1.5 rounded-xl bg-[#00C48C] hover:bg-[#00B07D] text-white font-black text-xs shadow transition-all cursor-pointer"
+                                            >
+                                              ➕ Add Selected ({checkedList.length} Questions) to {sec.name}
+                                            </button>
                                           )}
                                         </div>
 
-                                        {/* 3. MCQ Options if MCQ */}
-                                        {editingSectionQuestion.mode === 'MCQ' && (
-                                          <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
-                                            <span className="text-[11px] font-black uppercase text-[#5B4BFF] block">MCQ Options &amp; Correct Answer</span>
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                                              {['a', 'b', 'c', 'd'].map(letter => {
-                                                const optKey = `option${letter.toUpperCase()}` as 'optionA' | 'optionB' | 'optionC' | 'optionD';
-                                                const isSelected = editingSectionQuestion.correctOption === `option_${letter}`;
-                                                return (
-                                                  <div key={letter} className={`flex items-center gap-2 p-2 rounded-xl border ${isSelected ? 'border-[#00C48C] bg-[#E6F9F3]/40' : 'border-[#E7EAF3] dark:border-slate-700 bg-[#F8FAFC] dark:bg-slate-800'}`}>
+                                        {availableFiltered.length === 0 ? (
+                                          <div className="py-6 text-center text-[#4E5969] dark:text-slate-400 text-xs font-bold bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-800 rounded-xl">
+                                            No questions match the selected unit, topic or competency filter. Try selecting a different Unit / CO or Topic dropdown.
+                                          </div>
+                                        ) : (
+                                          <div className="max-h-64 overflow-y-auto space-y-2 pr-1 border border-[#E7EAF3] dark:border-slate-800 rounded-xl p-2.5 bg-[#F8FAFC] dark:bg-slate-900/50">
+                                            {availableFiltered.map((q) => {
+                                              const isChecked = checkedList.includes(q.id);
+                                              const isAlreadyInSec = sec.questions.some((sq: any) => sq.questionId === q.id);
+                                              const isAddDisabled = isAlreadyInSec || (!isChecked && isCapacityReached);
+
+                                              return (
+                                                <div
+                                                  key={q.id}
+                                                  className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs transition shadow-sm ${
+                                                    isAlreadyInSec
+                                                      ? 'bg-gray-50 dark:bg-slate-950/40 border-gray-200 dark:border-slate-800 opacity-60'
+                                                      : isChecked
+                                                        ? 'bg-[#EEF2FF] dark:bg-indigo-950/40 border-[#5B4BFF]/50'
+                                                        : 'bg-white dark:bg-slate-800 border-[#E7EAF3] dark:border-slate-700 hover:border-[#5B4BFF]/40'
+                                                  }`}
+                                                >
+                                                  <div className="flex items-start gap-3 flex-1">
                                                     <input
-                                                      type="radio"
-                                                      name={`correct-${q.questionId}`}
-                                                      checked={isSelected}
-                                                      onChange={() => setEditingSectionQuestion(prev => prev ? { ...prev, correctOption: `option_${letter}` } : null)}
-                                                      className="text-[#00C48C] focus:ring-[#00C48C] cursor-pointer"
+                                                      type="checkbox"
+                                                      disabled={isAddDisabled}
+                                                      checked={isChecked}
+                                                      title={isCapacityReached && !isChecked ? `Section capacity of ${targetM} reached. Remove an existing question first.` : undefined}
+                                                      onChange={() => handleToggleQuestionCheck(sec.id, q.id)}
+                                                      className="mt-1 rounded-md bg-white border-[#E7EAF3] text-[#5B4BFF] focus:ring-[#5B4BFF] w-4 h-4 cursor-pointer disabled:cursor-not-allowed"
                                                     />
-                                                    <span className="font-mono font-bold text-xs uppercase">{letter})</span>
-                                                    <input
-                                                      type="text"
-                                                      value={editingSectionQuestion[optKey] || ''}
-                                                      onChange={(e) => {
-                                                        const val = e.target.value;
-                                                        setEditingSectionQuestion(prev => prev ? { ...prev, [optKey]: val } : null);
-                                                      }}
-                                                      className="flex-1 bg-transparent border-0 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none"
-                                                      placeholder={`Option ${letter.toUpperCase()} text...`}
-                                                    />
+                                                    <div className="space-y-1.5 flex-1">
+                                                      <p className="font-black text-[#1B1E28] dark:text-white text-xs leading-relaxed">{q.question_text}</p>
+                                                      {(q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url) && (
+                                                        <div className="mt-1.5 flex items-center gap-2">
+                                                          <img
+                                                            src={q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url}
+                                                            alt="Diagram"
+                                                            className="h-14 w-20 object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-0.5 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+                                                            onClick={() => setViewingImageModal({
+                                                              src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
+                                                              title: q.question_text || '',
+                                                            })}
+                                                          />
+                                                          <button
+                                                            type="button"
+                                                            onClick={() => setViewingImageModal({
+                                                              src: q.image_url || q.imageUrl || (q as any).image || (q as any).diagramUrl || (q as any).diagram_url,
+                                                              title: q.question_text || '',
+                                                            })}
+                                                            className="text-[10px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
+                                                          >
+                                                            <span>📷</span>
+                                                            <span>View Diagram</span>
+                                                          </button>
+                                                        </div>
+                                                      )}
+                                                      <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                                        <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">
+                                                          🏛️ {q.unit_code || 'CO1'}
+                                                        </span>
+                                                        <span className={`px-2 py-0.5 rounded-full font-black border ${
+                                                          q.mode === 'MCQ' ? 'bg-[#EEF2FF] text-[#5B4BFF] border-[#5B4BFF]/30' : 'bg-purple-100 text-purple-700 border-purple-300'
+                                                        }`}>
+                                                          {q.mode}
+                                                        </span>
+                                                        {q.competency_code && (
+                                                          <span className="px-2 py-0.5 rounded-full font-mono font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
+                                                            🎯 {q.competency_code}
+                                                          </span>
+                                                        )}
+                                                        {q.topic && (
+                                                          <span className="px-2 py-0.5 rounded-full font-bold bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">
+                                                            📚 {q.topic}
+                                                          </span>
+                                                        )}
+                                                      </div>
+
+                                                      {/* Subquestions breakdown tree in picker before adding */}
+                                                      {(() => {
+                                                        const qSubs = q.sub_questions || (q as any).subQuestions;
+                                                        const curMarks = pickerTotalMarks[q.id] !== undefined ? pickerTotalMarks[q.id] : Number(q.max_marks || 2);
+                                                        if (!Array.isArray(qSubs) || qSubs.length === 0) return null;
+                                                        return (
+                                                          <div className="mt-2 pt-2 border-t border-slate-200 dark:border-slate-700/60 space-y-1.5">
+                                                            <span className="text-[10px] font-black uppercase text-[#5B4BFF] tracking-wider block">
+                                                              Sub-Questions Marks (Sum: {Number(curMarks).toFixed(1)} Marks):
+                                                            </span>
+                                                            {qSubs.map((sq: any) => {
+                                                              const sqKey = sq.id || sq.label;
+                                                              const curSubMark = pickerSubMarks[q.id]?.[sqKey] !== undefined ? pickerSubMarks[q.id][sqKey] : Number(sq.marks || 1);
+                                                              return (
+                                                                <div key={sqKey} className="flex items-center justify-between gap-2 text-[11px] bg-slate-50 dark:bg-slate-900/80 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
+                                                                  <div className="flex items-center gap-1.5 flex-1 min-w-0">
+                                                                    <span className="font-mono font-black text-[#5B4BFF] text-[10px]">{sq.label || '•'}</span>
+                                                                    <span className="text-slate-700 dark:text-slate-300 truncate text-[11px]">{sq.questionText}</span>
+                                                                  </div>
+                                                                  <div className="flex items-center gap-1 shrink-0">
+                                                                    <span className="text-[9px] font-bold text-slate-500">Marks:</span>
+                                                                    <input
+                                                                      type="number"
+                                                                      min={0.5}
+                                                                      step={0.5}
+                                                                      disabled={isAlreadyInSec}
+                                                                      value={curSubMark}
+                                                                      onChange={(e) => handlePickerSubMarkChange(q.id, sqKey, Number(e.target.value), qSubs)}
+                                                                      className="w-12 px-1 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#00C48C]/50 text-[#00C48C] font-black text-[11px] text-center focus:ring-1 focus:ring-[#00C48C] outline-none"
+                                                                    />
+                                                                  </div>
+                                                                </div>
+                                                              );
+                                                            })}
+                                                          </div>
+                                                        );
+                                                      })()}
+                                                    </div>
                                                   </div>
-                                                );
-                                              })}
-                                            </div>
+
+                                                  <div className="flex items-center gap-2 shrink-0">
+                                                    {/* Editable Total Marks before adding */}
+                                                    <div className="flex items-center gap-1 bg-slate-50 dark:bg-slate-900 px-2 py-1 rounded-xl border border-slate-200 dark:border-slate-700">
+                                                      <span className="text-[10px] font-bold text-slate-500">Marks:</span>
+                                                      <input
+                                                        type="number"
+                                                        min={0.5}
+                                                        step={0.5}
+                                                        disabled={isAlreadyInSec}
+                                                        value={pickerTotalMarks[q.id] !== undefined ? pickerTotalMarks[q.id] : Number(q.max_marks || 2)}
+                                                        onChange={(e) => handlePickerTotalMarksChange(q.id, Number(e.target.value), q.sub_questions || (q as any).subQuestions)}
+                                                        className="w-14 px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:ring-1 focus:ring-[#5B4BFF] outline-none"
+                                                        title="Change total question marks before adding"
+                                                      />
+                                                    </div>
+
+                                                    {isAlreadyInSec ? (
+                                                      <span className="text-[10px] font-black text-[#00C48C] bg-[#E6F9F3] px-2.5 py-1 rounded-full border border-[#00C48C]/30 whitespace-nowrap">
+                                                        ✓ Added
+                                                      </span>
+                                                    ) : isCapacityReached ? (
+                                                      <span
+                                                        className="text-[10px] font-bold text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-700 whitespace-nowrap cursor-not-allowed"
+                                                        title={`Capacity reached (${targetM}/${targetM}). Remove an existing question first.`}
+                                                      >
+                                                        Capacity Full
+                                                      </span>
+                                                    ) : (
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => handleSingleAddQuestionToSection(sec.id, q)}
+                                                        className="px-3 py-1.5 rounded-xl bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white font-black text-xs shadow transition-all whitespace-nowrap cursor-pointer"
+                                                      >
+                                                        + Add
+                                                      </button>
+                                                    )}
+                                                  </div>
+                                                </div>
+                                              );
+                                            })}
                                           </div>
                                         )}
-
-                                        {/* Action Buttons: Save or Cancel */}
-                                        <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-indigo-200 dark:border-indigo-900">
-                                          <button
-                                            type="button"
-                                            onClick={() => setEditingSectionQuestion(null)}
-                                            className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
-                                          >
-                                            ✕ Cancel
-                                          </button>
-                                          <button
-                                            type="button"
-                                            onClick={handleSaveEditedSectionQuestion}
-                                            className="px-5 py-1.5 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-indigo-600 hover:from-[#4E3EFF] hover:to-indigo-500 text-white font-black text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
-                                          >
-                                            <span>✓</span>
-                                            <span>Save Question &amp; Weightage</span>
-                                          </button>
-                                        </div>
                                       </div>
                                     );
-                                  }
+                                  })()}
+                                </div>
 
-                                  return (
-                                    <div key={q.questionId} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3 shadow-sm">
-                                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                                        <div className="flex items-start gap-3 flex-1">
-                                          <div className="flex flex-col items-center gap-1 pt-0.5">
-                                            <input
-                                              type="checkbox"
-                                              checked={(secGroupSelect[sec.id] || []).includes(q.questionId)}
-                                              onChange={() => handleToggleSelectForGroup(sec.id, q.questionId)}
-                                              className="w-4 h-4 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] cursor-pointer"
-                                              title="Select for choice group"
-                                            />
-                                            <div className="flex flex-col bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[9px] font-black">
-                                              <button
-                                                type="button"
-                                                disabled={qIdx === 0}
-                                                onClick={() => handleMoveQuestionUp(sec.id, qIdx)}
-                                                className="px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed"
-                                                title="Move Up"
-                                              >
-                                                ▲
-                                              </button>
-                                              <button
-                                                type="button"
-                                                disabled={qIdx === sec.questions.length - 1}
-                                                onClick={() => handleMoveQuestionDown(sec.id, qIdx)}
-                                                className="px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border-t border-slate-200 dark:border-slate-700"
-                                                title="Move Down"
-                                              >
-                                                ▼
-                                              </button>
-                                            </div>
-                                          </div>
-                                          <span className="font-mono text-[#5B4BFF] font-black text-sm">{qIdx + 1}.</span>
-                                          <div className="space-y-1 flex-1">
-                                            <p className="font-black text-[#1B1E28] dark:text-white leading-relaxed text-xs">{q.questionText}</p>
-                                            {(q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url) && (
-                                              <div className="mt-2 flex items-center gap-2">
-                                                <img
-                                                  src={q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url}
-                                                  alt="Diagram"
-                                                  className="h-16 w-24 object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs cursor-pointer hover:scale-105 transition-transform"
-                                                  onClick={() => setViewingImageModal({
-                                                    src: q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url,
-                                                    title: `Q${qIdx + 1}: ${q.questionText || ''}`,
-                                                  })}
-                                                />
-                                                <button
-                                                  type="button"
-                                                  onClick={() => setViewingImageModal({
-                                                    src: q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url,
-                                                    title: `Q${qIdx + 1}: ${q.questionText || ''}`,
-                                                  })}
-                                                  className="text-[11px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
-                                                >
-                                                  <span>📷</span>
-                                                  <span>Diagram Attached (Click to enlarge)</span>
-                                                </button>
-                                              </div>
-                                            )}
-                                            <div className="flex items-center gap-2 text-[10px]">
-                                              <span className="px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-black border border-[#5B4BFF]/20">
-                                                {q.mode}
-                                              </span>
-                                              <span className="px-2 py-0.5 rounded-full bg-[#E6F9F3] text-[#00C48C] font-black border border-[#00C48C]/20">
-                                                🎯 {q.competencyCode || 'CO1'}
-                                              </span>
-                                              <span className="px-2 py-0.5 rounded-full bg-[#FFF4EC] text-[#F36C21] font-bold border border-[#F36C21]/20">
-                                                📚 {q.topic || 'General Accounting / Concepts'}
-                                              </span>
-                                            </div>
-                                          </div>
-                                        </div>
+                                {/* Choice Groups Manager within Section */}
+                                {sec.choiceGroups && sec.choiceGroups.length > 0 && (
+                                  <div className="pt-2">
+                                    <ChoiceGroupManager
+                                      sectionId={sec.id}
+                                      choiceGroups={sec.choiceGroups}
+                                      questionsMap={allPaperQuestionsMap}
+                                      onUpdateGroup={(gId, updates) => handleUpdateChoiceGroup(sec.id, gId, updates)}
+                                      onRemoveGroup={(gId) => handleRemoveChoiceGroup(sec.id, gId)}
+                                      onRemoveQuestionFromGroup={(gId, qId) => handleRemoveQuestionFromChoiceGroup(sec.id, gId, qId)}
+                                    />
+                                  </div>
+                                )}
 
-                                        <div className="flex items-center gap-2.5">
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">Total Question Marks:</span>
-                                            {Array.isArray(q.subQuestions) && q.subQuestions.length > 0 ? (
-                                              <span
-                                                className="px-2.5 py-1 rounded-xl bg-[#EEF2FF] text-[#5B4BFF] font-black text-xs border border-[#5B4BFF]/40"
-                                                title="Computed as sum of subpart marks"
-                                              >
-                                                {Number(q.customMarks || 0).toFixed(1)} M
-                                              </span>
-                                            ) : (
-                                              <input
-                                                type="number"
-                                                value={q.customMarks}
-                                                onChange={(e) => handleUpdateCustomMarks(sec.id, q.questionId, Number(e.target.value))}
-                                                className="w-16 px-2.5 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
-                                              />
-                                            )}
-                                          </div>
-
-                                          {/* Edit Question & Weightage Action Button */}
-                                          <button
-                                            type="button"
-                                            onClick={() => handleStartEditSectionQuestion(sec.id, q)}
-                                            className="text-[#5B4BFF] hover:text-[#4E3EFF] font-black text-xs px-2.5 py-1 rounded-lg bg-[#EEF2FF] hover:bg-[#EEF2FF]/80 border border-[#5B4BFF]/30 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
-                                            title="Edit question text, weightage, sub-parts, or options"
-                                          >
-                                            <span>✏️</span>
-                                            <span>Edit</span>
-                                          </button>
-
-                                          <button
-                                            type="button"
-                                            onClick={() => handleRemoveQuestionFromSection(sec.id, q.questionId)}
-                                            className="text-[#F04438] hover:text-rose-700 font-extrabold text-xs px-2.5 py-1 rounded-lg bg-[#FEECEB] border border-[#F04438]/20 cursor-pointer"
-                                            title="Remove question from section"
-                                          >
-                                            ✕
-                                          </button>
-                                        </div>
-                                      </div>
-
-                                      {/* Sub-Questions Breakdown Tree */}
-                                      {Array.isArray(q.subQuestions) && q.subQuestions.length > 0 && (
-                                        <div className="space-y-2 border-l-2 border-[#5B4BFF]/40 pl-3 bg-[#F8FAFC] dark:bg-slate-800/60 p-3 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
-                                          <span className="text-[10px] font-black text-[#5B4BFF] uppercase tracking-wider block">
-                                            Sub-Questions Breakdown (Grand Total: {Number(q.customMarks || 0).toFixed(1)} Marks):
-                                          </span>
-                                          {q.subQuestions.map((sq: any) => (
-                                            <div key={sq.id || sq.label} className="flex items-center justify-between gap-3 text-xs bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-[#E7EAF3] dark:border-slate-800">
-                                              <div className="flex items-center gap-2 flex-1 min-w-0">
-                                                <span className="font-mono font-black text-[#5B4BFF] shrink-0 text-xs">{sq.label || 'a)'}</span>
-                                                <span className="font-bold text-[#1B1E28] dark:text-white text-xs truncate">{sq.questionText}</span>
-                                              </div>
-                                              <div className="flex items-center gap-1.5 shrink-0">
-                                                <span className="text-[10px] font-extrabold text-[#4E5969] dark:text-slate-400">Subpart Marks:</span>
-                                                <input
-                                                  type="number"
-                                                  min={0}
-                                                  step={0.5}
-                                                  value={sq.marks !== undefined ? sq.marks : ''}
-                                                  onChange={(e) => handleUpdateSubQuestionMark(sec.id, q.questionId, sq.id || sq.label, Number(e.target.value))}
-                                                  className="w-16 px-2 py-1 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center focus:outline-none focus:border-[#F36C21]"
-                                                />
-                                                <span className="text-[10px] text-[#7B8794] font-bold">Marks</span>
-                                              </div>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
+                                {/* Group Selection Banner */}
+                                {(secGroupSelect[sec.id] || []).length > 0 && (
+                                  <div className="p-3 bg-indigo-50 dark:bg-slate-800 border border-indigo-200 dark:border-indigo-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-xs">
+                                    <span className="text-xs font-bold text-[#5B4BFF]">
+                                      ⌥ {(secGroupSelect[sec.id] || []).length} question(s) selected for Choice Group
+                                    </span>
+                                    <div className="flex items-center gap-2">
+                                      <button
+                                        type="button"
+                                        disabled={(secGroupSelect[sec.id] || []).length < 2}
+                                        onClick={() => handleCreateChoiceGroup(sec.id)}
+                                        className="px-3 py-1.5 bg-[#5B4BFF] hover:bg-[#4E3EFF] text-white text-xs font-black rounded-lg shadow-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all cursor-pointer"
+                                      >
+                                        + Wrap in Choice Group
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => setSecGroupSelect(prev => ({ ...prev, [sec.id]: [] }))}
+                                        className="px-2.5 py-1 text-slate-500 hover:text-slate-800 dark:hover:text-white text-xs font-semibold cursor-pointer"
+                                      >
+                                        Clear
+                                      </button>
                                     </div>
-                                  );
-                                })}
-                              </div>
+                                  </div>
+                                )}
+
+                                {/* Added Questions List in Section */}
+                                {sec.questions.length === 0 ? (
+                                  <div className="text-center py-6 text-[#4E5969] dark:text-slate-400 text-xs font-bold italic bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-2xl">
+                                    No questions added to {sec.name} yet. Use the question selector above to check and add questions.
+                                  </div>
+                                ) : (
+                                  <div className="space-y-3">
+                                    {sec.questions.map((q: any, qIdx: number) => {
+                                      const isEditingThisQ = editingSectionQuestion?.secId === sec.id && editingSectionQuestion?.qId === (q.questionId || q.id);
+
+                                      if (isEditingThisQ && editingSectionQuestion) {
+                                        return (
+                                          <div key={q.questionId || q.id} className="p-4 rounded-2xl bg-indigo-50/50 dark:bg-slate-800/90 border-2 border-[#5B4BFF] space-y-4 shadow-md animate-fadeIn">
+                                            <div className="flex items-center justify-between border-b border-indigo-200 dark:border-indigo-900 pb-2.5">
+                                              <div className="flex items-center gap-2">
+                                                <span className="w-6 h-6 rounded-full bg-[#5B4BFF] text-white flex items-center justify-center font-black text-xs">
+                                                  {qIdx + 1}
+                                                </span>
+                                                <span className="text-xs font-black uppercase text-[#2D2575] dark:text-indigo-300">
+                                                  ✏️ Edit Question Prompt &amp; Weightage (Q{qIdx + 1})
+                                                </span>
+                                              </div>
+                                              <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-indigo-100 text-[#5B4BFF]">
+                                                {editingSectionQuestion.mode || q.mode}
+                                              </span>
+                                            </div>
+
+                                            {/* 1. Question Prompt Textarea */}
+                                            <div>
+                                              <label className="block text-[11px] font-black uppercase text-[#1B1E28] dark:text-slate-300 mb-1">
+                                                Question Prompt / Text *
+                                              </label>
+                                              <textarea
+                                                value={editingSectionQuestion.questionText}
+                                                onChange={(e) => setEditingSectionQuestion(prev => prev ? { ...prev, questionText: e.target.value } : null)}
+                                                rows={3}
+                                                placeholder="Type or refine question wording..."
+                                                className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-[#5B4BFF]/40 text-[#1B1E28] dark:text-white font-bold text-xs focus:ring-2 focus:ring-[#5B4BFF] focus:border-[#5B4BFF] outline-none"
+                                              />
+                                            </div>
+
+                                            {/* 2. Weightage & Sub-parts Configuration */}
+                                            <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3">
+                                              <div className="flex items-center justify-between">
+                                                <label className="text-[11px] font-black uppercase text-[#5B4BFF]">
+                                                  Weightage &amp; Sub-parts Structure
+                                                </label>
+                                                <div className="flex items-center gap-2">
+                                                  <span className="text-[11px] font-extrabold text-[#4E5969] dark:text-slate-400">Total Question Marks:</span>
+                                                  <span className="px-3 py-0.5 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-black text-xs border border-[#5B4BFF]/30">
+                                                    {editingSectionQuestion.subQuestions && editingSectionQuestion.subQuestions.length > 0
+                                                      ? editingSectionQuestion.subQuestions.reduce((sum, sq) => sum + Number(sq.marks || 0), 0)
+                                                      : editingSectionQuestion.customMarks} Marks
+                                                  </span>
+                                                </div>
+                                              </div>
+
+                                              {/* Sub-parts List if present */}
+                                              {editingSectionQuestion.subQuestions && editingSectionQuestion.subQuestions.length > 0 ? (
+                                                <div className="space-y-2">
+                                                  <div className="text-[10px] text-slate-500 font-bold uppercase">Editable Sub-Parts:</div>
+                                                  {editingSectionQuestion.subQuestions.map((sq: any, sIdx: number) => (
+                                                    <div key={sq.id || sIdx} className="flex flex-col sm:flex-row items-start sm:items-center gap-2 p-2 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700">
+                                                      <input
+                                                        type="text"
+                                                        value={sq.label || `${String.fromCharCode(97 + sIdx)})`}
+                                                        onChange={(e) => {
+                                                          const val = e.target.value;
+                                                          setEditingSectionQuestion(prev => {
+                                                            if (!prev) return null;
+                                                            const newSubs = [...prev.subQuestions];
+                                                            newSubs[sIdx] = { ...newSubs[sIdx], label: val };
+                                                            return { ...prev, subQuestions: newSubs };
+                                                          });
+                                                        }}
+                                                        className="w-12 px-2 py-1 rounded bg-white dark:bg-slate-900 border text-center font-mono font-black text-xs text-[#5B4BFF]"
+                                                        placeholder="a)"
+                                                      />
+                                                      <input
+                                                        type="text"
+                                                        value={sq.questionText}
+                                                        onChange={(e) => {
+                                                          const val = e.target.value;
+                                                          setEditingSectionQuestion(prev => {
+                                                            if (!prev) return null;
+                                                            const newSubs = [...prev.subQuestions];
+                                                            newSubs[sIdx] = { ...newSubs[sIdx], questionText: val };
+                                                            return { ...prev, subQuestions: newSubs };
+                                                          });
+                                                        }}
+                                                        className="flex-1 px-2.5 py-1 rounded bg-white dark:bg-slate-900 border font-bold text-xs text-[#1B1E28] dark:text-white"
+                                                        placeholder="Sub-part wording..."
+                                                      />
+                                                      <div className="flex items-center gap-1.5 shrink-0">
+                                                        <span className="text-[10px] font-bold text-slate-500">Marks:</span>
+                                                        <input
+                                                          type="number"
+                                                          min={0.5}
+                                                          step={0.5}
+                                                          value={sq.marks}
+                                                          onChange={(e) => {
+                                                            const val = Number(e.target.value);
+                                                            setEditingSectionQuestion(prev => {
+                                                              if (!prev) return null;
+                                                              const newSubs = [...prev.subQuestions];
+                                                              newSubs[sIdx] = { ...newSubs[sIdx], marks: val };
+                                                              const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
+                                                              return { ...prev, subQuestions: newSubs, customMarks: newTotal };
+                                                            });
+                                                          }}
+                                                          className="w-14 px-2 py-1 rounded bg-white dark:bg-slate-900 border border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center"
+                                                        />
+                                                        <button
+                                                          type="button"
+                                                          onClick={() => {
+                                                            setEditingSectionQuestion(prev => {
+                                                              if (!prev || prev.subQuestions.length <= 1) return prev;
+                                                              const newSubs = prev.subQuestions.filter((_, idx) => idx !== sIdx);
+                                                              const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
+                                                              return { ...prev, subQuestions: newSubs, customMarks: newTotal };
+                                                            });
+                                                          }}
+                                                          className="text-[#F04438] hover:text-rose-700 font-extrabold px-1.5 py-0.5 rounded text-xs"
+                                                          title="Remove this sub-part"
+                                                        >
+                                                          ✕
+                                                        </button>
+                                                      </div>
+                                                    </div>
+                                                  ))}
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingSectionQuestion(prev => {
+                                                        if (!prev) return null;
+                                                        const nextLabel = `${String.fromCharCode(97 + prev.subQuestions.length)})`;
+                                                        const newSubs = [...prev.subQuestions, { id: `sub-${Date.now()}`, label: nextLabel, questionText: '', marks: 5 }];
+                                                        const newTotal = newSubs.reduce((sum, s) => sum + Number(s.marks || 0), 0);
+                                                        return { ...prev, subQuestions: newSubs, customMarks: newTotal };
+                                                      });
+                                                    }}
+                                                    className="px-3 py-1 rounded-lg bg-[#EEF2FF] text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white text-xs font-black transition flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    <span>➕</span>
+                                                    <span>Add Another Sub-part</span>
+                                                  </button>
+                                                </div>
+                                              ) : (
+                                                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                                  <div className="flex items-center gap-2">
+                                                    <span className="text-xs font-bold text-[#1B1E28] dark:text-slate-300">Marks for Question:</span>
+                                                    <input
+                                                      type="number"
+                                                      min={0.5}
+                                                      step={0.5}
+                                                      value={editingSectionQuestion.customMarks}
+                                                      onChange={(e) => setEditingSectionQuestion(prev => prev ? { ...prev, customMarks: Number(e.target.value) } : null)}
+                                                      className="w-20 px-3 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center"
+                                                    />
+                                                    <span className="text-xs font-bold text-slate-400">Marks</span>
+                                                  </div>
+                                                  <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                      setEditingSectionQuestion(prev => {
+                                                        if (!prev) return null;
+                                                        const half = Number((prev.customMarks / 2).toFixed(1)) || 5;
+                                                        return {
+                                                          ...prev,
+                                                          subQuestions: [
+                                                            { id: 'sub-1', label: 'a)', questionText: '', marks: half },
+                                                            { id: 'sub-2', label: 'b)', questionText: '', marks: half }
+                                                          ]
+                                                        };
+                                                      });
+                                                    }}
+                                                    className="px-3 py-1.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 hover:bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30 text-xs font-black transition flex items-center gap-1 cursor-pointer"
+                                                  >
+                                                    <span>✨</span>
+                                                    <span>Split into Sub-Parts (a, b...)</span>
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+
+                                            {/* 3. MCQ Options if MCQ */}
+                                            {editingSectionQuestion.mode === 'MCQ' && (
+                                              <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-2">
+                                                <span className="text-[11px] font-black uppercase text-[#5B4BFF] block">MCQ Options &amp; Correct Answer</span>
+                                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                  {['a', 'b', 'c', 'd'].map(letter => {
+                                                    const optKey = `option${letter.toUpperCase()}` as 'optionA' | 'optionB' | 'optionC' | 'optionD';
+                                                    const isSelected = editingSectionQuestion.correctOption === `option_${letter}`;
+                                                    return (
+                                                      <div key={letter} className={`flex items-center gap-2 p-2 rounded-xl border ${isSelected ? 'border-[#00C48C] bg-[#E6F9F3]/40' : 'border-[#E7EAF3] dark:border-slate-700 bg-[#F8FAFC] dark:bg-slate-800'}`}>
+                                                        <input
+                                                          type="radio"
+                                                          name={`correct-${q.questionId}`}
+                                                          checked={isSelected}
+                                                          onChange={() => setEditingSectionQuestion(prev => prev ? { ...prev, correctOption: `option_${letter}` } : null)}
+                                                          className="text-[#00C48C] focus:ring-[#00C48C] cursor-pointer"
+                                                        />
+                                                        <span className="font-mono font-bold text-xs uppercase">{letter})</span>
+                                                        <input
+                                                          type="text"
+                                                          value={editingSectionQuestion[optKey] || ''}
+                                                          onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setEditingSectionQuestion(prev => prev ? { ...prev, [optKey]: val } : null);
+                                                          }}
+                                                          className="flex-1 bg-transparent border-0 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none"
+                                                          placeholder={`Option ${letter.toUpperCase()} text...`}
+                                                        />
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              </div>
+                                            )}
+
+                                            {/* Action Buttons: Save or Cancel */}
+                                            <div className="flex items-center justify-end gap-2.5 pt-2 border-t border-indigo-200 dark:border-indigo-900">
+                                              <button
+                                                type="button"
+                                                onClick={() => setEditingSectionQuestion(null)}
+                                                className="px-4 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 font-bold text-xs transition cursor-pointer"
+                                              >
+                                                ✕ Cancel
+                                              </button>
+                                              <button
+                                                type="button"
+                                                onClick={handleSaveEditedSectionQuestion}
+                                                className="px-5 py-1.5 rounded-xl bg-gradient-to-r from-[#5B4BFF] to-indigo-600 hover:from-[#4E3EFF] hover:to-indigo-500 text-white font-black text-xs shadow-md transition flex items-center gap-1.5 cursor-pointer"
+                                              >
+                                                <span>✓</span>
+                                                <span>Save Question &amp; Weightage</span>
+                                              </button>
+                                            </div>
+                                          </div>
+                                        );
+                                      }
+
+                                      return (
+                                        <div key={q.questionId} className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 space-y-3 shadow-sm hover:border-[#5B4BFF]/40 transition-all">
+                                          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                            <div className="flex items-start gap-3 flex-1">
+                                              <div className="flex flex-col items-center gap-1 pt-0.5">
+                                                <input
+                                                  type="checkbox"
+                                                  checked={(secGroupSelect[sec.id] || []).includes(q.questionId)}
+                                                  onChange={() => handleToggleSelectForGroup(sec.id, q.questionId)}
+                                                  className="w-4 h-4 rounded text-[#5B4BFF] focus:ring-[#5B4BFF] cursor-pointer"
+                                                  title="Select for choice group"
+                                                />
+                                                <div className="flex flex-col bg-slate-100 dark:bg-slate-800 rounded border border-slate-200 dark:border-slate-700 overflow-hidden text-[9px] font-black">
+                                                  <button
+                                                    type="button"
+                                                    disabled={qIdx === 0}
+                                                    onClick={() => handleMoveQuestionUp(sec.id, qIdx)}
+                                                    className="px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed"
+                                                    title="Move Up"
+                                                  >
+                                                    ▲
+                                                  </button>
+                                                  <button
+                                                    type="button"
+                                                    disabled={qIdx === sec.questions.length - 1}
+                                                    onClick={() => handleMoveQuestionDown(sec.id, qIdx)}
+                                                    className="px-1.5 py-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 disabled:opacity-30 disabled:cursor-not-allowed border-t border-slate-200 dark:border-slate-700"
+                                                    title="Move Down"
+                                                  >
+                                                    ▼
+                                                  </button>
+                                                </div>
+                                              </div>
+                                              <span className="font-mono text-[#5B4BFF] font-black text-sm">{qIdx + 1}.</span>
+                                              <div className="space-y-1 flex-1">
+                                                <p className="font-black text-[#1B1E28] dark:text-white leading-relaxed text-xs">{q.questionText}</p>
+                                                {(q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url) && (
+                                                  <div className="mt-2 flex items-center gap-2">
+                                                    <img
+                                                      src={q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url}
+                                                      alt="Diagram"
+                                                      className="h-16 w-24 object-contain rounded-lg border border-[#E7EAF3] dark:border-slate-700 bg-white p-1 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+                                                      onClick={() => setViewingImageModal({
+                                                        src: q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url,
+                                                        title: `Q${qIdx + 1}: ${q.questionText || ''}`,
+                                                      })}
+                                                    />
+                                                    <button
+                                                      type="button"
+                                                      onClick={() => setViewingImageModal({
+                                                        src: q.imageUrl || q.image_url || q.image || q.diagramUrl || q.diagram_url,
+                                                        title: `Q${qIdx + 1}: ${q.questionText || ''}`,
+                                                      })}
+                                                      className="text-[11px] font-bold text-[#5B4BFF] hover:underline flex items-center gap-1 cursor-pointer"
+                                                    >
+                                                      <span>📷</span>
+                                                      <span>Diagram Attached (Click to enlarge)</span>
+                                                    </button>
+                                                  </div>
+                                                )}
+                                                <div className="flex items-center gap-2 text-[10px] flex-wrap">
+                                                  <span className="px-2 py-0.5 rounded-full bg-[#EEF2FF] text-[#5B4BFF] font-black border border-[#5B4BFF]/20">
+                                                    {q.mode}
+                                                  </span>
+                                                  <span className="px-2 py-0.5 rounded-full bg-[#E6F9F3] text-[#00C48C] font-black border border-[#00C48C]/20">
+                                                    🎯 {q.competencyCode || 'CO1'}
+                                                  </span>
+                                                  <span className="px-2 py-0.5 rounded-full bg-[#FFF4EC] text-[#F36C21] font-bold border border-[#F36C21]/20">
+                                                    📚 {q.topic || 'General Accounting / Concepts'}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+
+                                            <div className="flex items-center gap-2.5 flex-wrap">
+                                              <div className="flex items-center gap-1.5">
+                                                <span className="text-[11px] font-bold text-[#4E5969] dark:text-slate-400">Total Marks:</span>
+                                                {Array.isArray(q.subQuestions) && q.subQuestions.length > 0 ? (
+                                                  <span
+                                                    className="px-2.5 py-1 rounded-xl bg-[#EEF2FF] text-[#5B4BFF] font-black text-xs border border-[#5B4BFF]/40"
+                                                    title="Computed as sum of subpart marks"
+                                                  >
+                                                    {Number(q.customMarks || 0).toFixed(1)} M
+                                                  </span>
+                                                ) : (
+                                                  <input
+                                                    type="number"
+                                                    value={q.customMarks}
+                                                    onChange={(e) => handleUpdateCustomMarks(sec.id, q.questionId, Number(e.target.value))}
+                                                    className="w-16 px-2.5 py-1 rounded-xl bg-[#F8FAFC] dark:bg-slate-800 border border-[#5B4BFF]/40 text-[#5B4BFF] font-black text-xs text-center focus:ring-1 focus:ring-[#5B4BFF] outline-none"
+                                                  />
+                                                )}
+                                              </div>
+
+                                              {/* Edit Question Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleStartEditSectionQuestion(sec.id, q)}
+                                                className="text-[#5B4BFF] hover:text-[#4E3EFF] font-black text-xs px-2.5 py-1 rounded-xl bg-[#EEF2FF] hover:bg-[#EEF2FF]/80 border border-[#5B4BFF]/30 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                                                title="Edit question text, weightage, sub-parts, or options"
+                                              >
+                                                <Edit3 className="w-3.5 h-3.5" />
+                                                <span>Edit</span>
+                                              </button>
+
+                                              {/* Prominent Remove Button */}
+                                              <button
+                                                type="button"
+                                                onClick={() => handleRemoveQuestionFromSection(sec.id, q.questionId)}
+                                                className="text-[#F04438] hover:text-white hover:bg-[#F04438] font-black text-xs px-2.5 py-1 rounded-xl bg-[#FEECEB] border border-[#F04438]/30 flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                                                title="Remove question from section"
+                                              >
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                                <span>Remove</span>
+                                              </button>
+                                            </div>
+                                          </div>
+
+                                          {/* Sub-Questions Breakdown Tree */}
+                                          {Array.isArray(q.subQuestions) && q.subQuestions.length > 0 && (
+                                            <div className="space-y-2 border-l-2 border-[#5B4BFF]/40 pl-3 bg-[#F8FAFC] dark:bg-slate-800/60 p-3 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
+                                              <span className="text-[10px] font-black text-[#5B4BFF] uppercase tracking-wider block">
+                                                Sub-Questions Breakdown (Grand Total: {Number(q.customMarks || 0).toFixed(1)} Marks):
+                                              </span>
+                                              {q.subQuestions.map((sq: any) => (
+                                                <div key={sq.id || sq.label} className="flex items-center justify-between gap-3 text-xs bg-white dark:bg-slate-900 p-2.5 rounded-lg border border-[#E7EAF3] dark:border-slate-800">
+                                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                                    <span className="font-mono font-black text-[#5B4BFF] shrink-0 text-xs">{sq.label || 'a)'}</span>
+                                                    <span className="font-bold text-[#1B1E28] dark:text-white text-xs truncate">{sq.questionText}</span>
+                                                  </div>
+                                                  <div className="flex items-center gap-1.5 shrink-0">
+                                                    <span className="text-[10px] font-extrabold text-[#4E5969] dark:text-slate-400">Subpart Marks:</span>
+                                                    <input
+                                                      type="number"
+                                                      min={0}
+                                                      step={0.5}
+                                                      value={sq.marks !== undefined ? sq.marks : ''}
+                                                      onChange={(e) => handleUpdateSubQuestionMark(sec.id, q.questionId, sq.id || sq.label, Number(e.target.value))}
+                                                      className="w-16 px-2 py-1 rounded-lg bg-[#F8FAFC] dark:bg-slate-800 border border-[#00C48C]/50 text-[#00C48C] font-black text-xs text-center focus:ring-1 focus:ring-[#00C48C] outline-none"
+                                                    />
+                                                    <span className="text-[10px] text-[#7B8794] font-bold">Marks</span>
+                                                  </div>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
+                              </>
                             )}
                           </div>
                         );
