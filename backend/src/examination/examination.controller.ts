@@ -43,11 +43,13 @@ export class ExaminationController {
     @Query('facultyId') facultyId?: string,
     @Query('createdBy') createdBy?: string,
     @Query('role') role?: string,
+    @Req() req?: any,
   ) {
+    const activeUser = this.extractUserFromReq(req, user);
     return this.examinationService.getPapers(
       tenantSlug,
       { status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section, facultyId, createdBy, role },
-      user,
+      activeUser,
     );
   }
 
@@ -191,8 +193,13 @@ export class ExaminationController {
     @Tenant() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
     @Query('status') statusFilter?: string,
+    @CurrentUser() user?: any,
+    @Req() req?: any,
   ) {
-    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter || 'PENDING_DQAC_APPROVAL');
+    const activeUser = this.extractUserFromReq(req, user);
+    return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter || 'PENDING_DQAC_APPROVAL', {
+      user: activeUser,
+    });
   }
 
   /** DQAC: Quality audit action on question paper */

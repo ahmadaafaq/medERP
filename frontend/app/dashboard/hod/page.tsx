@@ -102,7 +102,15 @@ function HodQPApprovalCard() {
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-extrabold text-[#1B1E28] dark:text-white truncate">{p.name}</p>
                 <p className="text-[11px] text-slate-500">{p.subject_name || p.code} · {p.type || 'THEORY'} · {p.max_marks}M</p>
-                <span className="text-[10px] text-orange-600 font-bold">⏳ Pending HOD Approval</span>
+                <span className={`text-[10px] font-bold ${
+                  p.status === 'DQAC_APPROVED' ? 'text-indigo-600' :
+                  p.status === 'PENDING_DQAC_APPROVAL' ? 'text-purple-600' :
+                  'text-orange-600'
+                }`}>
+                  {p.status === 'DQAC_APPROVED' ? '⭐ DQAC Approved (Ready for HOD Sign-off)' :
+                   p.status === 'PENDING_DQAC_APPROVAL' ? '🔍 Pending DQAC Audit' :
+                   '⏳ Pending HOD Approval'}
+                </span>
               </div>
               <div className="flex gap-1.5 flex-shrink-0 items-start mt-1">
                 <button onClick={() => act(p.id, 'approve')} disabled={actioning === p.id} className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold disabled:opacity-50">✓ Approve</button>

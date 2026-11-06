@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
 import {
@@ -124,6 +124,7 @@ export default function FacultyObePage() {
   const [computing, setComputing] = useState(false);
   const [dashData, setDashData] = useState<any>(null);
   const [targets, setTargets] = useState<any[]>([]);
+  const requestIdRef = useRef(0);
 
   // Academic Cascading State from FacultyAcademicCascadingDropdown
   const [academicCascade, setAcademicCascade] = useState<AcademicCascadingState | null>(null);
@@ -145,7 +146,16 @@ export default function FacultyObePage() {
   const tenant = getTenant();
   const facultyId = getFacultyId();
 
-  // Load dashboard data with dynamic parameters
+  // Helper to extract 4-digit year from batch
+  const extractBatchYear = (batch: any): string => {
+    if (!batch) return '';
+    const match = String(batch.batch_name || batch.name || '').match(/\b(20\d\d)\b/);
+    if (match) return match[1];
+    if (batch.year && String(batch.year).length === 4) return String(batch.year);
+    return String(batch.year || batch.batch_cd || '');
+  };
+
+  // Load dashboard data with dynamic parameters & race condition guard
   const loadDashboard = useCallback(async (
     customSubject?: string,
     customSemester?: string,
@@ -154,6 +164,7 @@ export default function FacultyObePage() {
     customBranch?: string,
     customBatch?: string,
   ) => {
+    const currentReqId = ++requestIdRef.current;
     setLoading(true);
     try {
       const activeTenant = getTenant();
@@ -166,11 +177,7 @@ export default function FacultyObePage() {
       const targetSec = customSection !== undefined ? customSection : selectedSection;
       const targetCourse = customCourse !== undefined ? customCourse : academicCascade?.course?.course_cd;
       const targetBranch = customBranch !== undefined ? customBranch : academicCascade?.branch?.branch_cd;
-      const defaultBatch = academicCascade?.batch?.year
-        ? String(academicCascade.batch.year)
-        : academicCascade?.batch?.batch_cd
-        ? String(academicCascade.batch.batch_cd)
-        : '';
+      const defaultBatch = extractBatchYear(academicCascade?.batch);
       const targetBatch = customBatch !== undefined ? customBatch : defaultBatch;
 
       if (targetSub) params.append('subjectCode', targetSub);
@@ -181,15 +188,40 @@ export default function FacultyObePage() {
       if (targetBatch) params.append('batchYear', String(targetBatch));
 
       const res = await fetch(`${API_BASE}/obe/faculty-dashboard?${params}`, { headers: getHeaders() });
+      if (currentReqId !== requestIdRef.current) return; // Discard stale response
       if (res.ok) {
         const json = await res.json();
         setDashData(json.data);
         setTargets(json.data?.gap_analysis || []);
+
+        // Auto-populate CO Attainment Results immediately if already computed
+        if (json.data?.co_attainments && Array.isArray(json.data.co_attainments) && json.data.co_attainments.length > 0) {
+          const map: Record<string, any> = {};
+          for (const row of json.data.co_attainments) {
+            if (!map[row.unit_code]) {
+              const finalVal = parseFloat(row.final_attainment || '0');
+              const lvl = row.attainment_level !== undefined ? row.attainment_level : (finalVal >= 2.5 ? 3 : finalVal >= 1.5 ? 2 : finalVal >= 0.5 ? 1 : 0);
+              map[row.unit_code] = {
+                direct_attainment: parseFloat(row.direct_attainment || '0'),
+                indirect_attainment: parseFloat(row.indirect_attainment || '0'),
+                final_attainment: finalVal,
+                attainment_level: lvl,
+                student_pass_pct: parseFloat(row.student_pass_pct || '0'),
+                total_students: row.total_students || 0,
+                students_passed: row.students_passed || 0,
+                has_survey: !!row.has_survey,
+              };
+            }
+          }
+          setCoAttainments(map);
+        }
       }
     } catch (e) {
       console.error(e);
     } finally {
-      setLoading(false);
+      if (currentReqId === requestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [selectedSubject, semester, selectedSection, academicCascade]);
 
@@ -201,11 +233,7 @@ export default function FacultyObePage() {
     const secVal = state.section || 'all';
     const courseVal = state.course?.course_cd || '';
     const branchVal = state.branch?.branch_cd || '';
-    const batchVal = state.batch?.year
-      ? String(state.batch.year)
-      : state.batch?.batch_cd
-      ? String(state.batch.batch_cd)
-      : '';
+    const batchVal = extractBatchYear(state.batch);
 
     setSelectedSubject(subCd);
     setSemester(semVal);
@@ -267,6 +295,8 @@ export default function FacultyObePage() {
 
   // Helper for batch year as number
   const getBatchYearNum = (): number | undefined => {
+    const match = String(academicCascade?.batch?.batch_name || (academicCascade?.batch as any)?.name || '').match(/\b(20\d\d)\b/);
+    if (match) return Number(match[1]);
     if (academicCascade?.batch?.year) {
       const n = Number(academicCascade.batch.year);
       if (!isNaN(n)) return n;

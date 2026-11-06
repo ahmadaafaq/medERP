@@ -54,7 +54,10 @@ interface QuestionDetail {
   questionText: string;
   mode: string;
   topic?: string;
+  topicCode?: string;
   competencyCode?: string;
+  co?: string;
+  bloomLevel?: string;
   defaultMarks: number;
   customMarks: number;
   optionA?: string;
@@ -171,7 +174,82 @@ export default function FacultyMarksPage() {
   const [selectedCbmeYearId, setSelectedCbmeYearId] = useState<string>('');
   const [professionals, setProfessionals] = useState<Professional[]>([]);
   const [selectedProfId, setSelectedProfId] = useState<string>('');
+  const [topicsMaster, setTopicsMaster] = useState<any[]>([]);
   const [metaLoaded, setMetaLoaded] = useState<boolean>(false);
+
+  const formatBloom = (raw?: string) => {
+    if (!raw) return 'K2 (Understand)';
+    let s = String(raw).trim();
+    s = s.replace(/^KL-/i, 'K');
+    if (/^K\d/i.test(s)) return s;
+    return `K${s}`;
+  };
+
+  const getBloomColor = (raw?: string) => {
+    const s = String(raw || '').toUpperCase();
+    if (s.includes('K1') || s.includes('KL-1') || s.includes('REMEMBER')) {
+      return 'bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300';
+    }
+    if (s.includes('K2') || s.includes('KL-2') || s.includes('UNDERSTAND')) {
+      return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/60 dark:text-blue-300 dark:border-blue-800';
+    }
+    if (s.includes('K3') || s.includes('KL-3') || s.includes('APPLY')) {
+      return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/60 dark:text-emerald-300 dark:border-emerald-800';
+    }
+    if (s.includes('K4') || s.includes('KL-4') || s.includes('ANALYZE')) {
+      return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/60 dark:text-amber-300 dark:border-amber-800';
+    }
+    if (s.includes('K5') || s.includes('KL-5') || s.includes('EVALUATE')) {
+      return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/60 dark:text-purple-300 dark:border-purple-800';
+    }
+    if (s.includes('K6') || s.includes('KL-6') || s.includes('CREATE')) {
+      return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-800';
+    }
+    return 'bg-indigo-50 text-indigo-700 border-indigo-200 dark:bg-indigo-950/60 dark:text-indigo-300 dark:border-indigo-800';
+  };
+
+  const resolveTopicAndBloom = (compCode?: string, topicName?: string) => {
+    const code = String(compCode || '').trim();
+    const name = String(topicName || '').trim();
+
+    const topicCodePrefix = code.includes('-ST') ? code.split('-ST')[0] : code;
+    let matched = topicsMaster.find((t: any) =>
+      (t.code && topicCodePrefix && t.code.toLowerCase() === topicCodePrefix.toLowerCase()) ||
+      (t.code && code && t.code.toLowerCase() === code.toLowerCase())
+    );
+
+    if (!matched && name) {
+      matched = topicsMaster.find((t: any) =>
+        t.name && t.name.toLowerCase().trim() === name.toLowerCase()
+      );
+    }
+
+    let co = matched?.unit_code || matched?.unit_name;
+    let bloom = matched?.bloom_level;
+    let resolvedTopic = matched?.name || name || 'General Topic';
+
+    if (!co) {
+      if (code.includes('T1') || code.includes('T2') || topicCodePrefix.endsWith('T1') || topicCodePrefix.endsWith('T2')) co = 'CO1';
+      else if (code.includes('T3') || topicCodePrefix.endsWith('T3')) co = 'CO2';
+      else if (code.includes('T4') || code.includes('T5') || topicCodePrefix.endsWith('T4') || topicCodePrefix.endsWith('T5')) co = 'CO3';
+      else if (code.includes('T6') || code.includes('T7') || topicCodePrefix.endsWith('T6') || topicCodePrefix.endsWith('T7')) co = 'CO4';
+      else if (code.includes('T8') || code.includes('T9') || code.includes('T10') || topicCodePrefix.endsWith('T8') || topicCodePrefix.endsWith('T10')) co = 'CO5';
+      else co = 'CO1';
+    }
+
+    if (!bloom) {
+      if (co === 'CO2' || co === 'CO3') bloom = 'KL-5 (Evaluate)';
+      else if (co === 'CO4') bloom = 'KL-2 (Understand)';
+      else if (co === 'CO5') bloom = 'KL-3 (Apply)';
+      else bloom = 'KL-4 (Analyze)';
+    }
+
+    return {
+      co: String(co).toUpperCase(),
+      bloom: String(bloom),
+      topic: resolvedTopic,
+    };
+  };
 
   const [tenantName, setTenantName] = useState<string>('');
   const [facultyDeptName, setFacultyDeptName] = useState<string>('');
@@ -236,10 +314,563 @@ export default function FacultyMarksPage() {
   const [allFetchedPapers, setAllFetchedPapers] = useState<ExamPaper[]>([]);
   const [selectedPaperId, setSelectedPaperId] = useState<string>('');
 
+  // Filter papers strictly by selected subject
+  const filteredPapers = useMemo(() => {
+    if (allFetchedPapers.length === 0) return [];
+    const selSubjObj: any = academicCascade?.subject || allSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
+    const subjCode = (selSubjObj?.code || selSubjObj?.sub_cd || '').toLowerCase().trim();
+    const subjName = (selSubjObj?.name || selSubjObj?.sub_name || '').toLowerCase().trim();
+    const subjId = String(selSubjObj?.id || selectedSubject || '').toLowerCase().trim();
+
+    if (!subjCode && !subjName && !subjId) return allFetchedPapers;
+
+    const matched = allFetchedPapers.filter(p => {
+      if (p.subject_id && String(p.subject_id).toLowerCase() === subjId) return true;
+      const pCode = (p.code || '').toLowerCase();
+      const pName = (p.name || '').toLowerCase();
+      const pSubjName = (p.subject_name || '').toLowerCase();
+      const pSubjCode = (p.subject_code || '').toLowerCase();
+      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjCode) || pSubjCode.includes(subjCode))) return true;
+      if (subjName && (pName.includes(subjName) || pSubjName.includes(subjName))) return true;
+      return false;
+    });
+    return matched.length > 0 ? matched : allFetchedPapers;
+  }, [allFetchedPapers, selectedSubject, allSubjects, academicCascade]);
+
+  const activePaper = useMemo(() => {
+    if (selectedPaperId) {
+      const matchInFiltered = filteredPapers.find(p => p.id === selectedPaperId);
+      if (matchInFiltered) return matchInFiltered;
+      const matchInAll = allFetchedPapers.find(p => p.id === selectedPaperId);
+      if (matchInAll) return matchInAll;
+    }
+    return filteredPapers[0] || allFetchedPapers[0] || null;
+  }, [filteredPapers, selectedPaperId, allFetchedPapers]);
+
+  // Synchronize selectedPaperId with activePaper if different
+  useEffect(() => {
+    if (activePaper && activePaper.id !== selectedPaperId) {
+      setSelectedPaperId(activePaper.id);
+    }
+  }, [activePaper, selectedPaperId]);
+
+  const paperCompetencies = useMemo(() => {
+    const targetPaper = activePaper || filteredPapers[0] || allFetchedPapers[0];
+    if (!targetPaper?.sections) return [];
+    const compSet = new Set<string>();
+    targetPaper.sections.forEach(sec => {
+      sec.questions.forEach(q => {
+        const comp = q.competencyCode || q.topic;
+        if (comp) compSet.add(comp);
+      });
+    });
+    return Array.from(compSet);
+  }, [activePaper, filteredPapers, allFetchedPapers]);
+
+  const calculateStudentCompetencyScores = (
+    paper: any,
+    qMarks: any = {},
+    subMarks: any = {},
+    skippedListOrMap: any = {}
+  ) => {
+    const targetPaper = paper || activePaper || filteredPapers[0] || allFetchedPapers[0];
+    if (!targetPaper || !Array.isArray(targetPaper.sections)) return {};
+    const scores: { [compCode: string]: { scored: number; max: number; isSkipped?: boolean } } = {};
+
+    const isSkippedCheck = (qId: string) => {
+      if (Array.isArray(skippedListOrMap)) return skippedListOrMap.includes(qId);
+      if (skippedListOrMap && typeof skippedListOrMap === 'object') {
+        if (skippedListOrMap[qId]) return true;
+      }
+      return qMarks[qId] === 'SKIPPED' || qMarks[qId] === null;
+    };
+
+    targetPaper.sections.forEach((sec: any) => {
+      if (!Array.isArray(sec.questions)) return;
+      sec.questions.forEach((q: any) => {
+        const comp = q.competencyCode || q.topic || 'General';
+        const qId = q.questionId || q.id;
+        const qMax = Number(q.customMarks || q.defaultMarks || q.max_marks || q.maxMarks || 2);
+
+        if (!scores[comp]) {
+          scores[comp] = { scored: 0, max: 0, isSkipped: true };
+        }
+
+        const isSkipped = isSkippedCheck(qId);
+        if (isSkipped) {
+          // Unattempted / Skipped question: do not penalize student or inflate max marks
+          return;
+        }
+
+        scores[comp].isSkipped = false;
+
+        if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
+          let subScoredSum = 0;
+          q.subQuestions.forEach((sq: any) => {
+            const compositeKey = `${qId}_${sq.id}`;
+            const rawVal = subMarks[compositeKey] ?? subMarks[sq.id] ?? subMarks[`${qId}___${sq.id}`];
+            const sqScored = Number(rawVal ?? 0);
+            subScoredSum += isNaN(sqScored) ? 0 : sqScored;
+          });
+          // Cap total scored on question to question's max marks so subparts never overshoot
+          const qScored = Math.min(qMax, subScoredSum);
+          scores[comp].max += qMax;
+          scores[comp].scored += qScored;
+          scores[comp].scored = Math.min(scores[comp].max, scores[comp].scored);
+        } else {
+          const rawQ = qMarks[qId];
+          const numQ = Number(rawQ ?? 0);
+          const qScored = isNaN(numQ) ? 0 : Math.min(qMax, Math.max(0, numQ));
+          scores[comp].max += qMax;
+          scores[comp].scored += qScored;
+        }
+      });
+    });
+
+    return scores;
+  };
+
   // ── Student Roster ────────────────────────────────────────────────────
   const [students, setStudents] = useState<StudentRow[]>([]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
+
+  // ── Datatable, Search, Sort, Pagination, & Reports Modal State ──
+  const [matrixSearch, setMatrixSearch] = useState<string>('');
+  const [matrixSortField, setMatrixSortField] = useState<string>('rollno');
+  const [matrixSortDir, setMatrixSortDir] = useState<'asc' | 'desc'>('asc');
+  const [matrixPage, setMatrixPage] = useState<number>(1);
+  const [matrixPageSize, setMatrixPageSize] = useState<number>(25);
+
+  const [reportModalOpen, setReportModalOpen] = useState<boolean>(false);
+  const [activeReportStudent, setActiveReportStudent] = useState<any>(null);
+  const [reportModalTab, setReportModalTab] = useState<'subtopics' | 'tracking' | 'practical' | 'chart'>('subtopics');
+  const [expandedSubTopics, setExpandedSubTopics] = useState<Record<string, boolean>>({});
+  const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
+
+  const CHART_COLORS = ['#5B4BFF', '#00C48C', '#F36C21', '#FFB020', '#7867FF', '#E03137', '#0EA5E9', '#8B5CF6'];
+
+  const handleSort = (field: string) => {
+    if (matrixSortField === field) {
+      setMatrixSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setMatrixSortField(field);
+      setMatrixSortDir('asc');
+    }
+  };
+
+  const filteredAndSortedStudents = useMemo(() => {
+    let list = [...students];
+    if (matrixSearch.trim()) {
+      const q = matrixSearch.trim().toLowerCase();
+      list = list.filter(st => {
+        const name = (st.name || '').toLowerCase();
+        const roll = String(st.rollno || '').toLowerCase();
+        const reg = String(st.registration_no || '').toLowerCase();
+        const passText = st.is_pass ? 'pass' : 'fail';
+        return name.includes(q) || roll.includes(q) || reg.includes(q) || passText.includes(q);
+      });
+    }
+
+    list.sort((a, b) => {
+      let comp = 0;
+      if (matrixSortField === 'rollno') {
+        comp = String(a.rollno).localeCompare(String(b.rollno), undefined, { numeric: true });
+      } else if (matrixSortField === 'name') {
+        comp = a.name.localeCompare(b.name);
+      } else if (matrixSortField === 'marks') {
+        comp = a.marks_obtained - b.marks_obtained;
+      } else if (matrixSortField === 'percentage') {
+        const pA = a.max_marks > 0 ? (a.marks_obtained / a.max_marks) : 0;
+        const pB = b.max_marks > 0 ? (b.marks_obtained / b.max_marks) : 0;
+        comp = pA - pB;
+      } else if (matrixSortField === 'status') {
+        comp = (a.is_pass === b.is_pass ? 0 : a.is_pass ? 1 : -1);
+      } else {
+        const getScore = (st: StudentRow) => {
+          if (st.competencyScores?.[matrixSortField]?.scored !== undefined) {
+            return st.competencyScores[matrixSortField].scored;
+          }
+          const scores = calculateStudentCompetencyScores(activePaper, st.questionMarks, st.subPartMarks, st.skippedQuestionIds || []);
+          return scores[matrixSortField]?.scored || 0;
+        };
+        comp = getScore(a) - getScore(b);
+      }
+      return matrixSortDir === 'asc' ? comp : -comp;
+    });
+
+    return list;
+  }, [students, matrixSearch, matrixSortField, matrixSortDir, activePaper]);
+
+  const totalEntries = filteredAndSortedStudents.length;
+  const totalPages = matrixPageSize === 0 ? 1 : Math.ceil(totalEntries / matrixPageSize) || 1;
+  const paginatedStudents = useMemo(() => {
+    if (matrixPageSize === 0) return filteredAndSortedStudents;
+    const start = (matrixPage - 1) * matrixPageSize;
+    return filteredAndSortedStudents.slice(start, start + matrixPageSize);
+  }, [filteredAndSortedStudents, matrixPage, matrixPageSize]);
+
+  // Handle Open Student Report Modal
+  const handleOpenStudentReport = (st: StudentRow) => {
+    const paper = activePaper || filteredPapers.find(p => p.id === selectedPaperId) || filteredPapers[0] || allFetchedPapers[0];
+
+    const isPrac = Boolean(
+      paper?.sections?.some(s =>
+        s.type === 'PRACTICAL' ||
+        (Array.isArray(s.practicalComponents) && s.practicalComponents.length > 0) ||
+        (Number(s.practicalMarks) > 0)
+      )
+    );
+
+    const attempts: any[] = [];
+    const subTopicMap: Record<string, { scored: number; totalMax: number; pct: number; questionCount: number; desc?: string; co?: string; bloom?: string }> = {};
+
+    let qCounter = 1;
+    (paper?.sections || []).forEach((sec) => {
+      (sec.questions || []).forEach((q) => {
+        const qId = q.questionId || (q as any).id || `q-${qCounter}`;
+        const isSkipped = Boolean(
+          (st.skippedQuestionIds && st.skippedQuestionIds.includes(qId)) ||
+          st.questionMarks?.[qId] === 'SKIPPED' ||
+          st.questionMarks?.[qId] === null
+        );
+        const sCode = q.competencyCode || q.topic || 'CO1';
+        const subQs = q.subQuestions || [];
+
+        let qScored = 0;
+        let qMax = Number(q.customMarks || q.defaultMarks || 1);
+
+        let mappedSubQs: any[] = [];
+        if (subQs.length > 0) {
+          mappedSubQs = subQs.map((sq: any, sqIdx: number) => {
+            const compositeKey = `${qId}_${sq.id || sq.label || sqIdx}`;
+            const rawSub = st.subPartMarks?.[compositeKey] ??
+              st.subPartMarks?.[`${qId}_${sq.id}`] ??
+              st.subPartMarks?.[sq.id] ??
+              st.subPartMarks?.[`${qId}___${sq.id || sq.label || sqIdx}`];
+            const subScore = isSkipped ? 0 : (rawSub !== undefined && !isNaN(Number(rawSub)) ? Number(rawSub) : 0);
+            const subMax = Number(sq.marks || sq.customMarks || sq.defaultMarks || 2.5);
+            qScored += subScore;
+            return {
+              id: sq.id,
+              label: sq.label,
+              questionText: sq.questionText || '',
+              scored: subScore,
+              max: subMax,
+            };
+          });
+          const parentMax = Number(q.customMarks || q.defaultMarks || 0);
+          if (parentMax > 0) {
+            qMax = parentMax;
+            qScored = Math.min(qMax, qScored);
+          } else {
+            qMax = mappedSubQs.reduce((acc, sub) => acc + sub.max, 0) || 5;
+          }
+        } else {
+          const rawQ = st.questionMarks?.[qId];
+          qScored = isSkipped ? 0 : (rawQ !== undefined && !isNaN(Number(rawQ)) ? Number(rawQ) : 0);
+        }
+
+        const meta = resolveTopicAndBloom(q.competencyCode, q.topic);
+        const resolvedCO = q.co || meta.co;
+        const resolvedBloom = q.bloomLevel || meta.bloom;
+        const resolvedTopic = q.topic || meta.topic;
+
+        if (!subTopicMap[sCode]) {
+          subTopicMap[sCode] = {
+            scored: 0,
+            totalMax: 0,
+            pct: 0,
+            questionCount: 0,
+            desc: resolvedTopic,
+            co: resolvedCO,
+            bloom: resolvedBloom,
+          };
+        }
+        subTopicMap[sCode].scored += isSkipped ? 0 : qScored;
+        subTopicMap[sCode].totalMax += qMax;
+        subTopicMap[sCode].questionCount += 1;
+        if (!subTopicMap[sCode].co) subTopicMap[sCode].co = resolvedCO;
+        if (!subTopicMap[sCode].bloom) subTopicMap[sCode].bloom = resolvedBloom;
+
+        const isCorrect = !isSkipped && qScored >= (qMax * 0.5);
+
+        attempts.push({
+          questionId: qId,
+          qNo: qCounter++,
+          part: sec.name || 'PART A',
+          questionText: q.questionText,
+          subTopicCode: sCode,
+          subTopicDesc: resolvedTopic,
+          co: resolvedCO,
+          topic: resolvedTopic,
+          bloomLevel: resolvedBloom,
+          optionA: q.optionA,
+          optionB: q.optionB,
+          optionC: q.optionC,
+          optionD: q.optionD,
+          correctOption: q.correctOption,
+          marksScored: qScored,
+          maxMarks: qMax,
+          isSkipped,
+          isCorrect,
+          statusTag: isSkipped ? 'skipped' : (isCorrect ? 'correct' : (qScored > 0 ? 'partial' : 'wrong')),
+          subQuestions: mappedSubQs,
+        });
+      });
+    });
+
+    Object.keys(subTopicMap).forEach(k => {
+      const item = subTopicMap[k];
+      item.pct = item.totalMax > 0 ? Math.round((item.scored / item.totalMax) * 100) : 0;
+    });
+
+    const practicalSec = paper?.sections?.find(s => s.type === 'PRACTICAL');
+    const practicalMaxMarks = Number(practicalSec?.practicalMarks || (practicalSec?.questions?.reduce((acc, q) => acc + (q.customMarks || q.defaultMarks || 0), 0)) || 40);
+    const practicalM = Number(st.practicalMark || 0);
+    const practicalPct = practicalMaxMarks > 0 ? Math.round((practicalM / practicalMaxMarks) * 100) : 0;
+
+    const practicalCategories = [
+      { id: 'cat-1', name: 'Procedure & Protocol Evaluation', maxMarks: 15, scoredMarks: Number(((practicalM / (practicalMaxMarks || 1)) * 15).toFixed(2)), color: '#5B4BFF' },
+      { id: 'cat-2', name: 'Execution & Practical Skill', maxMarks: 10, scoredMarks: Number(((practicalM / (practicalMaxMarks || 1)) * 10).toFixed(2)), color: '#00C48C' },
+      { id: 'cat-3', name: 'Viva Voce & Technical Defense', maxMarks: 10, scoredMarks: Number(((practicalM / (practicalMaxMarks || 1)) * 10).toFixed(2)), color: '#F36C21' },
+      { id: 'cat-4', name: 'Records, Logbook & Submission', maxMarks: 5, scoredMarks: Number(((practicalM / (practicalMaxMarks || 1)) * 5).toFixed(2)), color: '#FFB020' },
+    ];
+
+    const paperMaxM = Number(paper?.max_marks || st.max_marks || 20);
+
+    const reportData = {
+      ...st,
+      max_marks: paperMaxM,
+      batch: academicCascade?.batch?.batch_name || selectedBatch?.name || 'Batch 2024',
+      course: academicCascade?.course?.course_name || 'B.Tech',
+      semester: academicCascade?.semester?.name || 'Sem 5',
+      section: academicCascade?.section || 'A',
+      questionAttempts: attempts,
+      subTopicResults: subTopicMap,
+      isPracticalPaper: isPrac,
+      practicalMarks: practicalM,
+      practicalMax: practicalMaxMarks,
+      practicalPercentage: practicalPct,
+      practicalCategories,
+    };
+
+    setActiveReportStudent(reportData);
+    const expMap: Record<string, boolean> = {};
+    Object.keys(subTopicMap).forEach(k => { expMap[k] = true; });
+    setExpandedSubTopics(expMap);
+    setReportModalTab('subtopics');
+    setHoveredSlice(null);
+    setReportModalOpen(true);
+  };
+
+  const reportPieChartSlices = useMemo(() => {
+    if (!activeReportStudent?.subTopicResults) return [];
+    const entries = Object.entries(activeReportStudent.subTopicResults);
+    if (entries.length === 0) return [];
+
+    const cx = 275;
+    const cy = 180;
+    const r = 95;
+
+    const dataItems = entries.map(([code, data]: [string, any], idx) => {
+      const scored = Number(data.scored) || 0;
+      const totalMax = Number(data.totalMax) || 10;
+      const pct = Number(data.pct) || 0;
+      return {
+        code,
+        desc: data.desc || code,
+        scored,
+        totalMax,
+        pct,
+        val: Math.max(1, scored > 0 ? scored : (totalMax * 0.2)),
+        color: CHART_COLORS[idx % CHART_COLORS.length] || '#5B4BFF',
+      };
+    });
+
+    const totalSum = dataItems.reduce((acc, item) => acc + item.val, 0) || 1;
+    let currentAngle = 0;
+
+    return dataItems.map((item) => {
+      const sliceAngle = (item.val / totalSum) * 360;
+      const startAngle = currentAngle;
+      const endAngle = currentAngle + sliceAngle;
+      currentAngle += sliceAngle;
+
+      const midAngle = startAngle + sliceAngle / 2;
+      const midRad = (midAngle - 90) * (Math.PI / 180);
+      const startRad = (startAngle - 90) * (Math.PI / 180);
+      const endRad = (endAngle - 90) * (Math.PI / 180);
+
+      const x1 = cx + r * Math.cos(startRad);
+      const y1 = cy + r * Math.sin(startRad);
+      const x2 = cx + r * Math.cos(endRad);
+      const y2 = cy + r * Math.sin(endRad);
+
+      const largeArc = sliceAngle > 180 ? 1 : 0;
+      const pathData = `M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${largeArc} 1 ${x2} ${y2} Z`;
+
+      const lineLen = 35;
+      const lx1 = cx + (r + 4) * Math.cos(midRad);
+      const ly1 = cy + (r + 4) * Math.sin(midRad);
+      const lx2 = cx + (r + lineLen) * Math.cos(midRad);
+      const ly2 = cy + (r + lineLen) * Math.sin(midRad);
+      const isRight = lx2 >= cx;
+      const lx3 = isRight ? lx2 + 25 : lx2 - 25;
+      const ly3 = ly2;
+
+      return {
+        ...item,
+        pathData,
+        lineStart: { x: lx1, y: ly1 },
+        lineMid: { x: lx2, y: ly2 },
+        lineEnd: { x: lx3, y: ly3 },
+        textPos: { x: isRight ? lx3 + 5 : lx3 - 5, y: ly3 + 4 },
+        isRight,
+      };
+    });
+  }, [activeReportStudent]);
+
+  // Export to CSV
+  const exportMatrixToCsv = () => {
+    if (!students.length) return;
+    const paperMaxM = Number(activePaper?.max_marks || 20);
+    const headers = ['Roll No', 'Registration No', 'Student Name', 'Marks Obtained', 'Max Marks', 'Percentage'];
+    paperCompetencies.forEach(comp => headers.push(`CO / Module: ${comp}`));
+    headers.push('Result Status');
+
+    const rows = filteredAndSortedStudents.map(st => {
+      const pMax = Number(activePaper?.max_marks || st.max_marks || 20);
+      const pct = pMax > 0 ? ((st.marks_obtained / pMax) * 100).toFixed(1) : '0.0';
+      const row = [
+        `"${st.rollno}"`,
+        `"${st.registration_no || ''}"`,
+        `"${st.name.replace(/"/g, '""')}"`,
+        st.marks_obtained.toFixed(2),
+        pMax,
+        `${pct}%`,
+      ];
+      paperCompetencies.forEach(comp => {
+        const computedScores = calculateStudentCompetencyScores(
+          activePaper,
+          st.questionMarks,
+          st.subPartMarks,
+          st.skippedQuestionIds || []
+        );
+        const compData = (computedScores[comp] && (computedScores[comp].max > 0 || computedScores[comp].isSkipped))
+          ? computedScores[comp]
+          : (st.competencyScores[comp] || { scored: 0, max: 0, isSkipped: false });
+        if (compData.isSkipped || compData.max === 0) {
+          row.push('"Skipped (—)"');
+        } else {
+          const sc = Math.min(compData.max, compData.scored);
+          const p = Math.round((sc / compData.max) * 100);
+          row.push(`"${sc}/${compData.max} - ${p}%"`);
+        }
+      });
+      row.push(st.is_pass ? '"PASS"' : '"FAIL"');
+      return row.join(',');
+    });
+
+    const csvContent = '\uFEFF' + [headers.join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activePaper?.code || 'Exam'}_Marks_Report_${new Date().toISOString().split('T')[0]}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Export to Excel
+  const exportMatrixToExcel = () => {
+    if (!students.length) return;
+    const paperMaxM = Number(activePaper?.max_marks || 20);
+    let html = `
+      <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+      <head>
+        <!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet>
+        <x:Name>Marks Report</x:Name>
+        <x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions>
+        </x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+        <meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8">
+        <style>
+          th { background-color: #2D2575; color: #FFFFFF; font-weight: bold; border: 1px solid #CCCCCC; padding: 8px; text-align: left; }
+          td { border: 1px solid #DDDDDD; padding: 6px; }
+          .pass { color: #00875a; font-weight: bold; }
+          .fail { color: #de350b; font-weight: bold; }
+          .title { font-size: 14pt; font-weight: bold; color: #2D2575; }
+          .meta { font-size: 10pt; color: #555555; }
+        </style>
+      </head>
+      <body>
+        <table>
+          <tr><td colspan="${7 + paperCompetencies.length}" class="title">FACULTY MARKS EVALUATION &amp; OUTCOMES MATRIX</td></tr>
+          <tr><td colspan="${7 + paperCompetencies.length}" class="meta">Paper: [${activePaper?.code}] ${activePaper?.name} | Max Marks: ${paperMaxM} | Generated: ${new Date().toLocaleString()}</td></tr>
+          <tr></tr>
+          <tr>
+            <th>Roll No</th>
+            <th>Reg No</th>
+            <th>Student Name</th>
+            <th>Marks Scored</th>
+            <th>Max Marks</th>
+            <th>Percentage</th>
+            ${paperCompetencies.map(c => `<th>${c}</th>`).join('')}
+            <th>Result Status</th>
+          </tr>
+    `;
+
+    filteredAndSortedStudents.forEach(st => {
+      const pMax = Number(activePaper?.max_marks || st.max_marks || 20);
+      const pct = pMax > 0 ? ((st.marks_obtained / pMax) * 100).toFixed(1) : '0.0';
+      html += `<tr>
+        <td>${st.rollno}</td>
+        <td>${st.registration_no || ''}</td>
+        <td>${st.name}</td>
+        <td>${st.marks_obtained.toFixed(2)}</td>
+        <td>${pMax}</td>
+        <td>${pct}%</td>
+      `;
+      paperCompetencies.forEach(comp => {
+        const computedScores = calculateStudentCompetencyScores(
+          activePaper,
+          st.questionMarks,
+          st.subPartMarks,
+          st.skippedQuestionIds || []
+        );
+        const compData = (computedScores[comp] && (computedScores[comp].max > 0 || computedScores[comp].isSkipped))
+          ? computedScores[comp]
+          : (st.competencyScores[comp] || { scored: 0, max: 0, isSkipped: false });
+        if (compData.isSkipped || compData.max === 0) {
+          html += `<td style="color:#888;">Skipped (—)</td>`;
+        } else {
+          const sc = Math.min(compData.max, compData.scored);
+          const p = Math.round((sc / compData.max) * 100);
+          html += `<td>${sc}/${compData.max} - ${p}%</td>`;
+        }
+      });
+      html += `<td class="${st.is_pass ? 'pass' : 'fail'}">${st.is_pass ? 'PASS' : 'FAIL'}</td></tr>`;
+    });
+
+    html += `</table></body></html>`;
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activePaper?.code || 'Exam'}_Marks_Report_${new Date().toISOString().split('T')[0]}.xls`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Export / Print PDF
+  const exportMatrixToPdf = () => {
+    window.print();
+  };
 
   // ── Marks Entry State ─────────────────────────────────────────────────
   const [questionMarksMap, setQuestionMarksMap] = useState<{ [qId: string]: number | string }>({});
@@ -350,13 +981,14 @@ export default function FacultyMarksPage() {
       }
 
       // 2. Fetch all master data in parallel
-      const [dRes, sRes, bRes, linkRes, profRes, facSubRes] = await Promise.all([
+      const [dRes, sRes, bRes, linkRes, profRes, facSubRes, topRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}${facIdParam ? `&facultyId=${encodeURIComponent(facIdParam)}` : ''}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/batches?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/admin-master/professional-linkers?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers: h }).catch(() => null),
         facIdParam ? fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${slug}&facultyId=${encodeURIComponent(facIdParam)}`, { headers: h }).catch(() => null) : Promise.resolve(null),
+        fetch(`${API_BASE}/admin-master/topics?tenant=${slug}`, { headers: h }).catch(() => null),
       ]);
 
       const parseList = (j: any) => Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
@@ -435,6 +1067,12 @@ export default function FacultyMarksPage() {
         const profs = parseList(await profRes.json());
         setProfessionals(profs);
         if (profs.length > 0) setSelectedProfId(profs[0].id);
+      }
+
+      // Topics with CO and Bloom's Level
+      if (topRes && topRes.ok) {
+        const tops = parseList(await topRes.json());
+        setTopicsMaster(tops);
       }
 
     } catch (e) {
@@ -587,119 +1225,28 @@ export default function FacultyMarksPage() {
           : (sec.type === 'PRACTICAL' ? 20 : 0))
       ),
       practicalComponents: Array.isArray(sec.practicalComponents) ? sec.practicalComponents : [],
-      questions: Array.isArray(sec.questions) ? sec.questions.map((q: any) => ({
-        questionId: q.questionId || q.id || `q-${Math.random()}`,
-        questionText: q.questionText || q.question_text || '',
-        mode: q.mode || 'MCQ',
-        topic: q.topic || '',
-        competencyCode: q.competencyCode || q.competency_code || '',
-        defaultMarks: Number(q.defaultMarks || q.max_marks || 2),
-        customMarks: Number(q.customMarks || q.max_marks || 2),
-        optionA: q.optionA || q.option_a,
-        optionB: q.optionB || q.option_b,
-        optionC: q.optionC || q.option_c,
-        optionD: q.optionD || q.option_d,
-        correctOption: q.correctOption || q.correct_option,
-        subQuestions: Array.isArray(q.subQuestions) ? q.subQuestions : (typeof q.sub_questions === 'string' ? JSON.parse(q.sub_questions || '[]') : q.sub_questions || []),
-      })) : [],
+      questions: Array.isArray(sec.questions) ? sec.questions.map((q: any) => {
+        const meta = resolveTopicAndBloom(q.competencyCode || q.competency_code, q.topic || q.topic_name);
+        return {
+          questionId: q.questionId || q.id || `q-${Math.random()}`,
+          questionText: q.questionText || q.question_text || '',
+          mode: q.mode || 'MCQ',
+          topic: q.topic || q.topic_name || meta.topic,
+          topicCode: q.topicCode || q.topic_code || '',
+          competencyCode: q.competencyCode || q.competency_code || '',
+          co: q.co || q.unit_code || q.course_outcome || meta.co,
+          bloomLevel: q.bloomLevel || q.bloom_level || q.bloomsLevel || meta.bloom,
+          defaultMarks: Number(q.defaultMarks || q.max_marks || 2),
+          customMarks: Number(q.customMarks || q.max_marks || 2),
+          optionA: q.optionA || q.option_a,
+          optionB: q.optionB || q.option_b,
+          optionC: q.optionC || q.option_c,
+          optionD: q.optionD || q.option_d,
+          correctOption: q.correctOption || q.correct_option,
+          subQuestions: Array.isArray(q.subQuestions) ? q.subQuestions : (typeof q.sub_questions === 'string' ? JSON.parse(q.sub_questions || '[]') : q.sub_questions || []),
+        };
+      }) : [],
     }));
-  };
-
-  // Filter papers strictly by selected subject
-  const filteredPapers = useMemo(() => {
-    if (allFetchedPapers.length === 0) return [];
-    const selSubjObj: any = academicCascade?.subject || allSubjects.find(s => s.id === selectedSubject || s.code === selectedSubject);
-    const subjCode = (selSubjObj?.code || selSubjObj?.sub_cd || '').toLowerCase().trim();
-    const subjName = (selSubjObj?.name || selSubjObj?.sub_name || '').toLowerCase().trim();
-    const subjId = String(selSubjObj?.id || selectedSubject || '').toLowerCase().trim();
-
-    if (!subjCode && !subjName && !subjId) return allFetchedPapers;
-
-    return allFetchedPapers.filter(p => {
-      if (p.subject_id && String(p.subject_id).toLowerCase() === subjId) return true;
-      const pCode = (p.code || '').toLowerCase();
-      const pName = (p.name || '').toLowerCase();
-      const pSubjName = (p.subject_name || '').toLowerCase();
-      const pSubjCode = (p.subject_code || '').toLowerCase();
-      if (subjCode && (pCode.includes(subjCode) || pName.includes(subjCode) || pSubjCode.includes(subjCode))) return true;
-      if (subjName && (pName.includes(subjName) || pSubjName.includes(subjName))) return true;
-      return false;
-    });
-  }, [allFetchedPapers, selectedSubject, allSubjects, academicCascade]);
-
-  const activePaper = useMemo(() =>
-    filteredPapers.find(p => p.id === selectedPaperId) || null,
-    [filteredPapers, selectedPaperId]
-  );
-
-  const paperCompetencies = useMemo(() => {
-    if (!activePaper?.sections) return [];
-    const compSet = new Set<string>();
-    activePaper.sections.forEach(sec => {
-      sec.questions.forEach(q => { if (q.competencyCode) compSet.add(q.competencyCode); });
-    });
-    return Array.from(compSet);
-  }, [activePaper]);
-
-  const calculateStudentCompetencyScores = (
-    paper: any,
-    qMarks: any = {},
-    subMarks: any = {},
-    skippedListOrMap: any = {}
-  ) => {
-    if (!paper || !Array.isArray(paper.sections)) return {};
-    const scores: { [compCode: string]: { scored: number; max: number; isSkipped?: boolean } } = {};
-
-    const isSkippedCheck = (qId: string) => {
-      if (Array.isArray(skippedListOrMap)) return skippedListOrMap.includes(qId);
-      if (skippedListOrMap && typeof skippedListOrMap === 'object') {
-        if (skippedListOrMap[qId]) return true;
-      }
-      return qMarks[qId] === 'SKIPPED' || qMarks[qId] === null;
-    };
-
-    paper.sections.forEach((sec: any) => {
-      if (!Array.isArray(sec.questions)) return;
-      sec.questions.forEach((q: any) => {
-        const comp = q.competencyCode || q.competency_code || 'General';
-        const qId = q.questionId || q.id;
-        const qMax = Number(q.customMarks || q.defaultMarks || q.max_marks || q.maxMarks || 2);
-
-        if (!scores[comp]) {
-          scores[comp] = { scored: 0, max: 0, isSkipped: true };
-        }
-
-        const isSkipped = isSkippedCheck(qId);
-        if (isSkipped) {
-          // Unattempted / Skipped question: do not penalize student or inflate max marks
-          return;
-        }
-
-        scores[comp].isSkipped = false;
-
-        if (Array.isArray(q.subQuestions) && q.subQuestions.length > 0) {
-          let subScoredSum = 0;
-          q.subQuestions.forEach((sq: any) => {
-            const compositeKey = `${qId}_${sq.id}`;
-            const sqScored = Number(subMarks[compositeKey] ?? 0);
-            subScoredSum += isNaN(sqScored) ? 0 : sqScored;
-          });
-          // Cap total scored on question to question's max marks so subparts never overshoot
-          const qScored = Math.min(qMax, subScoredSum);
-          scores[comp].max += qMax;
-          scores[comp].scored += qScored;
-          scores[comp].scored = Math.min(scores[comp].max, scores[comp].scored);
-        } else {
-          const rawQ = qMarks[qId];
-          const numQ = Number(rawQ ?? 0);
-          const qScored = isNaN(numQ) ? 0 : Math.min(qMax, Math.max(0, numQ));
-          scores[comp].max += qMax;
-          scores[comp].scored += qScored;
-        }
-      });
-    });
-
-    return scores;
   };
 
   const fetchStudentRoster = async () => {
@@ -1698,24 +2245,48 @@ export default function FacultyMarksPage() {
                                       >
                                         <div className="flex items-start justify-between gap-3">
                                           <div className="space-y-1.5 flex-1 min-w-0">
-                                            {/* Top Row: Q Number, Topic, Competency */}
+                                            {/* Top Row: Q Number, CO, Bloom, Topic, Competency, Mode */}
                                             <div className="flex items-center gap-2 flex-wrap">
                                               <span className="font-mono font-black text-[#5B4BFF] text-xs">Q{qIdx + 1}.</span>
-                                              {q.competencyCode && (
-                                                <span className="px-2 py-0.5 rounded-full font-mono font-black text-[10px] bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
-                                                  🎯 {q.competencyCode}
+                                              
+                                              {/* CO Badge */}
+                                              {(q.co || q.competencyCode) && (
+                                                <span className="px-2.5 py-0.5 rounded-full font-black text-[10px] bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/30 flex items-center gap-1 shadow-2xs">
+                                                  <span>🎯</span>
+                                                  <span>{q.co || (q.competencyCode ? resolveTopicAndBloom(q.competencyCode, q.topic).co : 'CO1')}</span>
                                                 </span>
                                               )}
+
+                                              {/* Bloom's Taxonomy Badge */}
+                                              {(q.bloomLevel || q.competencyCode) && (() => {
+                                                const bl = q.bloomLevel || resolveTopicAndBloom(q.competencyCode, q.topic).bloom;
+                                                return (
+                                                  <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] flex items-center gap-1 border shadow-2xs ${getBloomColor(bl)}`}>
+                                                    <span>🧠</span>
+                                                    <span>Bloom: {formatBloom(bl)}</span>
+                                                  </span>
+                                                );
+                                              })()}
+
+                                              {/* Topic */}
+                                              {q.topic && (
+                                                <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                                                  <span>📚</span>
+                                                  <span>{q.topic}</span>
+                                                </span>
+                                              )}
+
+                                              {q.competencyCode && (
+                                                <span className="px-2 py-0.5 rounded-full font-mono font-bold text-[10px] bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">
+                                                  🏷️ {q.competencyCode}
+                                                </span>
+                                              )}
+
                                               <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
                                                 q.mode === 'MCQ' ? 'bg-[#EEF2FF] text-[#5B4BFF]' : 'bg-[#FFF4EC] text-[#F36C21]'
                                               }`}>
                                                 [{q.mode}]
                                               </span>
-                                              {q.topic && (
-                                                <span className="text-[10px] font-bold text-[#4E5969] dark:text-slate-400">
-                                                  📚 {q.topic}
-                                                </span>
-                                              )}
                                             </div>
 
                                             {/* Question Prompt */}
@@ -1885,115 +2456,861 @@ export default function FacultyMarksPage() {
             </div>
           )}
 
-          {/* ── STEP 4: CBME Competency Performance Matrix Table ── */}
+          {/* ── STEP 4: CBME Competency Performance Matrix Table with Datatable Features & Reports ── */}
           {students.length > 0 && (
-            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-4">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-[#E7EAF3] dark:border-slate-800 pb-3">
+            <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft space-y-5">
+              {/* Header & Paper Switcher */}
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-[#E7EAF3] dark:border-slate-800 pb-4">
                 <div>
                   <h3 className="text-xs font-black text-[#1B1E28] dark:text-white uppercase tracking-wider flex items-center gap-2">
                     <span className="w-5 h-5 rounded-full bg-[#00C48C] text-white flex items-center justify-center text-[10px] font-black">4</span>
                     📈 {isNonMed ? 'COURSE OUTCOME & LEARNING PERFORMANCE MATRIX' : 'CBME COMPETENCY PERFORMANCE MATRIX'} &amp; RESULTS
                   </h3>
                   <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
-                    {isNonMed ? 'Outcome and module-wise breakdown per student' : 'Competency-wise breakdown and outcome matrix per student'}
+                    {isNonMed ? 'Outcome and module-wise breakdown per student with interactive reports' : 'Competency-wise breakdown and outcome matrix per student'}
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-black text-[#4E5969] dark:text-slate-400 uppercase">PAPER:</span>
                   <select
-                    value={selectedPaperId}
+                    value={activePaper?.id || selectedPaperId}
                     onChange={e => setSelectedPaperId(e.target.value)}
                     className="px-3.5 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold shadow-sm"
                   >
-                    {filteredPapers.map(p => (
+                    {(filteredPapers.length > 0 ? filteredPapers : allFetchedPapers).map(p => (
                       <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
                     ))}
                   </select>
                 </div>
               </div>
 
-              <div className="overflow-x-auto">
+              {/* ── Action Toolbar: Search, Exports (Excel, CSV, PDF), & Page Size ── */}
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                {/* Search Bar */}
+                <div className="relative flex-1 max-w-md">
+                  <span className="absolute inset-y-0 left-3 flex items-center text-slate-400 text-xs pointer-events-none">
+                    🔍
+                  </span>
+                  <input
+                    type="text"
+                    value={matrixSearch}
+                    onChange={e => {
+                      setMatrixSearch(e.target.value);
+                      setMatrixPage(1);
+                    }}
+                    placeholder="Search by student name, roll no, reg no, or pass/fail..."
+                    className="w-full pl-8 pr-8 py-2 text-xs rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-medium focus:outline-none focus:border-[#5B4BFF] focus:ring-1 focus:ring-[#5B4BFF] transition"
+                  />
+                  {matrixSearch && (
+                    <button
+                      onClick={() => { setMatrixSearch(''); setMatrixPage(1); }}
+                      className="absolute inset-y-0 right-2.5 flex items-center text-slate-400 hover:text-slate-600 text-xs font-bold"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+
+                {/* Right Actions: Page Size & Export Buttons */}
+                <div className="flex items-center gap-2 flex-wrap justify-end">
+                  {/* Page Size Selector */}
+                  <div className="flex items-center gap-1.5 text-xs text-[#4E5969] dark:text-slate-400 font-bold bg-[#F6F8FC] dark:bg-slate-800 px-3 py-1.5 rounded-xl border border-[#E7EAF3] dark:border-slate-700">
+                    <span>Show:</span>
+                    <select
+                      value={matrixPageSize}
+                      onChange={e => {
+                        setMatrixPageSize(Number(e.target.value));
+                        setMatrixPage(1);
+                      }}
+                      className="bg-transparent text-xs font-black text-[#1B1E28] dark:text-white border-none focus:outline-none cursor-pointer"
+                    >
+                      <option value={10}>10</option>
+                      <option value={25}>25</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={0}>All</option>
+                    </select>
+                  </div>
+
+                  {/* Export Excel Button */}
+                  <button
+                    type="button"
+                    onClick={exportMatrixToExcel}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#00C48C]/10 text-[#00C48C] hover:bg-[#00C48C] hover:text-white border border-[#00C48C]/30 shadow-xs transition flex items-center gap-1.5"
+                    title="Export styled Excel workbook (.xls)"
+                  >
+                    <span>📗</span>
+                    <span>Excel</span>
+                  </button>
+
+                  {/* Export CSV Button */}
+                  <button
+                    type="button"
+                    onClick={exportMatrixToCsv}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#5B4BFF]/10 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white border border-[#5B4BFF]/30 shadow-xs transition flex items-center gap-1.5"
+                    title="Export raw CSV data (.csv)"
+                  >
+                    <span>📄</span>
+                    <span>CSV</span>
+                  </button>
+
+                  {/* Export PDF / Print Button */}
+                  <button
+                    type="button"
+                    onClick={exportMatrixToPdf}
+                    className="px-3 py-1.5 rounded-xl text-xs font-bold bg-[#F36C21]/10 text-[#F36C21] hover:bg-[#F36C21] hover:text-white border border-[#F36C21]/30 shadow-xs transition flex items-center gap-1.5"
+                    title="Print or Save as PDF"
+                  >
+                    <span>🖨️</span>
+                    <span>Print / PDF</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* ── Table Container ── */}
+              <div className="overflow-x-auto rounded-xl border border-[#E7EAF3] dark:border-slate-800">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
-                    <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-[11px] font-black text-[#1B1E28] dark:text-slate-300 uppercase tracking-wider bg-[#F8FAFC] dark:bg-slate-800/60">
-                      <th className="py-3.5 px-4 rounded-l-xl">Roll No</th>
-                      <th className="py-3.5 px-4">Student Name</th>
-                      <th className="py-3.5 px-4">Marks Obtained / Max</th>
-                      <th className="py-3.5 px-4">Percentage</th>
+                    <tr className="border-b border-[#E7EAF3] dark:border-slate-800 text-[11px] font-black text-[#1B1E28] dark:text-slate-300 uppercase tracking-wider bg-[#F8FAFC] dark:bg-slate-800/60 select-none">
+                      <th
+                        onClick={() => handleSort('rollno')}
+                        className="py-3.5 px-4 cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Roll No</span>
+                          <span className="text-[10px] text-slate-400">
+                            {matrixSortField === 'rollno' ? (matrixSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                          </span>
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('name')}
+                        className="py-3.5 px-4 cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Student Name</span>
+                          <span className="text-[10px] text-slate-400">
+                            {matrixSortField === 'name' ? (matrixSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                          </span>
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('marks')}
+                        className="py-3.5 px-4 cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Marks Obtained / Max</span>
+                          <span className="text-[10px] text-slate-400">
+                            {matrixSortField === 'marks' ? (matrixSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                          </span>
+                        </div>
+                      </th>
+                      <th
+                        onClick={() => handleSort('percentage')}
+                        className="py-3.5 px-4 cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition"
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <span>Percentage</span>
+                          <span className="text-[10px] text-slate-400">
+                            {matrixSortField === 'percentage' ? (matrixSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                          </span>
+                        </div>
+                      </th>
                       {paperCompetencies.map(comp => (
-                        <th key={comp} className="py-3.5 px-4 text-center text-[#00C48C]">🎯 {comp}</th>
+                        <th
+                          key={comp}
+                          onClick={() => handleSort(comp)}
+                          className="py-3.5 px-4 text-center text-[#00C48C] cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition"
+                        >
+                          <div className="flex items-center justify-center gap-1">
+                            <span>🎯 {comp}</span>
+                            <span className="text-[10px] text-slate-400">
+                              {matrixSortField === comp ? (matrixSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                            </span>
+                          </div>
+                        </th>
                       ))}
-                      <th className="py-3.5 px-4 text-right rounded-r-xl">Result Status</th>
+                      <th
+                        onClick={() => handleSort('status')}
+                        className="py-3.5 px-4 text-center cursor-pointer hover:bg-slate-200/50 dark:hover:bg-slate-700/50 transition"
+                      >
+                        <div className="flex items-center justify-center gap-1.5">
+                          <span>Result Status</span>
+                          <span className="text-[10px] text-slate-400">
+                            {matrixSortField === 'status' ? (matrixSortDir === 'asc' ? '▲' : '▼') : '↕'}
+                          </span>
+                        </div>
+                      </th>
+                      <th className="py-3.5 px-4 text-center text-[#5B4BFF] font-black uppercase">
+                        View Reports
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[#E7EAF3] dark:divide-slate-800 font-medium">
-                    {students.map(st => {
-                      const percentage = st.max_marks > 0 ? (st.marks_obtained / st.max_marks) * 100 : 0;
-                      return (
-                        <tr key={st.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
-                          <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">{st.rollno}</td>
-                          <td className="py-3.5 px-4 font-black text-[#1B1E28] dark:text-white">{st.name}</td>
-                          <td className="py-3.5 px-4 font-mono font-black text-[#00C48C]">{st.marks_obtained.toFixed(2)} / {st.max_marks}</td>
-                          <td className="py-3.5 px-4 font-mono font-black text-[#F36C21]">{percentage.toFixed(1)}%</td>
-                          {paperCompetencies.map(comp => {
-                            const computedScores = calculateStudentCompetencyScores(
-                              activePaper,
-                              st.questionMarks,
-                              st.subPartMarks,
-                              st.skippedQuestionIds || []
-                            );
-                            const compData = (computedScores[comp] && (computedScores[comp].max > 0 || computedScores[comp].isSkipped))
-                              ? computedScores[comp]
-                              : (st.competencyScores[comp] || { scored: 0, max: 0, isSkipped: false });
+                    {paginatedStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={7 + paperCompetencies.length} className="py-8 text-center text-[#4E5969] dark:text-slate-400 italic">
+                          No students found matching &quot;{matrixSearch}&quot;
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedStudents.map(st => {
+                        const paperMaxM = Number(activePaper?.max_marks || st.max_marks || 20);
+                        const percentage = paperMaxM > 0 ? (st.marks_obtained / paperMaxM) * 100 : 0;
+                        return (
+                          <tr key={st.id} className="hover:bg-[#F1F4F9]/60 dark:hover:bg-slate-800/40 transition">
+                            <td className="py-3.5 px-4 font-mono font-black text-[#5B4BFF]">
+                              <div>{st.rollno}</div>
+                              {st.registration_no && (
+                                <div className="text-[10px] text-slate-400 font-mono">Reg: {st.registration_no}</div>
+                              )}
+                            </td>
+                            <td className="py-3.5 px-4">
+                              <div className="font-black text-[#1B1E28] dark:text-white flex items-center gap-2">
+                                {st.photo_url ? (
+                                  <img src={st.photo_url} alt={st.name} className="w-6 h-6 rounded-full object-cover border border-slate-200" />
+                                ) : (
+                                  <div className="w-6 h-6 rounded-full bg-[#5B4BFF]/10 text-[#5B4BFF] font-black flex items-center justify-center text-[10px]">
+                                    {st.name.charAt(0)}
+                                  </div>
+                                )}
+                                <span>{st.name}</span>
+                              </div>
+                            </td>
+                            <td className="py-3.5 px-4 font-mono font-black text-[#00C48C]">{st.marks_obtained.toFixed(2)} / {paperMaxM}</td>
+                            <td className="py-3.5 px-4 font-mono font-black text-[#F36C21]">{percentage.toFixed(1)}%</td>
+                            {paperCompetencies.map(comp => {
+                              const computedScores = calculateStudentCompetencyScores(
+                                activePaper,
+                                st.questionMarks,
+                                st.subPartMarks,
+                                st.skippedQuestionIds || []
+                              );
+                              const compData = (computedScores[comp] && (computedScores[comp].max > 0 || computedScores[comp].isSkipped))
+                                ? computedScores[comp]
+                                : (st.competencyScores[comp] || { scored: 0, max: 0, isSkipped: false });
 
-                            if (compData.isSkipped || compData.max === 0) {
+                              if (compData.isSkipped || compData.max === 0) {
+                                return (
+                                  <td key={comp} className="py-3.5 px-4 text-center">
+                                    <span
+                                      className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#F1F4F9] dark:bg-slate-800 text-[#7B8794] border border-[#E7EAF3] dark:border-slate-700 shadow-xs"
+                                      title="Question was unattempted / skipped (choice rule)"
+                                    >
+                                      Skipped (—)
+                                    </span>
+                                  </td>
+                                );
+                              }
+
+                              const displayScored = Math.min(compData.max, compData.scored);
+                              const compPct = Math.min(100, Math.round((displayScored / compData.max) * 100));
+                              const isGood = compPct >= 50;
+
                               return (
                                 <td key={comp} className="py-3.5 px-4 text-center">
-                                  <span
-                                    className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-[#F1F4F9] dark:bg-slate-800 text-[#7B8794] border border-[#E7EAF3] dark:border-slate-700 shadow-xs"
-                                    title="Question was unattempted / skipped (choice rule)"
-                                  >
-                                    Skipped (—)
+                                  <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black border ${
+                                    isGood
+                                      ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
+                                      : 'bg-[#FFF8E6] text-[#FFB020] border-[#FFB020]/30'
+                                  }`}>
+                                    {displayScored}/{compData.max} - {compPct}%
                                   </span>
                                 </td>
                               );
-                            }
-
-                            const displayScored = Math.min(compData.max, compData.scored);
-                            const compPct = Math.min(100, Math.round((displayScored / compData.max) * 100));
-                            const isGood = compPct >= 50;
-
-                            return (
-                              <td key={comp} className="py-3.5 px-4 text-center">
-                                <span className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-black border ${
-                                  isGood
-                                    ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
-                                    : 'bg-[#FFF8E6] text-[#FFB020] border-[#FFB020]/30'
-                                }`}>
-                                  {displayScored}/{compData.max} - {compPct}%
-                                </span>
-                              </td>
-                            );
-                          })}
-                          <td className="py-3.5 px-4 text-right">
-                            <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
-                              st.is_pass
-                                ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
-                                : 'bg-[#FEECEB] text-[#F04438] border-[#F04438]/30'
-                            }`}>
-                              {st.is_pass ? '✓ PASS' : '⚠️ FAIL'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            })}
+                            <td className="py-3.5 px-4 text-center">
+                              <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                                st.is_pass
+                                  ? 'bg-[#E6F9F3] text-[#00C48C] border-[#00C48C]/30'
+                                  : 'bg-[#FEECEB] text-[#F04438] border-[#F04438]/30'
+                              }`}>
+                                {st.is_pass ? '✓ PASS' : '⚠️ FAIL'}
+                              </span>
+                            </td>
+                            {/* View Reports Action Column */}
+                            <td className="py-3.5 px-4 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenStudentReport(st)}
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-[#5B4BFF]/10 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white border border-[#5B4BFF]/20 shadow-xs transition"
+                                title={`View Section-wise MIS Analysis for ${st.name}`}
+                              >
+                                <span>📊</span>
+                                <span>View Reports</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
+              </div>
+
+              {/* ── Datatable Pagination Footer ── */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#4E5969] dark:text-slate-400 pt-1">
+                <div>
+                  {totalEntries > 0 ? (
+                    <span>
+                      Showing <strong>{matrixPageSize === 0 ? 1 : (matrixPage - 1) * matrixPageSize + 1}</strong> to{' '}
+                      <strong>{matrixPageSize === 0 ? totalEntries : Math.min(matrixPage * matrixPageSize, totalEntries)}</strong> of{' '}
+                      <strong>{totalEntries}</strong> students
+                      {matrixSearch && <span> (filtered from {students.length} total)</span>}
+                    </span>
+                  ) : (
+                    <span>No students to display</span>
+                  )}
+                </div>
+
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setMatrixPage(1)}
+                      disabled={matrixPage === 1}
+                      className="px-2.5 py-1 rounded-lg border border-[#E7EAF3] dark:border-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                      « First
+                    </button>
+                    <button
+                      onClick={() => setMatrixPage(p => Math.max(1, p - 1))}
+                      disabled={matrixPage === 1}
+                      className="px-2.5 py-1 rounded-lg border border-[#E7EAF3] dark:border-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                      ‹ Prev
+                    </button>
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum = matrixPage;
+                      if (totalPages <= 5) pageNum = i + 1;
+                      else if (matrixPage <= 3) pageNum = i + 1;
+                      else if (matrixPage >= totalPages - 2) pageNum = totalPages - 4 + i;
+                      else pageNum = matrixPage - 2 + i;
+
+                      return (
+                        <button
+                          key={pageNum}
+                          onClick={() => setMatrixPage(pageNum)}
+                          className={`px-3 py-1 rounded-lg border font-black transition ${
+                            matrixPage === pageNum
+                              ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-xs'
+                              : 'border-[#E7EAF3] dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800'
+                          }`}
+                        >
+                          {pageNum}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={() => setMatrixPage(p => Math.min(totalPages, p + 1))}
+                      disabled={matrixPage === totalPages}
+                      className="px-2.5 py-1 rounded-lg border border-[#E7EAF3] dark:border-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                      Next ›
+                    </button>
+                    <button
+                      onClick={() => setMatrixPage(totalPages)}
+                      disabled={matrixPage === totalPages}
+                      className="px-2.5 py-1 rounded-lg border border-[#E7EAF3] dark:border-slate-700 font-bold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                    >
+                      Last »
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           )}
 
-        </main>
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {/* ── MODAL POPUP: Section-Wise Student Analysis (MIS Report Theory Result Standard) ── */}
+          {/* ═══════════════════════════════════════════════════════════════════════ */}
+          {reportModalOpen && activeReportStudent && (
+            <div
+              className="fixed inset-0 z-[99999] bg-black/75 backdrop-blur-md flex items-center justify-center p-4 overflow-y-auto"
+              onClick={() => setReportModalOpen(false)}
+            >
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-[#1B1E28] rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-hidden flex flex-col shadow-2xl border border-slate-200 dark:border-slate-700 animate-scaleUp"
+              >
+                {/* 1. Modal Top Bar */}
+                <div className="p-6 border-b border-slate-200 dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-900 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    {activeReportStudent.photo_url ? (
+                      <img
+                        src={activeReportStudent.photo_url}
+                        alt={activeReportStudent.name}
+                        className="w-12 h-12 rounded-2xl object-cover border-2 border-white shadow-md"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 rounded-2xl bg-[#5B4BFF] text-white flex items-center justify-center font-black text-lg shadow-md">
+                        {(activeReportStudent.name || '?').charAt(0)}
+                      </div>
+                    )}
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono font-extrabold text-xs text-[#5B4BFF]">{activeReportStudent.rollno}</span>
+                        {activeReportStudent.registration_no && (
+                          <span className="font-mono text-[10px] text-slate-400">Reg: {activeReportStudent.registration_no}</span>
+                        )}
+                        <span className={`px-2 py-0.2 rounded text-[10px] font-extrabold uppercase ${
+                          activeReportStudent.is_pass ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'
+                        }`}>
+                          {activeReportStudent.is_pass ? 'Pass' : 'Fail'}
+                        </span>
+                      </div>
+                      <h3 className="text-base font-black text-slate-900 dark:text-white">{activeReportStudent.name}</h3>
+                      <p className="text-[11px] text-slate-500">
+                        {activeReportStudent.course} • Batch: {activeReportStudent.batch} • Total Score: <strong>{(Number(activeReportStudent.marks_obtained) || 0).toFixed(2)} / {activeReportStudent.max_marks || 20} ({((Number(activeReportStudent.marks_obtained) || 0) / (activeReportStudent.max_marks || 1) * 100).toFixed(1)}%)</strong>
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(false)}
+                    className="w-8 h-8 rounded-full bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 font-bold flex items-center justify-center transition"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* 2. Modal Tabs Bar (Practical Assessment ONLY rendered if activeReportStudent.isPracticalPaper is true) */}
+                <div className="px-6 border-b border-slate-200 dark:border-slate-800 flex items-center gap-6 bg-slate-100 dark:bg-slate-950/80 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setReportModalTab('subtopics')}
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      reportModalTab === 'subtopics' ? 'border-[#5B4BFF] text-[#5B4BFF]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>🎯</span>
+                    <span>1. Questions Comes Under Sections (SubTopics Analysis)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportModalTab('tracking')}
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      reportModalTab === 'tracking' ? 'border-[#5B4BFF] text-[#5B4BFF]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>📝</span>
+                    <span>2. Question Paper Tracking</span>
+                  </button>
+                  {/* Tab 3: Practical Assessment — Strictly HIDDEN if practical is not included in section */}
+                  {activeReportStudent.isPracticalPaper && (
+                    <button
+                      type="button"
+                      onClick={() => setReportModalTab('practical')}
+                      className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                        reportModalTab === 'practical' ? 'border-[#F36C21] text-[#F36C21]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                      }`}
+                    >
+                      <span>🧪</span>
+                      <span>3. Practical Assessment</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setReportModalTab('chart')}
+                    className={`py-3.5 text-xs font-black border-b-2 whitespace-nowrap transition flex items-center gap-2 ${
+                      reportModalTab === 'chart' ? 'border-[#5B4BFF] text-[#5B4BFF]' : 'border-transparent text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                  >
+                    <span>📊</span>
+                    <span>{activeReportStudent.isPracticalPaper ? '4. Chart' : '3. Chart'}</span>
+                  </button>
+                </div>
+
+                {/* 3. Modal Body Content */}
+                <div className="p-6 overflow-y-auto max-h-[64vh] space-y-4">
+                  {/* TAB 1: Questions Comes Under Sections (SubTopics Analysis) */}
+                  {reportModalTab === 'subtopics' && (
+                    <div className="space-y-4">
+                      {/* Paper Banner Header */}
+                      <div className="p-3.5 rounded-xl bg-emerald-800 text-white flex items-center justify-between text-xs font-bold shadow-sm">
+                        <div className="flex items-center gap-2">
+                          <span>📄</span>
+                          <span>{activePaper?.name || 'Examination Paper'} ({activePaper?.code || ''})</span>
+                        </div>
+                        <div className="flex items-center gap-2 text-emerald-100">
+                          <span>📅</span>
+                          <span>Batch: {activeReportStudent.batch}</span>
+                        </div>
+                      </div>
+
+                      {/* SubTopic Groups */}
+                      {Object.entries(activeReportStudent.subTopicResults || {}).map(([sCode, stSummary]: [string, any], idx) => {
+                        const isExp = expandedSubTopics[sCode] !== false;
+                        const subQuestions = (activeReportStudent.questionAttempts || []).filter(
+                          (att: any) => att.subTopicCode === sCode
+                        );
+                        const colorClass = idx % 2 === 0 ? 'bg-[#2D2575] text-white' : 'bg-rose-900 text-white';
+
+                        return (
+                          <div key={sCode} className="rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xs">
+                            <div
+                              onClick={() => setExpandedSubTopics(prev => ({ ...prev, [sCode]: !prev[sCode] }))}
+                              className={`p-3 cursor-pointer flex items-center justify-between gap-3 ${colorClass}`}
+                            >
+                              <div className="flex items-center gap-2.5 flex-wrap">
+                                <span className="w-5 h-5 rounded bg-white/20 flex items-center justify-center text-xs font-black shrink-0">
+                                  {isExp ? '−' : '+'}
+                                </span>
+                                <span className="text-xs font-black">
+                                  {sCode} {stSummary.desc ? `— ${stSummary.desc}` : ''}
+                                </span>
+                                {stSummary.co && (
+                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 text-white border border-white/30 flex items-center gap-1">
+                                    <span>🎯</span>
+                                    <span>{stSummary.co}</span>
+                                  </span>
+                                )}
+                                {stSummary.bloom && (
+                                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-white/20 text-white border border-white/30 flex items-center gap-1">
+                                    <span>🧠</span>
+                                    <span>Bloom: {formatBloom(stSummary.bloom)}</span>
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-3 shrink-0">
+                                <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-black bg-white/20 text-white border border-white/30">
+                                  {stSummary.scored}/{stSummary.totalMax} Marks ({stSummary.pct}%)
+                                </span>
+                              </div>
+                            </div>
+
+                            {isExp && (
+                              <div className="p-4 bg-white dark:bg-slate-900 space-y-3">
+                                {subQuestions.length === 0 ? (
+                                  <p className="text-xs text-slate-400 italic">No questions mapped to this outcome/subtopic.</p>
+                                ) : (
+                                  subQuestions.map((q: any) => (
+                                    <div key={q.questionId} className="p-3.5 rounded-xl bg-[#F6F8FC] dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-2 text-xs">
+                                      <div className="flex items-center gap-2 flex-wrap text-[11px]">
+                                        <span className="px-2.5 py-0.5 rounded-lg font-black bg-[#F36C21] text-white shadow-xs">
+                                          {q.part}
+                                        </span>
+                                        <span className="px-2.5 py-0.5 rounded-lg font-black bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
+                                          Q. {q.qNo}
+                                        </span>
+
+                                        {/* ── CO BADGE ── */}
+                                        <span className="px-2.5 py-0.5 rounded-full font-black text-[10px] bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/30 flex items-center gap-1 shadow-2xs">
+                                          <span>🎯</span>
+                                          <span>{q.co || 'CO2'}</span>
+                                        </span>
+
+                                        {/* ── TOPIC BADGE ── */}
+                                        <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                                          <span>📚</span>
+                                          <span>{q.topic || q.subTopicDesc}</span>
+                                        </span>
+
+                                        {/* ── BLOOM'S TAXONOMY BADGE ── */}
+                                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] flex items-center gap-1 border shadow-2xs ${getBloomColor(q.bloomLevel)}`}>
+                                          <span>🧠</span>
+                                          <span>Bloom: {formatBloom(q.bloomLevel)}</span>
+                                        </span>
+
+                                        <span className="text-slate-500 dark:text-slate-400 font-medium ml-1">
+                                          Note:- Each question contains {q.maxMarks || 1} marks.
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-start justify-between gap-3 pt-1">
+                                        <p className="font-bold text-slate-900 dark:text-white leading-relaxed flex-1">
+                                          <span className="text-slate-400 font-mono mr-1.5">Q. {q.qNo}</span>
+                                          {q.questionText}
+                                        </p>
+                                        {q.isSkipped ? (
+                                          <span className="px-2.5 py-1 rounded-full font-mono font-bold text-xs text-slate-500 bg-slate-100 border border-slate-300">
+                                            Skipped (—)
+                                          </span>
+                                        ) : (
+                                          <span className="px-2.5 py-1 rounded-full font-mono font-black text-xs text-rose-600 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800">
+                                            ({q.marksScored || 0}/{q.maxMarks || 1})
+                                          </span>
+                                        )}
+                                      </div>
+
+                                      {/* Sub-parts if any */}
+                                      {q.subQuestions && q.subQuestions.length > 0 && (
+                                        <div className="pl-4 space-y-1.5 border-l-2 border-slate-300 dark:border-slate-700 pt-1">
+                                          {q.subQuestions.map((sq: any) => (
+                                            <div key={sq.id} className="flex items-center justify-between text-[11px] p-1.5 rounded bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                                              <span><strong>Q. {sq.label}</strong> {sq.questionText}</span>
+                                              <span className="font-mono font-bold text-rose-600">({sq.scored || 0}/{sq.max || 2.5})</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ))
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* TAB 2: Question Paper Tracking */}
+                  {reportModalTab === 'tracking' && (
+                    <div className="space-y-6">
+                      {Array.from(new Set((activeReportStudent.questionAttempts || []).map((q: any) => q.part))).map((secName: any) => {
+                        const secQuestions = (activeReportStudent.questionAttempts || []).filter((q: any) => q.part === secName);
+                        if (secQuestions.length === 0) return null;
+
+                        return (
+                          <div key={secName} className="p-5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
+                            <div className="border-b border-slate-200 dark:border-slate-800 pb-2 flex items-center justify-between">
+                              <h4 className="text-sm font-black text-center text-slate-900 dark:text-white uppercase tracking-wider w-full">
+                                {secName}
+                              </h4>
+                            </div>
+                            <p className="text-xs text-slate-500 font-medium">
+                              (1). Note:- Tick (✓) the appropriate answer. Each question contains marks as indicated.
+                            </p>
+
+                            <div className="space-y-4 pt-2">
+                              {secQuestions.map((q: any) => (
+                                <div key={q.questionId} className="space-y-2 text-xs border-b border-slate-100 dark:border-slate-800/80 pb-3 last:border-b-0">
+                                  <div className="flex items-start gap-2.5">
+                                    <span className={`text-base font-black ${
+                                      q.isSkipped ? 'text-slate-400' : (q.isCorrect ? 'text-[#00C48C]' : 'text-[#F04438]')
+                                    }`}>
+                                      {q.isSkipped ? '—' : (q.isCorrect ? '✓' : '✗')}
+                                    </span>
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2 flex-wrap mb-1 text-[11px]">
+                                        <span className="px-2.5 py-0.5 rounded-full font-black text-[10px] bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/30 flex items-center gap-1 shadow-2xs">
+                                          <span>🎯</span>
+                                          <span>{q.co || 'CO2'}</span>
+                                        </span>
+                                        <span className="px-2.5 py-0.5 rounded-full font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                                          <span>📚</span>
+                                          <span>{q.topic || q.subTopicDesc}</span>
+                                        </span>
+                                        <span className={`px-2.5 py-0.5 rounded-full font-black text-[10px] flex items-center gap-1 border shadow-2xs ${getBloomColor(q.bloomLevel)}`}>
+                                          <span>🧠</span>
+                                          <span>Bloom: {formatBloom(q.bloomLevel)}</span>
+                                        </span>
+                                      </div>
+                                      <p className="font-bold text-slate-900 dark:text-white">
+                                        <strong>({q.qNo}).</strong> {q.questionText}
+                                        {q.isSkipped ? (
+                                          <span className="ml-2 px-2 py-0.5 rounded text-[10px] bg-slate-100 text-slate-500 font-mono">
+                                            Skipped (—)
+                                          </span>
+                                        ) : (
+                                          <span className="ml-2 font-mono font-bold text-[#F04438]">
+                                            ({q.marksScored || 0}/{q.maxMarks || 1})
+                                          </span>
+                                        )}
+                                      </p>
+
+                                      {/* MCQ Options 2x2 Grid */}
+                                      {q.optionA && (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2 pl-2">
+                                          <div className={`p-1.5 rounded-lg border ${['option_a', 'optiona', 'a'].includes(String(q.correctOption || '').toLowerCase().trim()) ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(a).</strong> {q.optionA}
+                                          </div>
+                                          <div className={`p-1.5 rounded-lg border ${['option_b', 'optionb', 'b'].includes(String(q.correctOption || '').toLowerCase().trim()) ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(b).</strong> {q.optionB}
+                                          </div>
+                                          <div className={`p-1.5 rounded-lg border ${['option_c', 'optionc', 'c'].includes(String(q.correctOption || '').toLowerCase().trim()) ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(c).</strong> {q.optionC}
+                                          </div>
+                                          <div className={`p-1.5 rounded-lg border ${['option_d', 'optiond', 'd'].includes(String(q.correctOption || '').toLowerCase().trim()) ? 'border-[#00C48C] bg-emerald-50/50 text-[#00C48C] font-bold' : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'}`}>
+                                            <strong>(d).</strong> {q.optionD}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Sub-parts */}
+                                      {q.subQuestions && q.subQuestions.length > 0 && (
+                                        <div className="pl-4 space-y-1.5 border-l-2 border-slate-200 dark:border-slate-800 mt-2">
+                                          {q.subQuestions.map((sq: any) => (
+                                            <div key={sq.id} className="flex items-center justify-between p-1.5 rounded bg-[#F6F8FC] dark:bg-slate-950 text-xs">
+                                              <span><strong>({sq.label})</strong> {sq.questionText}</span>
+                                              <span className="font-mono font-bold text-[#F04438]">({sq.scored || 0}/{sq.max || 2.5})</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* TAB 3: Practical Assessment (ONLY if activeReportStudent.isPracticalPaper) */}
+                  {activeReportStudent.isPracticalPaper && reportModalTab === 'practical' && (
+                    <div className="space-y-6">
+                      <div className="p-4 rounded-2xl bg-gradient-to-r from-[#F36C21] to-[#FF8A48] text-white flex flex-col md:flex-row items-start md:items-center justify-between gap-3 shadow-md">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase bg-white/20 text-white">
+                              🧪 Practical &amp; Clinical Assessment
+                            </span>
+                            <span className="text-xs font-bold text-orange-100">
+                              4 Categories Matrix
+                            </span>
+                          </div>
+                          <h4 className="text-base font-black text-white mt-1">
+                            Practical Score: {(Number(activeReportStudent.practicalMarks) || 0).toFixed(2)} / {activeReportStudent.practicalMax || 40}.00 Marks ({activeReportStudent.practicalPercentage || 0}%)
+                          </h4>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <span className="px-3 py-1.5 rounded-xl text-xs font-black bg-white text-[#F36C21] shadow-sm">
+                            {(Number(activeReportStudent.practicalPercentage) || 0) >= 50 ? '✓ Practical Passed' : '⚠️ Needs Improvement'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        {(activeReportStudent.practicalCategories || []).map((cat: any) => (
+                          <div key={cat.id} className="p-4 rounded-2xl bg-[#F6F8FC] dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-3 shadow-xs">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h5 className="text-xs font-bold text-slate-900 dark:text-white">{cat.name}</h5>
+                                <p className="text-[10px] text-slate-500">Max Component Marks: {cat.maxMarks}</p>
+                              </div>
+                              <span className="px-2 py-0.5 rounded-md text-xs font-mono font-bold" style={{ backgroundColor: `${cat.color}20`, color: cat.color }}>
+                                {(Number(cat.scoredMarks) || 0).toFixed(2)} / {cat.maxMarks}
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200 dark:bg-slate-800 h-2 rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all duration-300"
+                                style={{
+                                  width: `${Math.min(100, Math.round(((cat.scoredMarks || 0) / (cat.maxMarks || 1)) * 100))}%`,
+                                  backgroundColor: cat.color,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* TAB 4 (or 3): Chart (SubTopics Progress Chart with Radial Labels) */}
+                  {reportModalTab === 'chart' && (
+                    <div className="space-y-6 text-center">
+                      <div>
+                        <h3 className="text-xl font-black text-[#F04438] tracking-tight uppercase">
+                          SUBTOPICS RESULT : {(Number(activeReportStudent.marks_obtained) || 0).toFixed(2)} / {activeReportStudent.max_marks || 20} = {((((Number(activeReportStudent.marks_obtained) || 0) / (Number(activeReportStudent.max_marks) || 1))) * 100).toFixed(1)}%
+                        </h3>
+                        <p className="text-xs text-slate-500 mt-1">
+                          Visual distribution of student performance across question paper modules and outcomes.
+                        </p>
+                      </div>
+
+                      <div className="flex flex-col items-center justify-center p-2">
+                        <div className="relative w-full max-w-[620px] h-[370px]">
+                          <svg viewBox="0 0 550 360" className="w-full h-full">
+                            <defs>
+                              <filter id="reportPieShadow" x="-10%" y="-10%" width="120%" height="120%">
+                                <feDropShadow dx="0" dy="4" stdDeviation="6" floodOpacity="0.15" />
+                              </filter>
+                            </defs>
+
+                            <g filter="url(#reportPieShadow)">
+                              {reportPieChartSlices.map((slice: any) => {
+                                const isHov = hoveredSlice === slice.code;
+                                return (
+                                  <path
+                                    key={slice.code}
+                                    d={slice.pathData}
+                                    fill={slice.color}
+                                    stroke="#FFFFFF"
+                                    strokeWidth="2.5"
+                                    onMouseEnter={() => setHoveredSlice(slice.code)}
+                                    onMouseLeave={() => setHoveredSlice(null)}
+                                    className="transition-all duration-200 cursor-pointer"
+                                    style={{
+                                      opacity: hoveredSlice ? (isHov ? 1 : 0.65) : 1,
+                                      transformOrigin: '275px 180px',
+                                      transform: isHov ? 'scale(1.04)' : 'scale(1)',
+                                    }}
+                                  />
+                                );
+                              })}
+                            </g>
+
+                            <g className="pointer-events-none">
+                              {reportPieChartSlices.map((slice: any) => {
+                                const isHov = hoveredSlice === slice.code;
+                                return (
+                                  <g key={`label-${slice.code}`}>
+                                    <polyline
+                                      points={`${slice.lineStart.x},${slice.lineStart.y} ${slice.lineMid.x},${slice.lineMid.y} ${slice.lineEnd.x},${slice.lineEnd.y}`}
+                                      fill="none"
+                                      stroke={isHov ? '#1B1E28' : slice.color}
+                                      strokeWidth={isHov ? '2' : '1.2'}
+                                      strokeDasharray={isHov ? 'none' : '2,2'}
+                                      className="transition-all duration-200"
+                                    />
+                                    <circle
+                                      cx={slice.lineStart.x}
+                                      cy={slice.lineStart.y}
+                                      r="2.5"
+                                      fill={slice.color}
+                                    />
+                                    <text
+                                      x={slice.textPos.x}
+                                      y={slice.textPos.y}
+                                      textAnchor={slice.isRight ? 'start' : 'end'}
+                                      fontSize="11"
+                                      fontWeight={isHov ? '900' : '800'}
+                                      fill={isHov ? '#1B1E28' : slice.color}
+                                      className="font-mono tracking-tight transition-all duration-200"
+                                    >
+                                      {slice.code} — {slice.scored}/{slice.totalMax} ({slice.pct}%)
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </g>
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* 4. Modal Footer */}
+                <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    className="px-4 py-2 rounded-xl text-xs font-black bg-[#5B4BFF]/10 text-[#5B4BFF] hover:bg-[#5B4BFF] hover:text-white transition flex items-center gap-1.5"
+                  >
+                    <span>🖨️</span>
+                    <span>Print Report</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(false)}
+                    className="px-5 py-2 rounded-xl text-xs font-black bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 transition"
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+
+          </main>
       </div>
     </div>
   );

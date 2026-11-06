@@ -159,17 +159,17 @@ export class ObeService {
     const semester = dto.semester != null ? String(dto.semester).trim() : null;
     const rawBatchYear = dto.batch_year ?? dto.batchYear;
     let batchYear = rawBatchYear != null && !isNaN(Number(rawBatchYear)) ? Number(rawBatchYear) : null;
+    const courseCd = dto.course_cd || dto.courseCd || null;
     if (batchYear && batchYear < 100) {
       const bRow = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT year FROM batches WHERE (code = $1 OR batch_cd = $1) AND year IS NOT NULL LIMIT 1`,
-        [String(batchYear)]
+        `SELECT year FROM batches WHERE (batch_cd = $1 OR code = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 1`,
+        [String(batchYear), courseCd || null],
       ).catch(() => []);
-      if (bRow.length && bRow[0].year && !isNaN(Number(bRow[0].year))) {
+      if (bRow[0]?.year && !isNaN(Number(bRow[0].year))) {
         batchYear = Number(bRow[0].year);
       }
     }
-    const courseCd = dto.course_cd || dto.courseCd || null;
     const branchCd = dto.branch_cd || dto.branchCd || null;
     const rawSec = dto.section != null ? String(dto.section).trim() : null;
     const section = rawSec && rawSec !== 'all' ? this.normalizeSectionCode(rawSec) : (rawSec === 'all' ? 'all' : null);
@@ -294,12 +294,33 @@ export class ObeService {
   }) {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
+    let resolvedBatchYears: number[] = [];
+    if (params?.batchYear) {
+      resolvedBatchYears.push(Number(params.batchYear));
+      const bRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT year, batch_cd, code FROM batches WHERE (batch_cd = $1 OR code = $1 OR year = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 3`,
+        [String(params.batchYear), params?.courseCd || null],
+      ).catch(() => []);
+      for (const b of bRows) {
+        if (b.year && !isNaN(Number(b.year))) resolvedBatchYears.push(Number(b.year));
+        if (b.batch_cd && !isNaN(Number(b.batch_cd))) resolvedBatchYears.push(Number(b.batch_cd));
+      }
+      resolvedBatchYears = Array.from(new Set(resolvedBatchYears));
+    }
+
     let q = `SELECT * FROM obe_targets WHERE 1=1`;
     const p: any[] = [];
-    if (params?.facultyId) { p.push(params.facultyId); q += ` AND faculty_id = $${p.length}`; }
-    if (params?.subjectCode) { p.push(params.subjectCode); q += ` AND subject_code = $${p.length}`; }
+    if (params?.subjectCode) {
+      p.push(params.subjectCode);
+      q += ` AND (subject_code = $${p.length} OR subject_code IS NULL)`;
+    } else if (params?.facultyId) { p.push(params.facultyId); q += ` AND faculty_id = $${p.length}`; }
+
     if (params?.semester) { p.push(params.semester); q += ` AND semester = $${p.length}`; }
-    if (params?.batchYear) { p.push(params.batchYear); q += ` AND batch_year = $${p.length}`; }
+    if (resolvedBatchYears.length > 0) {
+      p.push(resolvedBatchYears);
+      q += ` AND (batch_year = ANY($${p.length}::int[]) OR batch_year IS NULL)`;
+    }
     if (params?.courseCd) { p.push(params.courseCd); q += ` AND course_cd = $${p.length}`; }
     if (params?.branchCd) { p.push(params.branchCd); q += ` AND branch_cd = $${p.length}`; }
     if (params?.section && params.section !== 'all') {
@@ -754,29 +775,31 @@ export class ObeService {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
 
-    // Normalize batchYear if it's a code (e.g. 17 -> 2024)
-    let resolvedBatchYear = params.batchYear;
-    if (params.batchYear && params.batchYear < 100) {
-      const bRow = await this.tenantSchemaService.queryInTenant(
+    // Resolve batch years if batch code or year is passed
+    let resolvedBatchYears: number[] = [];
+    if (params.batchYear) {
+      resolvedBatchYears.push(Number(params.batchYear));
+      const bRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT year FROM batches WHERE (code = $1 OR batch_cd = $1) AND year IS NOT NULL LIMIT 1`,
-        [String(params.batchYear)]
+        `SELECT year, batch_cd, code FROM batches WHERE (batch_cd = $1 OR code = $1 OR year = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 3`,
+        [String(params.batchYear), params.courseCd || null],
       ).catch(() => []);
-      if (bRow.length && bRow[0].year && !isNaN(Number(bRow[0].year))) {
-        resolvedBatchYear = Number(bRow[0].year);
+      for (const b of bRows) {
+        if (b.year && !isNaN(Number(b.year))) resolvedBatchYears.push(Number(b.year));
+        if (b.batch_cd && !isNaN(Number(b.batch_cd))) resolvedBatchYears.push(Number(b.batch_cd));
       }
+      resolvedBatchYears = Array.from(new Set(resolvedBatchYears));
     }
 
-    // Load targets for this faculty
+    // Load targets for this subject / faculty
     let targetsQ = `SELECT * FROM obe_targets WHERE 1=1`;
     const targetsP: any[] = [];
-    if (params.facultyId) {
-      targetsP.push(params.facultyId);
-      targetsQ += ` AND (faculty_id::text = $${targetsP.length} OR faculty_id IS NULL)`;
-    }
     if (params.subjectCode) {
       targetsP.push(params.subjectCode);
       targetsQ += ` AND (subject_code = $${targetsP.length} OR subject_code IS NULL)`;
+    } else if (params.facultyId) {
+      targetsP.push(params.facultyId);
+      targetsQ += ` AND (faculty_id::text = $${targetsP.length} OR faculty_id IS NULL)`;
     }
     if (params.semester) {
       targetsP.push(params.semester);
@@ -790,9 +813,9 @@ export class ObeService {
       targetsP.push(params.branchCd);
       targetsQ += ` AND (branch_cd = $${targetsP.length} OR branch_cd IS NULL)`;
     }
-    if (resolvedBatchYear) {
-      targetsP.push(resolvedBatchYear);
-      targetsQ += ` AND (batch_year = $${targetsP.length} OR batch_year IS NULL)`;
+    if (resolvedBatchYears.length > 0) {
+      targetsP.push(resolvedBatchYears);
+      targetsQ += ` AND (batch_year = ANY($${targetsP.length}::int[]) OR batch_year IS NULL)`;
     }
     if (params.section && params.section !== 'all') {
       const normSec = this.normalizeSectionCode(params.section);
@@ -820,9 +843,9 @@ export class ObeService {
         fallbackP.push(params.branchCd);
         fallbackQ += ` AND (branch_cd = $${fallbackP.length} OR branch_cd IS NULL)`;
       }
-      if (resolvedBatchYear) {
-        fallbackP.push(resolvedBatchYear);
-        fallbackQ += ` AND (batch_year = $${fallbackP.length} OR batch_year IS NULL)`;
+      if (resolvedBatchYears.length > 0) {
+        fallbackP.push(resolvedBatchYears);
+        fallbackQ += ` AND (batch_year = ANY($${fallbackP.length}::int[]) OR batch_year IS NULL)`;
       }
       fallbackQ += ` ORDER BY subject_code, unit_code`;
       const fallbackTargets = await this.tenantSchemaService.queryInTenant(slug, fallbackQ, fallbackP).catch(() => []);
@@ -881,7 +904,10 @@ export class ObeService {
     const attP: any[] = [];
     if (params.subjectCode) { attP.push(params.subjectCode); attQ += ` AND (subject_code = $${attP.length} OR subject_code IS NULL)`; }
     if (params.semester) { attP.push(params.semester); attQ += ` AND (semester = $${attP.length} OR semester IS NULL)`; }
-    if (resolvedBatchYear) { attP.push(resolvedBatchYear); attQ += ` AND (batch_year = $${attP.length} OR batch_year IS NULL)`; }
+    if (resolvedBatchYears.length > 0) {
+      attP.push(resolvedBatchYears);
+      attQ += ` AND (batch_year = ANY($${attP.length}::int[]) OR batch_year IS NULL)`;
+    }
     if (params.courseCd) { attP.push(params.courseCd); attQ += ` AND (course_cd = $${attP.length} OR course_cd IS NULL)`; }
     if (params.branchCd) { attP.push(params.branchCd); attQ += ` AND (branch_cd = $${attP.length} OR branch_cd IS NULL)`; }
     if (params.section && params.section !== 'all') {
@@ -921,6 +947,29 @@ export class ObeService {
       });
     }
 
+    // Fallback: If no targets declared in obe_targets, but attainments exist, populate default gap rows
+    if (targets.length === 0 && attainments.length > 0) {
+      const seenUnits = new Set<string>();
+      for (const att of attainments) {
+        if (!seenUnits.has(att.unit_code)) {
+          seenUnits.add(att.unit_code);
+          const finalVal = parseFloat(att.final_attainment || '0');
+          const achievedLvl = finalVal >= 2.5 ? 3 : finalVal >= 1.5 ? 2 : finalVal >= 0.5 ? 1 : 0;
+          gapAnalysis.push({
+            subject_code: att.subject_code,
+            unit_code: att.unit_code,
+            target_level: null,
+            achieved_attainment: finalVal,
+            achieved_level: achievedLvl,
+            met: null,
+            gap: null,
+            corrective_action: null,
+            target_id: null,
+          });
+        }
+      }
+    }
+
     const totalTargets = targets.length;
     const score = totalTargets > 0 ? (metCount / totalTargets) * 100 : null;
     const grade = score === null ? 'No Data' : score >= 80 ? 'Excellent' : score >= 60 ? 'Good' : score >= 40 ? 'Satisfactory' : 'Needs Improvement';
@@ -938,7 +987,7 @@ export class ObeService {
     };
   }
 
-  // ─── 6. HOD DASHBOARD ────────────────────────────────────────────────────────
+    // ─── 6. HOD DASHBOARD ────────────────────────────────────────────────────────
 
   async getHodDashboard(tenantSlug: string, params: {
     semester?: string; batchYear?: number; courseCd?: string; branchCd?: string;
@@ -1135,6 +1184,22 @@ export class ObeService {
     const slug = this.resolveTenant(tenantSlug);
     await this.ensureObeTables(slug);
 
+    // Resolve batch years if batch code or year is passed
+    let resolvedBatchYears: number[] = [];
+    if (params.batchYear) {
+      resolvedBatchYears.push(Number(params.batchYear));
+      const bRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT year, batch_cd, code FROM batches WHERE (batch_cd = $1 OR code = $1 OR year = $1) AND (course_cd = $2 OR $2 IS NULL) LIMIT 3`,
+        [String(params.batchYear), params.courseCd || null],
+      ).catch(() => []);
+      for (const b of bRows) {
+        if (b.year && !isNaN(Number(b.year))) resolvedBatchYears.push(Number(b.year));
+        if (b.batch_cd && !isNaN(Number(b.batch_cd))) resolvedBatchYears.push(Number(b.batch_cd));
+      }
+      resolvedBatchYears = Array.from(new Set(resolvedBatchYears));
+    }
+
     let q = `
       SELECT ca.*, ot.target_level, ot.student_pass_pct_target, ot.corrective_action,
              CASE WHEN ca.final_attainment >= 2.5 THEN 3 WHEN ca.final_attainment >= 1.5 THEN 2 WHEN ca.final_attainment >= 0.5 THEN 1 ELSE 0 END as attainment_level,
@@ -1147,7 +1212,10 @@ export class ObeService {
     const p: any[] = [];
     if (params.subjectCode) { p.push(params.subjectCode); q += ` AND ca.subject_code = $${p.length}`; }
     if (params.semester) { p.push(params.semester); q += ` AND ca.semester = $${p.length}`; }
-    if (params.batchYear) { p.push(params.batchYear); q += ` AND ca.batch_year = $${p.length}`; }
+    if (resolvedBatchYears.length > 0) {
+      p.push(resolvedBatchYears);
+      q += ` AND (ca.batch_year = ANY($${p.length}::int[]) OR ca.batch_year IS NULL)`;
+    }
     if (params.courseCd) { p.push(params.courseCd); q += ` AND ca.course_cd = $${p.length}`; }
     if (params.branchCd) { p.push(params.branchCd); q += ` AND ca.branch_cd = $${p.length}`; }
     if (params.section && params.section !== 'all') {

@@ -1239,7 +1239,31 @@ export default function ClerkQPDesignerPage() {
     setActiveTab('design');
   };
 
+  const isPaperApproved = (p: any): boolean => {
+    if (!p) return false;
+    const st = String(p.status || '').toUpperCase().trim();
+    const dqacSt = String(p.dqac_status || '').toUpperCase().trim();
+    const hodSt = String(p.hod_status || '').toUpperCase().trim();
+    return (
+      st === 'HOD_APPROVED' ||
+      st === 'DQAC_APPROVED' ||
+      st === 'APPROVED' ||
+      st === 'PUBLISHED' ||
+      st.includes('APPROVED') ||
+      dqacSt === 'DQAC_APPROVED' ||
+      dqacSt.includes('APPROVED') ||
+      hodSt === 'HOD_APPROVED' ||
+      hodSt.includes('APPROVED') ||
+      Boolean(p.is_approved) ||
+      Boolean(p.is_hod_approved)
+    );
+  };
+
   const startEditPaper = (p: any) => {
+    if (isPaperApproved(p)) {
+      alert('This examination paper has already been approved and is locked against direct edits. Please duplicate/clone as a new set if modifications are required.');
+      return;
+    }
     setEditingPaperId(p.id);
     setPaperCode(p.code || '');
     setPaperTitle(p.name || '');
@@ -2585,13 +2609,22 @@ export default function ClerkQPDesignerPage() {
                             >
                               👁️ View
                             </button>
-                            <button
-                              onClick={() => startEditPaper(p)}
-                              className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-[#5B4BFF] font-bold text-[11px] hover:bg-[#5B4BFF] hover:text-white transition-all"
-                            >
-                              ✏️ Edit
-                            </button>
-                            {p.status === 'HOD_APPROVED' && (
+                            {isPaperApproved(p) ? (
+                              <span
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 font-bold text-[11px] cursor-not-allowed select-none flex items-center gap-1"
+                                title="Paper is approved by HOD/DQAC and is locked against direct edits"
+                              >
+                                🔒 Edit Locked
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => startEditPaper(p)}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-[#5B4BFF] font-bold text-[11px] hover:bg-[#5B4BFF] hover:text-white transition-all"
+                              >
+                                ✏️ Edit
+                              </button>
+                            )}
+                            {isPaperApproved(p) && (
                               <button
                                 onClick={() => {
                                   setSelectedPaperToPublish(p);
@@ -2603,12 +2636,14 @@ export default function ClerkQPDesignerPage() {
                                 <span>Publish &rarr;</span>
                               </button>
                             )}
-                            <button
-                              onClick={() => handleDeletePaper(p.id)}
-                              className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white font-bold text-[11px] transition-all"
-                            >
-                              🗑️
-                            </button>
+                            {!isPaperApproved(p) && (
+                              <button
+                                onClick={() => handleDeletePaper(p.id)}
+                                className="px-2 py-1 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-600 hover:text-white font-bold text-[11px] transition-all"
+                              >
+                                🗑️
+                              </button>
+                            )}
                           </div>
                         </div>
                       );

@@ -81,6 +81,16 @@ interface StagedSubTopic {
   bloom_level: string;
 }
 
+interface StagedTopic {
+  code: string;
+  name: string;
+  description: string;
+  bloom_level: string;
+  hours: number;
+  unit_id: string;
+  unit_code: string;
+}
+
 interface DepartmentItem {
   id: string;
   code: string;
@@ -316,6 +326,7 @@ export default function FacultyCurriculumSubjectsPage() {
   });
 
   const [stagedSubTopics, setStagedSubTopics] = useState<StagedSubTopic[]>([]);
+  const [stagedTopics, setStagedTopics] = useState<StagedTopic[]>([]);
 
   // Auto-dismiss toast
   useEffect(() => {
@@ -692,18 +703,103 @@ export default function FacultyCurriculumSubjectsPage() {
     setModalType('unit');
   };
 
+  // Helper: auto-generate topic number as per selected Course Outcome (CO) and existing sequence
+  const getNextTopicCodeForUnit = (
+    targetUnitOrId?: any,
+    existingTopics: TopicItem[] = [],
+    queue: StagedTopic[] = []
+  ): string => {
+    const subCode = selectedSubject?.subject_code || selectedSubject?.subject_id || 'SUB';
+
+    let uObj: any = null;
+    if (typeof targetUnitOrId === 'object' && targetUnitOrId) {
+      uObj = targetUnitOrId;
+    } else if (typeof targetUnitOrId === 'string' && targetUnitOrId) {
+      uObj = units.find((u) => u.id === targetUnitOrId || u.code === targetUnitOrId);
+    }
+    const unitCode = uObj?.code || 'CO1';
+    const unitId = uObj?.id || '';
+
+    // Extract CO number from unitCode (e.g. "CO3" -> 3, "CO1" -> 1, "CO4" -> 4)
+    const coMatch = String(unitCode).match(/\d+/);
+    const coNum = coMatch ? parseInt(coMatch[0], 10) : 1;
+
+    // Gather all topic numbers used in this specific CO + staged topics for this CO
+    const unitTopicNums: number[] = [];
+    existingTopics.forEach((t) => {
+      const matchUnit = (unitId && t.unit_id === unitId) || (unitCode && t.unit_code === unitCode);
+      if (matchUnit) {
+        const numMatch = (t.code || '').match(/T(\d+)/i) || (t.code || '').match(/(\d+)$/);
+        if (numMatch) {
+          unitTopicNums.push(parseInt(numMatch[1], 10));
+        }
+      }
+    });
+
+    queue.forEach((st) => {
+      const matchUnit = (unitId && st.unit_id === unitId) || (unitCode && st.unit_code === unitCode);
+      if (matchUnit) {
+        const numMatch = (st.code || '').match(/T(\d+)/i) || (st.code || '').match(/(\d+)$/);
+        if (numMatch) {
+          unitTopicNums.push(parseInt(numMatch[1], 10));
+        }
+      }
+    });
+
+    let nextNum: number;
+    if (unitTopicNums.length > 0) {
+      // If topics already exist under this CO, continue from the max + 1
+      nextNum = Math.max(...unitTopicNums) + 1;
+    } else {
+      // First topic for this CO: start from CO number (e.g. CO3 -> 3 -> SUB-T3)
+      nextNum = coNum;
+    }
+
+    // Ensure no collision across all existing topics or queue for this subject
+    const allUsedCodes = new Set([
+      ...existingTopics.map((t) => (t.code || '').toUpperCase().trim()),
+      ...queue.map((st) => (st.code || '').toUpperCase().trim()),
+    ]);
+
+    while (allUsedCodes.has(`${subCode}-T${nextNum}`.toUpperCase())) {
+      nextNum++;
+    }
+
+    return `${subCode}-T${nextNum}`;
+  };
+
   const openAddTopicModal = (preselectedUnitId?: string) => {
     setIsEditing(false);
     setActiveItem(null);
-    const targetUnit = units.find((u) => u.id === preselectedUnitId) || units[0];
+    setStagedTopics([]);
+
+    // 1. Determine target CO
+    let targetUnit: UnitItem | undefined;
+    if (preselectedUnitId && preselectedUnitId !== 'all') {
+      targetUnit = units.find((u) => u.id === preselectedUnitId || u.code === preselectedUnitId);
+    }
+
+    // 2. Check localStorage for last chosen CO for this subject so browser refresh continues last CO selection
+    if (!targetUnit && typeof window !== 'undefined' && selectedSubject) {
+      const storageKey = `faculty_last_co_${selectedSubject.subject_code || selectedSubject.subject_id || 'curr'}`;
+      const savedUnitId = localStorage.getItem(storageKey);
+      if (savedUnitId) {
+        targetUnit = units.find((u) => u.id === savedUnitId || u.code === savedUnitId);
+      }
+    }
+
+    // 3. Fallback to first unit if none selected yet
+    if (!targetUnit && units.length > 0) {
+      targetUnit = units[0];
+    }
+
     const unitCode = targetUnit ? targetUnit.code : 'CO1';
-    const nextOrder = topics.filter((t) => t.unit_id === targetUnit?.id || t.unit_code === unitCode).length + 1;
-    const subCode = selectedSubject?.subject_code || 'SUB';
+    const autoCode = getNextTopicCodeForUnit(targetUnit, topics, []);
 
     setTopicForm({
       unit_id: targetUnit?.id || '',
       unit_code: unitCode,
-      code: `${subCode}-T${nextOrder}`,
+      code: autoCode,
       name: '',
       description: '',
       bloom_level: 'KL-2 (Understand)',
@@ -715,6 +811,7 @@ export default function FacultyCurriculumSubjectsPage() {
   const openEditTopicModal = (topic: TopicItem) => {
     setIsEditing(true);
     setActiveItem(topic);
+    setStagedTopics([]);
     setTopicForm({
       unit_id: topic.unit_id || '',
       unit_code: topic.unit_code || '',
@@ -889,13 +986,115 @@ export default function FacultyCurriculumSubjectsPage() {
     }
   };
 
-  // Submit Handler for Topic
-  const handleSaveTopic = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!selectedSubject) return;
-    if (!topicForm.name.trim()) {
-      showToast('Topic Name is required', 'error');
+  // Queue Handlers for adding multiple Topics under same CO in sequence
+  const handleAddTopicToQueue = () => {
+    const code = topicForm.code.trim().toUpperCase();
+    const name = topicForm.name.trim();
+    const desc = topicForm.description.trim() || name;
+
+    if (!topicForm.unit_id && units.length > 0) {
+      showToast('Please select a Course Outcome (CO) first', 'error');
       return;
+    }
+    if (!code) {
+      showToast('Please enter Topic Code', 'error');
+      return;
+    }
+    if (!name) {
+      showToast('Please enter Topic Title', 'error');
+      return;
+    }
+
+    if (stagedTopics.some((it) => it.code === code)) {
+      showToast(`Topic code "${code}" is already in the queue`, 'error');
+      return;
+    }
+
+    const currentUnit = units.find((u) => u.id === topicForm.unit_id || u.code === topicForm.unit_code);
+    const newItem: StagedTopic = {
+      code,
+      name,
+      description: desc,
+      hours: Number(topicForm.hours) || 2,
+      bloom_level: topicForm.bloom_level || 'KL-2 (Understand)',
+      unit_id: topicForm.unit_id,
+      unit_code: currentUnit?.code || topicForm.unit_code || 'CO1',
+    };
+
+    const nextQueue = [...stagedTopics, newItem];
+    setStagedTopics(nextQueue);
+
+    // Save CO choice in localStorage so browser refresh continues last CO selection
+    if (typeof window !== 'undefined' && selectedSubject && topicForm.unit_id) {
+      const storageKey = `faculty_last_co_${selectedSubject.subject_code || selectedSubject.subject_id || 'curr'}`;
+      localStorage.setItem(storageKey, topicForm.unit_id);
+    }
+
+    // Auto-generate code for next topic under this same CO
+    const nextCode = getNextTopicCodeForUnit(currentUnit, topics, nextQueue);
+    setTopicForm((prev) => ({
+      ...prev,
+      code: nextCode,
+      name: '',
+      description: '',
+    }));
+    showToast(`Added ${code} to batch! Next topic: ${nextCode}`);
+  };
+
+  const handleRemoveTopicFromQueue = (index: number) => {
+    const updated = stagedTopics.filter((_, idx) => idx !== index);
+    setStagedTopics(updated);
+    const currentUnit = units.find((u) => u.id === topicForm.unit_id || u.code === topicForm.unit_code);
+    const nextCode = getNextTopicCodeForUnit(currentUnit, topics, updated);
+    setTopicForm((prev) => ({ ...prev, code: nextCode }));
+  };
+
+  // Submit Handler for Topic (Supports single save or batch queue)
+  const handleSaveTopic = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!selectedSubject) return;
+
+    const currentName = topicForm.name.trim();
+    const currentDesc = topicForm.description.trim();
+    const currentCode = topicForm.code.trim().toUpperCase();
+
+    let itemsToSave: Array<StagedTopic> = [];
+
+    if (stagedTopics.length > 0) {
+      itemsToSave = [...stagedTopics];
+      // If user also typed in the input fields before hitting save, include it
+      if (currentName) {
+        if (!currentCode) {
+          showToast('Please provide a Topic Code for current entry', 'error');
+          return;
+        }
+        const currentUnit = units.find((u) => u.id === topicForm.unit_id || u.code === topicForm.unit_code);
+        itemsToSave.push({
+          code: currentCode,
+          name: currentName,
+          description: currentDesc || currentName,
+          hours: Number(topicForm.hours) || 2,
+          bloom_level: topicForm.bloom_level || 'KL-2 (Understand)',
+          unit_id: topicForm.unit_id,
+          unit_code: currentUnit?.code || topicForm.unit_code || 'CO1',
+        });
+      }
+    } else {
+      // Single item save (or edit)
+      if (!currentName) {
+        showToast('Topic Title is required', 'error');
+        return;
+      }
+      const currentUnit = units.find((u) => u.id === topicForm.unit_id || u.code === topicForm.unit_code);
+      itemsToSave.push({
+        code: currentCode || `${selectedSubject.subject_code || 'SUB'}-T${topics.length + 1}`,
+        name: currentName,
+        description: currentDesc || currentName,
+        hours: Number(topicForm.hours) || 2,
+        bloom_level: topicForm.bloom_level || 'KL-2 (Understand)',
+        unit_id: topicForm.unit_id,
+        unit_code: currentUnit?.code || topicForm.unit_code || 'CO1',
+      });
     }
 
     setIsSaving(true);
@@ -907,43 +1106,84 @@ export default function FacultyCurriculumSubjectsPage() {
     if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const subCode = selectedSubject.subject_code || selectedSubject.subject_id;
-    const matchedUnit = units.find((u) => u.id === topicForm.unit_id || u.code === topicForm.unit_code);
-
-    const payload: any = {
-      code: topicForm.code.trim().toUpperCase() || `${subCode}-T${topics.length + 1}`,
-      name: topicForm.name.trim(),
-      description: topicForm.description.trim() || topicForm.name.trim(),
-      subject_id: selectedSubject.subject_id || subCode,
-      subject_code: subCode,
-      unit_id: matchedUnit?.id || (topicForm.unit_id && /^[0-9a-f-]{36}$/i.test(topicForm.unit_id) ? topicForm.unit_id : null),
-      unit_code: matchedUnit?.code || topicForm.unit_code || null,
-      course_cd: selectedSubject.course_cd || null,
-      branch_cd: selectedSubject.branch_cd || null,
-      batch_year: selectedSubject.batch_cd ? Number(selectedSubject.batch_cd) : 2024,
-      bloom_level: topicForm.bloom_level,
-      hours: Number(topicForm.hours) || 2,
-    };
 
     try {
-      let url = '/api/v1/admin-master/topics';
-      let method = 'POST';
       if (isEditing && activeItem?.id) {
-        url = `/api/v1/admin-master/topics/${activeItem.id}`;
-        method = 'PUT';
+        const item = itemsToSave[0];
+        const matchedUnit = units.find((u) => u.id === item.unit_id || u.code === item.unit_code);
+        const payload: any = {
+          code: item.code,
+          name: item.name,
+          description: item.description,
+          subject_id: selectedSubject.subject_id || subCode,
+          subject_code: subCode,
+          unit_id: matchedUnit?.id || (item.unit_id && /^[0-9a-f-]{36}$/i.test(item.unit_id) ? item.unit_id : null),
+          unit_code: matchedUnit?.code || item.unit_code || null,
+          course_cd: selectedSubject.course_cd || null,
+          branch_cd: selectedSubject.branch_cd || null,
+          batch_year: selectedSubject.batch_cd ? Number(selectedSubject.batch_cd) : 2024,
+          bloom_level: item.bloom_level,
+          hours: Number(item.hours) || 2,
+        };
+
+        const res = await fetch(`/api/v1/admin-master/topics/${activeItem.id}`, {
+          method: 'PUT',
+          headers,
+          body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+          const errJson = await res.json().catch(() => ({}));
+          throw new Error(errJson.message || 'Failed to update Topic');
+        }
+        showToast('Topic updated successfully');
+      } else {
+        // Save all items
+        let successCount = 0;
+        for (const item of itemsToSave) {
+          const matchedUnit = units.find((u) => u.id === item.unit_id || u.code === item.unit_code);
+          const payload: any = {
+            code: item.code,
+            name: item.name,
+            description: item.description,
+            subject_id: selectedSubject.subject_id || subCode,
+            subject_code: subCode,
+            unit_id: matchedUnit?.id || (item.unit_id && /^[0-9a-f-]{36}$/i.test(item.unit_id) ? item.unit_id : null),
+            unit_code: matchedUnit?.code || item.unit_code || null,
+            course_cd: selectedSubject.course_cd || null,
+            branch_cd: selectedSubject.branch_cd || null,
+            batch_year: selectedSubject.batch_cd ? Number(selectedSubject.batch_cd) : 2024,
+            bloom_level: item.bloom_level,
+            hours: Number(item.hours) || 2,
+          };
+
+          const res = await fetch('/api/v1/admin-master/topics', {
+            method: 'POST',
+            headers,
+            body: JSON.stringify(payload),
+          });
+
+          if (!res.ok) {
+            const errJson = await res.json().catch(() => ({}));
+            throw new Error(errJson.message || `Failed to save Topic "${item.code}"`);
+          }
+          successCount++;
+        }
+
+        // Save last used CO in localStorage so browser refresh starts with it
+        if (typeof window !== 'undefined' && selectedSubject && topicForm.unit_id) {
+          const storageKey = `faculty_last_co_${selectedSubject.subject_code || selectedSubject.subject_id || 'curr'}`;
+          localStorage.setItem(storageKey, topicForm.unit_id);
+        }
+
+        showToast(
+          itemsToSave.length > 1
+            ? `Successfully saved all ${successCount} topics!`
+            : 'Topic created successfully'
+        );
       }
 
-      const res = await fetch(url, {
-        method,
-        headers,
-        body: JSON.stringify(payload),
-      });
-
-      if (!res.ok) {
-        const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || 'Failed to save Topic');
-      }
-
-      showToast(isEditing ? 'Topic updated successfully' : 'Topic created successfully');
+      setStagedTopics([]);
       setModalType(null);
       await loadSubjectCurriculum(selectedSubject);
     } catch (err: any) {
@@ -1981,6 +2221,13 @@ export default function FacultyCurriculumSubjectsPage() {
                               <td className="py-3.5 px-4 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
                                   <button
+                                    onClick={() => openAddTopicModal(unit.id)}
+                                    className="px-2 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all text-[11px] font-bold flex items-center gap-1"
+                                    title="Add Topic under this Course Outcome"
+                                  >
+                                    <span>➕ Topic</span>
+                                  </button>
+                                  <button
                                     onClick={() => openEditUnitModal(unit)}
                                     className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/40 text-indigo-600 dark:text-indigo-400 hover:bg-indigo-600 hover:text-white transition-all"
                                     title="Edit Course Outcome"
@@ -2992,19 +3239,24 @@ export default function FacultyCurriculumSubjectsPage() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL 2: ADD / EDIT TOPIC                                                 */}
+      {/* MODAL 2: ADD / EDIT TOPIC (Supports Auto-CO Numbering & Batch Table Queue) */}
       {/* ========================================================================= */}
       {modalType === 'topic' && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-8">
             {/* Modal Header */}
             <div className="bg-gradient-to-r from-[#2D2575] to-[#3B309A] p-5 text-white flex items-center justify-between">
               <div>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase bg-white/20 text-white border border-white/30">
                   {selectedSubject?.subject_code} • {selectedSubject?.subject_name}
                 </span>
-                <h3 className="text-base font-black mt-1">
-                  {isEditing ? '✏️ Edit Syllabus Topic' : '➕ Add Syllabus Topic'}
+                <h3 className="text-base font-black mt-1 flex items-center gap-2">
+                  <span>{isEditing ? '✏️ Edit Syllabus Topic' : '➕ Add Syllabus Topic'}</span>
+                  {!isEditing && stagedTopics.length > 0 && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-[#F36C21] text-white">
+                      {stagedTopics.length} in table
+                    </span>
+                  )}
                 </h3>
               </div>
               <button
@@ -3016,10 +3268,12 @@ export default function FacultyCurriculumSubjectsPage() {
             </div>
 
             {/* Modal Form */}
-            <form onSubmit={handleSaveTopic} className="p-6 space-y-4">
+            <form onSubmit={handleSaveTopic} className="p-6 space-y-4 max-h-[82vh] overflow-y-auto">
+              {/* 1. First Ask to Choose CO */}
               <div>
-                <label className="text-[11px] font-bold text-[#1B1E28] dark:text-white block mb-1">
-                  Linked Course Outcome (Unit) <span className="text-[#F04438]">*</span>
+                <label className="text-[11px] font-bold text-[#1B1E28] dark:text-white flex items-center justify-between mb-1">
+                  <span>Linked Course Outcome (Unit) <span className="text-[#F04438]">*</span></span>
+                  <span className="text-[10px] text-[#5B4BFF] font-semibold">1. Choose CO to auto-generate topic number</span>
                 </label>
                 <select
                   required
@@ -3027,11 +3281,18 @@ export default function FacultyCurriculumSubjectsPage() {
                   onChange={(e) => {
                     const uId = e.target.value;
                     const uObj = units.find((u) => u.id === uId);
-                    setTopicForm({
-                      ...topicForm,
+                    const newUnitCode = uObj?.code || '';
+                    if (typeof window !== 'undefined' && selectedSubject && uId) {
+                      const storageKey = `faculty_last_co_${selectedSubject.subject_code || selectedSubject.subject_id || 'curr'}`;
+                      localStorage.setItem(storageKey, uId);
+                    }
+                    const nextCode = getNextTopicCodeForUnit(uObj, topics, stagedTopics);
+                    setTopicForm((prev) => ({
+                      ...prev,
                       unit_id: uId,
-                      unit_code: uObj?.code || '',
-                    });
+                      unit_code: newUnitCode,
+                      code: nextCode,
+                    }));
                   }}
                   className="w-full px-3 py-2 rounded-xl bg-[#F6F8FC] dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-xs font-bold text-[#1B1E28] dark:text-white focus:outline-none focus:border-[#5B4BFF]"
                 >
@@ -3049,10 +3310,12 @@ export default function FacultyCurriculumSubjectsPage() {
                 )}
               </div>
 
+              {/* 2. Auto-Generated Topic Code as per CO + Lecture Hours */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-[11px] font-bold text-[#1B1E28] dark:text-white block mb-1">
-                    Topic Code <span className="text-[#F04438]">*</span>
+                  <label className="text-[11px] font-bold text-[#1B1E28] dark:text-white flex items-center justify-between mb-1">
+                    <span>Topic Code <span className="text-[#F04438]">*</span></span>
+                    <span className="text-[10px] text-[#00C48C] font-mono font-bold">Auto-Gen per CO</span>
                   </label>
                   <input
                     type="text"
@@ -3084,7 +3347,7 @@ export default function FacultyCurriculumSubjectsPage() {
                 </label>
                 <input
                   type="text"
-                  required
+                  required={stagedTopics.length === 0}
                   value={topicForm.name}
                   onChange={(e) => setTopicForm({ ...topicForm, name: e.target.value })}
                   placeholder="e.g. Entity-Relationship Data Modeling"
@@ -3122,7 +3385,75 @@ export default function FacultyCurriculumSubjectsPage() {
                 </select>
               </div>
 
-              <div className="pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-end gap-2">
+              {/* Batch Staging Queue Table for Topics Added Under Same CO */}
+              {!isEditing && stagedTopics.length > 0 && (
+                <div className="rounded-xl border border-indigo-200 dark:border-indigo-900/40 bg-indigo-50/60 dark:bg-indigo-950/20 p-3 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-black text-[#5B4BFF]">
+                    <span className="flex items-center gap-1.5">
+                      <span>📋</span>
+                      <span>Added Topics Table ({stagedTopics.length})</span>
+                    </span>
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      Completed items will be saved together
+                    </span>
+                  </div>
+
+                  <div className="max-h-44 overflow-y-auto rounded-lg border border-indigo-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs">
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-[10px] font-black uppercase text-slate-500 border-b border-indigo-100 dark:border-slate-800">
+                        <tr>
+                          <th className="py-2 px-2.5 w-8 text-center">#</th>
+                          <th className="py-2 px-2.5">CO</th>
+                          <th className="py-2 px-2.5">Topic Code</th>
+                          <th className="py-2 px-3">Topic Title</th>
+                          <th className="py-2 px-2 text-center">Hours</th>
+                          <th className="py-2 px-2">Bloom</th>
+                          <th className="py-2 px-2 w-8 text-center">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                        {stagedTopics.map((stItem, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+                            <td className="py-2 px-2.5 text-center font-bold text-slate-400 text-[11px]">{idx + 1}</td>
+                            <td className="py-2 px-2.5">
+                              <span className="px-2 py-0.5 rounded-full font-mono font-bold text-[10px] bg-[#5B4BFF]/10 text-[#5B4BFF] border border-[#5B4BFF]/20">
+                                🎯 {stItem.unit_code}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2.5 font-mono font-black text-slate-900 dark:text-white text-[11px]">
+                              {stItem.code}
+                            </td>
+                            <td className="py-2 px-3 font-bold text-slate-800 dark:text-slate-200 text-[11px]">
+                              {stItem.name}
+                            </td>
+                            <td className="py-2 px-2 text-center text-slate-600 dark:text-slate-400 text-[11px]">
+                              {stItem.hours}h
+                            </td>
+                            <td className="py-2 px-2">
+                              <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                {stItem.bloom_level.split(' ')[0]}
+                              </span>
+                            </td>
+                            <td className="py-2 px-2 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveTopicFromQueue(idx)}
+                                className="w-6 h-6 rounded-md hover:bg-rose-100 dark:hover:bg-rose-950/60 text-slate-400 hover:text-rose-600 inline-flex items-center justify-center text-xs transition"
+                                title="Remove from table"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Modal Footer Actions */}
+              <div className="pt-3 border-t border-[#E7EAF3] dark:border-slate-800 flex items-center justify-end gap-2 flex-wrap">
                 <button
                   type="button"
                   onClick={() => setModalType(null)}
@@ -3130,12 +3461,29 @@ export default function FacultyCurriculumSubjectsPage() {
                 >
                   Cancel
                 </button>
+                {!isEditing && (
+                  <button
+                    type="button"
+                    onClick={handleAddTopicToQueue}
+                    disabled={isSaving}
+                    className="px-4 py-2 rounded-xl bg-[#5B4BFF]/10 hover:bg-[#5B4BFF]/20 text-[#5B4BFF] dark:text-indigo-400 text-xs font-bold transition-all border border-[#5B4BFF]/30 flex items-center gap-1.5 shadow-2xs"
+                    title="Add topic to table and auto-generate next topic number under this CO"
+                  >
+                    <span>➕ Add & Next Topic</span>
+                  </button>
+                )}
                 <button
                   type="submit"
                   disabled={isSaving}
-                  className="px-5 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4838DF] text-white text-xs font-black shadow-md transition-all disabled:opacity-50"
+                  className="px-5 py-2 rounded-xl bg-[#5B4BFF] hover:bg-[#4838DF] text-white text-xs font-black shadow-md transition-all disabled:opacity-50 flex items-center gap-1.5"
                 >
-                  {isSaving ? 'Saving...' : isEditing ? 'Update Topic' : 'Save Topic'}
+                  {isSaving
+                    ? 'Saving...'
+                    : isEditing
+                    ? 'Update Topic'
+                    : stagedTopics.length > 0
+                    ? `Save All (${stagedTopics.length + (topicForm.name.trim() ? 1 : 0)}) Topics`
+                    : 'Save Topic'}
                 </button>
               </div>
             </form>

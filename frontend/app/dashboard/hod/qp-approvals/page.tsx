@@ -85,10 +85,14 @@ export default function HODQPApprovalsPage() {
       } else if (filterTab === 'HOD_APPROVED') {
         routePath = `/api/v1/exams/papers/approved?${qp.toString()}`;
         fallbackPath = `${API_BASE}/exams/papers/approved?${qp.toString()}`;
-      } else if (filterTab !== 'ALL') {
+      } else if (filterTab === 'ALL') {
+        qp.set('status', 'ALL');
+        routePath = `/api/v1/exams/papers/pending-hod-approval?${qp.toString()}`;
+        fallbackPath = `${API_BASE}/exams/papers/pending-hod-approval?${qp.toString()}`;
+      } else {
         qp.set('status', filterTab);
-        routePath = `/api/v1/exams/papers?${qp.toString()}`;
-        fallbackPath = `${API_BASE}/exams/papers?${qp.toString()}`;
+        routePath = `/api/v1/exams/papers/pending-hod-approval?${qp.toString()}`;
+        fallbackPath = `${API_BASE}/exams/papers/pending-hod-approval?${qp.toString()}`;
       }
 
       let list: any[] = [];
@@ -321,8 +325,9 @@ export default function HODQPApprovalsPage() {
             {/* Status Tabs */}
             <div className="flex gap-2 flex-wrap items-center">
               {[
-                { key: 'PENDING_HOD_APPROVAL', label: '⏳ Pending HOD Approval' },
+                { key: 'PENDING_HOD_APPROVAL', label: '⏳ All Pending Approvals' },
                 { key: 'DQAC_APPROVED', label: '⭐ DQAC Approved' },
+                { key: 'PENDING_DQAC_APPROVAL', label: '🔍 Pending DQAC Audit' },
                 { key: 'HOD_APPROVED', label: '✅ HOD Approved' },
                 { key: 'CHANGES_REQUESTED', label: '⚠️ Changes Requested' },
                 { key: 'DRAFT', label: '📝 Drafts' },

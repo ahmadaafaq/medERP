@@ -132,6 +132,12 @@ export class ExaminationService {
 
         let nextStatus = dto.status || prevStatus || 'DRAFT';
         let nextVersion = dto.version ? Number(dto.version) : currentVersion;
+
+        const isApprovedStatus = prevStatus === 'HOD_APPROVED' || prevStatus === 'DQAC_APPROVED' || prevStatus === 'APPROVED' || prevStatus === 'PUBLISHED';
+        if (isApprovedStatus && dto.status !== 'ARCHIVED' && !isAdmin) {
+          throw new BadRequestException('This question paper has been approved by HOD and is locked against direct edits. Please clone as a new set.');
+        }
+
         if (prevStatus === 'CHANGES_REQUESTED' && dto.status === 'PENDING_HOD_APPROVAL') {
           nextVersion = currentVersion + 1;
         } else if ((prevStatus === 'PUBLISHED' || prevStatus === 'APPROVED') && dto.status !== 'ARCHIVED') {
@@ -589,15 +595,23 @@ export class ExaminationService {
       } else {
         // Faculty strictly sees ONLY their prepared question papers (creator only)
         // Even once DQAC/HOD approved, it only shows to the particular creator faculty.
-        // Rest of faculties cannot see it.
-        if (validUserId) {
-          whereClauses.push(`p.created_by::text = $${pIdx}`);
-          params.push(validUserId);
-          pIdx++;
-        } else if (filters?.createdBy || filters?.facultyId) {
-          const fid = filters.createdBy || filters.facultyId;
-          whereClauses.push(`p.created_by::text = $${pIdx}`);
-          params.push(fid);
+        // Matches flexibly across UUID, employee ID, and faculty profile.
+        const effectiveCreatorId = validUserId || filters?.createdBy || filters?.facultyId || userId;
+        if (effectiveCreatorId) {
+          whereClauses.push(`(
+            p.created_by::text = $${pIdx}
+            OR p.created_by::text IN (
+              SELECT id::text FROM users WHERE id::text = $${pIdx} OR emp_id = $${pIdx} OR username = $${pIdx}
+            )
+            OR p.created_by::text IN (
+              SELECT user_id::text FROM faculty WHERE id::text = $${pIdx} OR emp_id = $${pIdx}
+            )
+            OR p.faculty_id::text = $${pIdx}
+            OR p.faculty_id::text IN (
+              SELECT id::text FROM faculty WHERE id::text = $${pIdx} OR user_id::text = $${pIdx} OR emp_id = $${pIdx}
+            )
+          )`);
+          params.push(String(effectiveCreatorId));
           pIdx++;
         } else {
           // Strict confidentiality: Block leakage if faculty user is unidentifiable
@@ -1634,11 +1648,16 @@ export class ExaminationService {
     const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
-      `SELECT id, created_by, department_id FROM examination_papers WHERE id::text = $1 LIMIT 1`,
+      `SELECT id, created_by, department_id, status FROM examination_papers WHERE id::text = $1 LIMIT 1`,
       [id],
     );
     if (!existing || existing.length === 0) {
       throw new NotFoundException('Examination paper not found');
+    }
+
+    const paperStatus = String(existing[0].status || '').toUpperCase();
+    if (paperStatus === 'HOD_APPROVED' || paperStatus === 'DQAC_APPROVED' || paperStatus === 'APPROVED' || paperStatus === 'PUBLISHED') {
+      throw new BadRequestException('This examination paper has been approved by HOD and is locked against deletion.');
     }
 
     if (user) {
@@ -1806,6 +1825,11 @@ export class ExaminationService {
       const dbRole = (userRow?.role || '').toUpperCase();
       const dbAssignedRoles = (userRow?.assigned_roles || '').toUpperCase();
       const isHodUser = rawRole.includes('HOD') || dbRole.includes('HOD') || dbAssignedRoles.includes('HOD');
+      const isAdminUser = rawRole.includes('ADMIN') || rawRole.includes('PRINCIPAL') || dbRole.includes('ADMIN') || dbRole.includes('PRINCIPAL') || dbAssignedRoles.includes('ADMIN');
+
+      if (isAdminUser) {
+        result.isRestricted = false;
+      }
 
       // Fetch all departments in tenant to dynamically group disciplines
       const allDepts = await this.tenantSchemaService.queryInTenant(
@@ -1923,13 +1947,19 @@ export class ExaminationService {
       const params: any[] = [];
       let whereClause: string;
       if (statusFilter && statusFilter !== 'ALL') {
-        params.push(statusFilter);
-        whereClause = `WHERE p.status = $1`;
+        if (statusFilter === 'PENDING_HOD_APPROVAL') {
+          whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'RESUBMITTED', 'DQAC_APPROVED', 'PENDING_DQAC_APPROVAL')`;
+        } else if (statusFilter === 'PENDING_AUDIT') {
+          whereClause = `WHERE p.status = 'PENDING_DQAC_APPROVAL'`;
+        } else {
+          params.push(statusFilter);
+          whereClause = `WHERE p.status = $1`;
+        }
       } else if (statusFilter === 'ALL') {
         whereClause = `WHERE 1=1`;
       } else {
-        // Default pending queue for HOD review
-        whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'RESUBMITTED')`;
+        // Default pending queue for HOD review includes papers submitted for DQAC audit or pending final HOD sign-off
+        whereClause = `WHERE p.status IN ('PENDING_HOD_APPROVAL', 'RESUBMITTED', 'DQAC_APPROVED', 'PENDING_DQAC_APPROVAL')`;
       }
 
       if (scope.departmentIds.length > 0) {
@@ -1954,7 +1984,7 @@ export class ExaminationService {
               AND f2.department_id::text = ANY($${deptParamIdx}::text[])
           )
         )`;
-      } else if (scope.isRestricted) {
+      } else if (scope.isRestricted && (userContext?.userId || userContext?.empId) && !scope.departmentIds.length && userContext?.user?.role !== 'ADMIN' && userContext?.user?.role !== 'SUPER_ADMIN') {
         whereClause += ` AND 1 = 0`;
       } else if (departmentId && this.isUUID(departmentId)) {
         params.push(departmentId);
