@@ -334,18 +334,17 @@ export default function FacultyMarksPage() {
       if (subjName && (pName.includes(subjName) || pSubjName.includes(subjName))) return true;
       return false;
     });
-    return matched.length > 0 ? matched : allFetchedPapers;
+    return matched;
   }, [allFetchedPapers, selectedSubject, allSubjects, academicCascade]);
 
   const activePaper = useMemo(() => {
     if (selectedPaperId) {
       const matchInFiltered = filteredPapers.find(p => p.id === selectedPaperId);
       if (matchInFiltered) return matchInFiltered;
-      const matchInAll = allFetchedPapers.find(p => p.id === selectedPaperId);
-      if (matchInAll) return matchInAll;
+      
     }
-    return filteredPapers[0] || allFetchedPapers[0] || null;
-  }, [filteredPapers, selectedPaperId, allFetchedPapers]);
+    return filteredPapers[0] || null;
+  }, [filteredPapers, selectedPaperId]);
 
   // Synchronize selectedPaperId with activePaper if different
   useEffect(() => {
@@ -355,7 +354,7 @@ export default function FacultyMarksPage() {
   }, [activePaper, selectedPaperId]);
 
   const paperCompetencies = useMemo(() => {
-    const targetPaper = activePaper || filteredPapers[0] || allFetchedPapers[0];
+    const targetPaper = activePaper || filteredPapers[0] || null;
     if (!targetPaper?.sections) return [];
     const compSet = new Set<string>();
     targetPaper.sections.forEach(sec => {
@@ -365,7 +364,7 @@ export default function FacultyMarksPage() {
       });
     });
     return Array.from(compSet);
-  }, [activePaper, filteredPapers, allFetchedPapers]);
+  }, [activePaper, filteredPapers]);
 
   const calculateStudentCompetencyScores = (
     paper: any,
@@ -373,7 +372,7 @@ export default function FacultyMarksPage() {
     subMarks: any = {},
     skippedListOrMap: any = {}
   ) => {
-    const targetPaper = paper || activePaper || filteredPapers[0] || allFetchedPapers[0];
+    const targetPaper = paper || activePaper || filteredPapers[0] || null;
     if (!targetPaper || !Array.isArray(targetPaper.sections)) return {};
     const scores: { [compCode: string]: { scored: number; max: number; isSkipped?: boolean } } = {};
 
@@ -512,7 +511,7 @@ export default function FacultyMarksPage() {
 
   // Handle Open Student Report Modal
   const handleOpenStudentReport = (st: StudentRow) => {
-    const paper = activePaper || filteredPapers.find(p => p.id === selectedPaperId) || filteredPapers[0] || allFetchedPapers[0];
+    const paper = activePaper || filteredPapers.find(p => p.id === selectedPaperId) || filteredPapers[0] || null;
 
     const isPrac = Boolean(
       paper?.sections?.some(s =>
@@ -1126,6 +1125,8 @@ export default function FacultyMarksPage() {
       if (academicCascade?.batch?.batch_cd) queryParams.set('batchCd', String(academicCascade.batch.batch_cd));
       if (academicCascade?.semester?.sem_cd) queryParams.set('semester', String(academicCascade.semester.sem_cd));
       if (academicCascade?.section) queryParams.set('section', String(academicCascade.section));
+      const activeSubjParam = selectedSubject || academicCascade?.subject?.id || academicCascade?.subject?.code;
+      if (activeSubjParam) queryParams.set('subjectId', String(activeSubjParam));
 
       const res = await fetch(`${API_BASE}/exams/papers?${queryParams.toString()}`, { headers });
       let rawList: any[] = [];
@@ -2477,7 +2478,7 @@ export default function FacultyMarksPage() {
                     onChange={e => setSelectedPaperId(e.target.value)}
                     className="px-3.5 py-1.5 text-xs rounded-xl bg-white dark:bg-slate-800 border border-[#E7EAF3] dark:border-slate-700 text-[#1B1E28] dark:text-white font-bold shadow-sm"
                   >
-                    {(filteredPapers.length > 0 ? filteredPapers : allFetchedPapers).map(p => (
+                    {filteredPapers.map(p => (
                       <option key={p.id} value={p.id}>[{p.code}] {p.name}</option>
                     ))}
                   </select>

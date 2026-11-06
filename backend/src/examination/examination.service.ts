@@ -27,11 +27,13 @@ export class ExaminationService {
     const validUserId = userId && this.isUUID(userId) ? userId : null;
     const rawDeptId = dto.departmentId || dto.department_id;
     let validDeptId = rawDeptId && this.isUUID(rawDeptId) ? rawDeptId : null;
-    const finalColgCd = dto.colgCd || dto.colg_cd || null;
-    const finalCourseCd = dto.courseCd || dto.course_cd || null;
-    const finalBranchCd = dto.branchCd || dto.branch_cd || null;
-    const finalBatchCd = dto.batchCd || dto.batch_cd || null;
-    const finalAcademicYear = dto.academicYear || dto.academic_year || null;
+    let finalColgCd = dto.colgCd || dto.colg_cd || null;
+    let finalCourseCd = dto.courseCd || dto.course_cd || null;
+    let finalBranchCd = dto.branchCd || dto.branch_cd || null;
+    let finalBatchCd = dto.batchCd || dto.batch_cd || null;
+    let finalSemester = dto.semester || null;
+    let finalAcademicYear = dto.academicYear || dto.academic_year || null;
+    let validBatchId = dto.batchId && this.isUUID(dto.batchId) ? dto.batchId : null;
 
     // Resolve Department UUID if not already a UUID or if branch/course maps to a department
     if (!validDeptId && (finalBranchCd || finalCourseCd)) {
@@ -62,24 +64,35 @@ export class ExaminationService {
       } catch {}
     }
 
-    // Resolve Subject UUID if non-UUID code is provided
+        // Resolve Subject UUID if non-UUID code is provided
     let validSubjId = dto.subjectId && this.isUUID(dto.subjectId) ? dto.subjectId : null;
-    if (!validSubjId && (dto.subjectId || dto.code)) {
-      try {
-        const sTarget = dto.subjectId || dto.code;
+    let subjRow: any = null;
+    try {
+      const sTarget = validSubjId || dto.subjectId || dto.code;
+      if (sTarget) {
         const foundSubj = await this.tenantSchemaService.queryInTenant(
           slug,
-          `SELECT id FROM subjects WHERE code = $1 OR $2 ILIKE (code || '%') LIMIT 1`,
+          `SELECT id, course_cd, branch_cd, batch_cd, sem_cd, batch_id, department_id FROM subjects WHERE id::text = $1 OR code = $1 OR $2 ILIKE (code || '%') LIMIT 1`,
           [sTarget, sTarget],
         );
         if (foundSubj && foundSubj.length > 0) {
           validSubjId = foundSubj[0].id;
+          subjRow = foundSubj[0];
         }
-      } catch {}
+      }
+    } catch {}
+
+    if (subjRow) {
+      if (!finalCourseCd && subjRow.course_cd) finalCourseCd = String(subjRow.course_cd);
+      if (!finalBranchCd && subjRow.branch_cd) finalBranchCd = String(subjRow.branch_cd);
+      if (!finalBatchCd && subjRow.batch_cd) finalBatchCd = String(subjRow.batch_cd);
+      if (!finalSemester && subjRow.sem_cd) finalSemester = String(subjRow.sem_cd);
+      if (!validBatchId && subjRow.batch_id) validBatchId = subjRow.batch_id;
+      if (!validDeptId && subjRow.department_id) validDeptId = subjRow.department_id;
+      if (!finalColgCd && slug.toLowerCase().includes('srms')) finalColgCd = '1';
     }
 
     // Resolve Batch UUID if non-UUID batch is provided
-    let validBatchId = dto.batchId && this.isUUID(dto.batchId) ? dto.batchId : null;
     if (!validBatchId && (dto.batchCd || finalBatchCd)) {
       try {
         const bTarget = dto.batchCd || finalBatchCd;
@@ -197,7 +210,7 @@ export class ExaminationService {
             finalCourseCd,
             finalBranchCd,
             finalBatchCd,
-            dto.semester || null,
+            finalSemester || dto.semester || null,
             dto.section || null,
             finalAcademicYear,
             nextVersion,
@@ -249,7 +262,7 @@ export class ExaminationService {
             finalCourseCd,
             finalBranchCd,
             finalBatchCd,
-            dto.semester || null,
+            finalSemester || dto.semester || null,
             dto.section || null,
             finalAcademicYear,
             initialVersion,
@@ -288,7 +301,7 @@ export class ExaminationService {
           finalCourseCd,
           finalBranchCd,
           finalBatchCd,
-          dto.semester || null,
+          finalSemester || dto.semester || null,
           dto.section || null,
           finalAcademicYear,
           initialVersion,
@@ -554,6 +567,7 @@ export class ExaminationService {
       section?: string;
       facultyId?: string;
       createdBy?: string;
+      subjectId?: string;
       role?: string;
     },
     user?: any,
@@ -638,25 +652,36 @@ export class ExaminationService {
       whereClauses.push(`p.colg_cd = $${pIdx++}`);
       params.push(filters.colgCd);
     }
+        if (filters?.subjectId) {
+      whereClauses.push(`(p.subject_id::text = $${pIdx} OR s.code = $${pIdx} OR s.id::text = $${pIdx} OR s2.code = $${pIdx} OR p.code ILIKE ($${pIdx} || '%'))`);
+      params.push(filters.subjectId);
+      pIdx++;
+    }
+
     if (filters?.courseCd) {
-      whereClauses.push(`p.course_cd = $${pIdx++}`);
+      whereClauses.push(`(p.course_cd = $${pIdx} OR (p.course_cd IS NULL AND (s.course_cd = $${pIdx} OR s2.course_cd = $${pIdx})))`);
       params.push(filters.courseCd);
+      pIdx++;
     }
     if (filters?.branchCd) {
-      whereClauses.push(`p.branch_cd = $${pIdx++}`);
+      whereClauses.push(`(p.branch_cd = $${pIdx} OR (p.branch_cd IS NULL AND (s.branch_cd = $${pIdx} OR s2.branch_cd = $${pIdx})))`);
       params.push(filters.branchCd);
+      pIdx++;
     }
     if (filters?.batchCd) {
-      whereClauses.push(`p.batch_cd = $${pIdx++}`);
+      whereClauses.push(`(p.batch_cd = $${pIdx} OR (p.batch_cd IS NULL AND (s.batch_cd = $${pIdx} OR s2.batch_cd = $${pIdx})))`);
       params.push(filters.batchCd);
+      pIdx++;
     }
     if (filters?.semester) {
-      whereClauses.push(`p.semester = $${pIdx++}`);
+      whereClauses.push(`(p.semester = $${pIdx} OR (p.semester IS NULL AND (s.sem_cd = $${pIdx} OR s2.sem_cd = $${pIdx} OR s.semester ILIKE ('%' || $${pIdx} || '%'))))`);
       params.push(filters.semester);
+      pIdx++;
     }
     if (filters?.section) {
-      whereClauses.push(`p.section = $${pIdx++}`);
+      whereClauses.push(`(p.section = $${pIdx} OR p.target_sections::text ILIKE '%All%' OR p.section IS NULL)`);
       params.push(filters.section);
+      pIdx++;
     }
 
     const whereStr = whereClauses.length > 0 ? `WHERE ${whereClauses.join(' AND ')}` : '';

@@ -42,13 +42,14 @@ export class ExaminationController {
     @Query('section') section?: string,
     @Query('facultyId') facultyId?: string,
     @Query('createdBy') createdBy?: string,
+    @Query('subjectId') subjectId?: string,
     @Query('role') role?: string,
     @Req() req?: any,
   ) {
     const activeUser = this.extractUserFromReq(req, user);
     return this.examinationService.getPapers(
       tenantSlug,
-      { status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section, facultyId, createdBy, role },
+      { status, departmentId, colgCd, courseCd, branchCd, batchCd, semester, section, facultyId, createdBy, subjectId, role },
       activeUser,
     );
   }
