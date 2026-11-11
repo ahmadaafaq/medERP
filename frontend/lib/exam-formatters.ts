@@ -91,13 +91,33 @@ export function formatSemesterOnly(semester?: string | number | null): string {
 /**
  * Formats section label cleanly (e.g. 'A' -> 'Section A', 'Section A' -> 'Section A')
  */
+const NUM_TO_LETTER: Record<string, string> = {
+  '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E',
+  '6': 'F', '7': 'G', '8': 'H', '9': 'I', '10': 'J',
+};
+
 export function formatSectionOnly(section?: string | null): string {
   if (!section) return '';
   const str = String(section).trim();
-  if (str.toLowerCase().startsWith('section') || str.toLowerCase().startsWith('sec')) {
-    return str.replace(/^Sec\b/i, 'Section');
+  const lower = str.toLowerCase();
+  if (lower === 'all' || lower === 'all sections' || lower.includes('common')) {
+    return 'Common (All Sections)';
   }
-  return `Section ${str}`;
+
+  // If already matches Section A(1) or Section A
+  const letterMatch = str.match(/\b([a-jA-J])\b/);
+  if (letterMatch) {
+    return `Section ${letterMatch[1].toUpperCase()}`;
+  }
+
+  // If numeric code 1 to 10
+  const numMatch = str.match(/\b(10|[1-9])\b/);
+  if (numMatch && NUM_TO_LETTER[numMatch[1]]) {
+    return `Section ${NUM_TO_LETTER[numMatch[1]]}`;
+  }
+
+  const clean = str.replace(/^sec(tion)?\s*/i, '').replace(/\s*\(\d+\)\s*/g, '').trim();
+  return clean ? `Section ${clean}` : 'Section A';
 }
 
 /**

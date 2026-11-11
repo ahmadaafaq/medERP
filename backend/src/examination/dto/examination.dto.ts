@@ -24,7 +24,19 @@ export class CreateExamPaperDto {
 
   @IsString()
   @IsOptional()
+  batch_id?: string;
+
+  @IsString()
+  @IsOptional()
+  subject_id?: string;
+
+  @IsString()
+  @IsOptional()
   examDate?: string;
+
+  @IsString()
+  @IsOptional()
+  exam_date?: string;
 
   @IsNumber()
   @IsOptional()
@@ -32,15 +44,39 @@ export class CreateExamPaperDto {
 
   @IsNumber()
   @IsOptional()
+  max_marks?: number;
+
+  @IsNumber()
+  @IsOptional()
   passingMarks?: number;
+
+  @IsNumber()
+  @IsOptional()
+  passing_marks?: number;
 
   @IsString()
   @IsOptional()
   type?: string;
 
+  @IsString()
+  @IsOptional()
+  paperType?: string;
+
+  @IsString()
+  @IsOptional()
+  paper_type?: string;
+
   @IsNumber()
   @IsOptional()
   durationMinutes?: number;
+
+  @IsNumber()
+  @IsOptional()
+  duration_minutes?: number;
+
+  @IsNumber()
+  @IsOptional()
+  duration?: number;
 
   @IsOptional()
   sections?: any;
@@ -132,7 +168,15 @@ export class CreateExamPaperDto {
 
   @IsString()
   @IsOptional()
+  created_by?: string;
+
+  @IsString()
+  @IsOptional()
   facultyId?: string;
+
+  @IsString()
+  @IsOptional()
+  faculty_id?: string;
 
   @IsString()
   @IsOptional()
@@ -155,6 +199,48 @@ export class CreateExamPaperDto {
 
   @IsOptional()
   target_sections?: any;
+
+  @IsOptional()
+  targetSection?: any;
+
+  @IsOptional()
+  target_section?: any;
+
+  @IsOptional()
+  college_id?: any;
+
+  @IsOptional()
+  collegeId?: any;
+
+  @IsOptional()
+  course_id?: any;
+
+  @IsOptional()
+  courseId?: any;
+
+  @IsOptional()
+  branch_id?: any;
+
+  @IsOptional()
+  branchId?: any;
+
+  @IsOptional()
+  sem_cd?: any;
+
+  @IsOptional()
+  semCd?: any;
+
+  @IsOptional()
+  is_common?: any;
+
+  @IsOptional()
+  isCommon?: any;
+
+  @IsOptional()
+  allow_submissions?: any;
+
+  @IsOptional()
+  allowSubmissions?: any;
 }
 
 export class SubmitResultDto {

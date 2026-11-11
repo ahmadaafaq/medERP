@@ -37,14 +37,18 @@ export function validateChoiceGroup(
   const n = group.requiredToAttempt;
 
   if (m < ASSESSMENT_LIMITS.MIN_CHOICE_GROUP_QUESTIONS) {
-    errors.push(
-      `Choice group "${group.name}" must contain at least ${ASSESSMENT_LIMITS.MIN_CHOICE_GROUP_QUESTIONS} questions. Found ${m}.`,
+    warnings.push(
+      `Choice group "${group.name}" contains ${m} questions. Add more questions to provide true student choice.`,
     );
   }
 
-  if (n < ASSESSMENT_LIMITS.MIN_REQUIRED_ATTEMPT || n >= m) {
+  if (n < ASSESSMENT_LIMITS.MIN_REQUIRED_ATTEMPT || (m > 0 && n > m)) {
     errors.push(
-      `Choice group "${group.name}" required attempts (N=${n}) must satisfy 1 <= N < M (M=${m}).`,
+      `Choice group "${group.name}" required attempts (N=${n}) must satisfy 1 <= N <= M (M=${m}).`,
+    );
+  } else if (m > 0 && n === m) {
+    warnings.push(
+      `Choice group "${group.name}" requires attempting all ${m} questions. All questions are effectively mandatory.`,
     );
   }
 

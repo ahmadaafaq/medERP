@@ -184,6 +184,26 @@ export class TenantSchemaService implements OnApplicationBootstrap {
               ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS unit_code VARCHAR(100);
               ALTER TABLE "${schema}".question_bank ADD COLUMN IF NOT EXISTS sub_topic_code VARCHAR(100);
             END IF;
+            IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'examination_papers') THEN
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'DRAFT';
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS department_id UUID;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS section VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS academic_year VARCHAR(50);
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS version INT DEFAULT 1;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS hod_remarks TEXT;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS question_remarks JSONB DEFAULT '{}'::jsonb;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS created_by UUID;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS faculty_id UUID;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS paper_set VARCHAR(50) DEFAULT 'Set A';
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS target_sections JSONB DEFAULT '["All"]'::jsonb;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS dqac_remarks TEXT;
+              ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS dqac_status VARCHAR(50);
+            END IF;
           EXCEPTION WHEN OTHERS THEN NULL; END $$;
         `).catch(() => {});
       }
@@ -2101,6 +2121,8 @@ export class TenantSchemaService implements OnApplicationBootstrap {
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS question_remarks JSONB DEFAULT '{}'::jsonb;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS created_by UUID;`).catch(() => { });
     await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS faculty_id UUID;`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS paper_set VARCHAR(50) DEFAULT 'Set A';`).catch(() => { });
+    await runner.query(`ALTER TABLE "${schema}".examination_papers ADD COLUMN IF NOT EXISTS target_sections JSONB DEFAULT '["All"]'::jsonb;`).catch(() => { });
 
     // ── Examination Competencies ───────────────────────────────────────────
     await runner.query(`

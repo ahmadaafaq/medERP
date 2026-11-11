@@ -595,31 +595,96 @@ export interface FacultySubjectLink {
  * Converts 'Section C', 'sec c', 'C', '3' -> '3'
  * Converts 'Section D', 'sec d', 'D', '4' -> '4'
  */
+export const ACADEMIC_SECTIONS_1_TO_10 = [
+  { code: '1', label: 'Section A' },
+  { code: '2', label: 'Section B' },
+  { code: '3', label: 'Section C' },
+  { code: '4', label: 'Section D' },
+  { code: '5', label: 'Section E' },
+  { code: '6', label: 'Section F' },
+  { code: '7', label: 'Section G' },
+  { code: '8', label: 'Section H' },
+  { code: '9', label: 'Section I' },
+  { code: '10', label: 'Section J' },
+];
+
+const SECTION_CODE_TO_LETTER: Record<string, string> = {
+  '1': 'A', '2': 'B', '3': 'C', '4': 'D', '5': 'E',
+  '6': 'F', '7': 'G', '8': 'H', '9': 'I', '10': 'J',
+};
+
+const SECTION_LETTER_TO_CODE: Record<string, string> = {
+  a: '1', b: '2', c: '3', d: '4', e: '5',
+  f: '6', g: '7', h: '8', i: '9', j: '10',
+};
+
 export function normalizeSection(val: any): string {
-  const v = String(val || '').trim().toLowerCase();
-  if (!v || v === 'all' || v === 'all sections') return 'all';
-  if (v === '1' || v === 'section a' || v === 'sec a' || v === 'a' || v === 'sec 1' || v === 'section 1') return '1';
-  if (v === '2' || v === 'section b' || v === 'sec b' || v === 'b' || v === 'sec 2' || v === 'section 2') return '2';
-  if (v === '3' || v === 'section c' || v === 'sec c' || v === 'c' || v === 'sec 3' || v === 'section 3') return '3';
-  if (v === '4' || v === 'section d' || v === 'sec d' || v === 'd' || v === 'sec 4' || v === 'section 4') return '4';
-  if (v === '5' || v === 'section e' || v === 'sec e' || v === 'e' || v === 'sec 5' || v === 'section 5') return '5';
-  const digitMatch = v.match(/\d+/);
-  if (digitMatch) return digitMatch[0];
+  if (val === null || val === undefined) return '1';
+  const v = String(val).trim().toLowerCase();
+  if (!v || v === 'all' || v === 'all sections' || v.includes('common')) return 'all';
+
+  if (/^(10|[1-9])$/.test(v)) return v;
+
+  const letterMatch = v.match(/\b([a-j])\b/i);
+  if (letterMatch && SECTION_LETTER_TO_CODE[letterMatch[1].toLowerCase()]) {
+    return SECTION_LETTER_TO_CODE[letterMatch[1].toLowerCase()];
+  }
+
+  const digitMatch = v.match(/\b(10|[1-9])\b/);
+  if (digitMatch) return digitMatch[1];
+
+  const anyDigits = v.match(/\d+/);
+  if (anyDigits) return anyDigits[0];
+
   return '1';
 }
 
-/**
- * Clean Section Formatter. Prevents double-prefixes (never produces 'Section Section A').
- */
-export function formatSectionLabel(sec: string): string {
-  const code = normalizeSection(sec);
-  if (code === '1') return 'Section A (1)';
-  if (code === '2') return 'Section B (2)';
-  if (code === '3') return 'Section C (3)';
-  if (code === '4') return 'Section D (4)';
-  if (code === '5') return 'Section E (5)';
-  const clean = String(sec).replace(/^section\s+/i, '').replace(/^sec\s+/i, '').trim();
-  return `Section ${clean}`;
+export function formatSectionLabel(sec: any): string {
+  if (sec === null || sec === undefined) return 'Section A';
+  const raw = String(sec).trim();
+  if (!raw || raw.toLowerCase() === 'all' || raw.toLowerCase() === 'all sections' || raw.toLowerCase().includes('common')) {
+    return 'Common (All Sections)';
+  }
+
+  const code = normalizeSection(raw);
+  if (code === 'all') return 'Common (All Sections)';
+
+  if (SECTION_CODE_TO_LETTER[code]) {
+    return `Section ${SECTION_CODE_TO_LETTER[code]}`;
+  }
+
+  const clean = raw
+    .replace(/^section\s+/i, '')
+    .replace(/^sec\s+/i, '')
+    .replace(/\s*\(\d+\)\s*/g, '')
+    .trim();
+
+  return clean ? `Section ${clean}` : 'Section A';
+}
+
+export function formatTargetSectionsDisplay(targetSections: any, fallbackSec?: any): string {
+  let secs = targetSections;
+  if (typeof secs === 'string') {
+    try {
+      secs = JSON.parse(secs);
+    } catch {
+      secs = [secs];
+    }
+  }
+
+  if (!Array.isArray(secs) || secs.length === 0) {
+    if (fallbackSec && String(fallbackSec).toLowerCase() !== 'all') {
+      secs = [fallbackSec];
+    } else {
+      return 'Common: All Sections';
+    }
+  }
+
+  if (secs.some((s: any) => String(s).toLowerCase() === 'all' || String(s).toLowerCase().includes('common'))) {
+    return 'Common: All Sections';
+  }
+
+  return secs.map((s: any) => formatSectionLabel(s)).join(', ');
 }
 
 /**

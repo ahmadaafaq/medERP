@@ -467,42 +467,17 @@ export default function FacultyAcademicCascadingDropdown({
     return Array.from(map.values());
   }, [onlyLinked, linkedSubjects, subjects, courseCd, branchCd, batchCd, semCd]);
 
-  // 6. FILTERED SECTIONS: Scoped to faculty linked sections if onlyLinked, or all standard cohort sections if Admin
+  // 6. FILTERED SECTIONS: Standard Sections 1 to 10 (Section A to J) + faculty linked sections
   const visibleSections = useMemo<string[]>(() => {
     const secSet = new Set<string>();
-    if (onlyLinked && linkedSubjects.length > 0) {
-      // Faculty mode: strictly scope to sections linked to this faculty for current hierarchy
-      linkedSubjects
-        .filter((l) => {
-          if (courseCd && l.course_cd && String(l.course_cd) !== String(courseCd)) return false;
-          if (branchCd && l.branch_cd && String(l.branch_cd) !== String(branchCd)) return false;
-          if (batchCd && l.batch_cd && String(l.batch_cd) !== String(batchCd)) return false;
-          if (semCd && l.sem_cd && String(l.sem_cd) !== String(semCd)) return false;
-          return true;
-        })
-        .forEach((l) => {
-          const sec = normalizeSection(l.section || '1');
-          if (sec && sec !== 'all') secSet.add(sec);
-        });
-    } else {
-      // Admin mode: open all standard cohort sections (Section 1/A, 2/B, 3/C, 4/D)
-      secSet.add('1');
-      secSet.add('2');
-      secSet.add('3');
-      secSet.add('4');
-      // Plus any section tags from linked subjects
-      linkedSubjects.forEach((l) => {
-        const sec = normalizeSection(l.section);
-        if (sec && sec !== 'all') secSet.add(sec);
-      });
+    for (let i = 1; i <= 10; i++) {
+      secSet.add(String(i));
     }
-
-    if (secSet.size === 0) {
-      secSet.add('1');
-      secSet.add('2');
-      secSet.add('3');
-      secSet.add('4');
-    }
+    // Also include any additional section tags from linked subjects
+    linkedSubjects.forEach((l) => {
+      const sec = normalizeSection(l.section);
+      if (sec && sec !== 'all') secSet.add(sec);
+    });
 
     return Array.from(secSet).sort((a, b) => {
       const numA = parseInt(a, 10);
@@ -510,7 +485,7 @@ export default function FacultyAcademicCascadingDropdown({
       if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
       return a.localeCompare(b);
     });
-  }, [onlyLinked, linkedSubjects, courseCd, branchCd, batchCd, semCd]);
+  }, [linkedSubjects]);
 
   // Auto-sync Section: default to first available section only if currently empty or invalid
   useEffect(() => {

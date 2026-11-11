@@ -15,6 +15,7 @@ import {
   CreateProfessionalDto, UpdateProfessionalDto,
   CreateGroupDto, UpdateGroupDto,
   CreateResidencyDto, UpdateResidencyDto,
+  UpdateHodScopeDto,
 } from './dto/college-master.dto';
 import { UserRole } from '../common/enums/role.enum';
 
@@ -3144,5 +3145,231 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     );
     return { success: true, message: 'Residency Category deleted successfully' };
   }
-}
 
+  /**
+   * 10. HOD SCOPE LINKER
+   * Fetches HOD users, colleges, courses, and departments for a tenant.
+   */
+  async getHodScopes(
+    effectiveTenant?: string,
+    user?: any,
+    collegeId?: string,
+    colgCd?: string,
+    includeAllFaculty = false,
+  ) {
+    const ctx = await this.resolveTenantContext(user, effectiveTenant);
+    if (!ctx) {
+      throw new BadRequestException('Invalid tenant context for HOD scope');
+    }
+    const slug = ctx.tenantSlug;
+    const schema = `tenant_${slug}`;
+
+    await this.ds.query(`
+      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      ALTER TABLE "${schema}".departments ADD COLUMN IF NOT EXISTS course_name VARCHAR(200);
+      ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      ALTER TABLE "${schema}".courses ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+      ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS college_id VARCHAR(100);
+      ALTER TABLE "${schema}".faculty ADD COLUMN IF NOT EXISTS college_code VARCHAR(50);
+    `).catch(() => {});
+
+    // 0. Fetch Colleges available for this tenant / user
+    const colleges = await this.listColleges(user, slug).catch(() => []);
+
+    // 1. Fetch HOD users (or include faculty if requested)
+    const roleFilter = includeAllFaculty
+      ? `WHERE u.role ILIKE '%hod%'
+         OR u.assigned_roles ILIKE '%hod%'
+         OR u.role ILIKE '%faculty%'
+         OR u.assigned_roles ILIKE '%faculty%'
+         OR u.role ILIKE '%teacher%'
+         OR u.role ILIKE '%professor%'
+         OR f.id IS NOT NULL
+         OR u.id::text IN (
+           SELECT DISTINCT hod_user_id::text 
+           FROM "${schema}".departments 
+           WHERE hod_user_id IS NOT NULL
+         )`
+      : `WHERE u.role ILIKE '%hod%'
+         OR u.assigned_roles ILIKE '%hod%'
+         OR u.id::text IN (
+           SELECT DISTINCT hod_user_id::text 
+           FROM "${schema}".departments 
+           WHERE hod_user_id IS NOT NULL
+         )`;
+
+    const hodQuery = `
+      SELECT DISTINCT ON (u.id)
+        u.id,
+        u.name,
+        u.email,
+        u.role,
+        u.assigned_roles,
+        f.emp_id,
+        f.designation,
+        f.colg_cd,
+        f.college_id,
+        f.college_code
+      FROM "${schema}".users u
+      LEFT JOIN "${schema}".faculty f ON f.email = u.email OR f.id::text = u.id::text
+      ${roleFilter}
+      ORDER BY u.id, u.name ASC
+    `;
+    const hodRows = await this.ds.query(hodQuery).catch(() => []);
+
+    // 2. Fetch all courses
+    const coursesQuery = `
+      SELECT id, name, code, course_cd, colg_cd
+      FROM "${schema}".courses
+      WHERE is_active = true OR is_active IS NULL
+      ORDER BY CAST(NULLIF(regexp_replace(COALESCE(course_cd, code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, name ASC
+    `;
+    const courseRows = await this.ds.query(coursesQuery).catch(() => []);
+
+    // 3. Fetch all departments with course names and HOD info
+    const deptQuery = `
+      SELECT 
+        d.id,
+        d.name,
+        d.code,
+        d.branch_cd,
+        d.course_cd,
+        d.colg_cd,
+        COALESCE(c.name, d.course_name, 'General / Other') AS course_name,
+        d.hod_user_id,
+        u.name AS hod_name,
+        u.email AS hod_email
+      FROM "${schema}".departments d
+      LEFT JOIN "${schema}".courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+      LEFT JOIN "${schema}".users u ON u.id::text = d.hod_user_id::text
+      ORDER BY 
+        COALESCE(c.name, 'ZZZ') ASC,
+        CAST(NULLIF(regexp_replace(COALESCE(d.branch_cd, d.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST,
+        d.name ASC
+    `;
+    const deptRows = await this.ds.query(deptQuery).catch(() => []);
+
+    // Build HOD summary metrics
+    const hods = hodRows.map((h: any) => {
+      const linkedDepts = deptRows.filter((d: any) => String(d.hod_user_id) === String(h.id));
+      return {
+        ...h,
+        linkedDepartmentCount: linkedDepts.length,
+        linkedDepartments: linkedDepts.map((d: any) => ({
+          id: d.id,
+          name: d.name,
+          code: d.code,
+          branch_cd: d.branch_cd,
+          course_cd: d.course_cd,
+          course_name: d.course_name,
+          colg_cd: d.colg_cd,
+        })),
+      };
+    });
+
+    return {
+      success: true,
+      tenant: slug,
+      colleges,
+      hods,
+      courses: courseRows,
+      departments: deptRows,
+    };
+  }
+
+  /**
+   * Updates HOD scope linking for a specific HOD user across departments.
+   */
+  async updateHodScope(dto: UpdateHodScopeDto, effectiveTenant?: string, user?: any) {
+    const ctx = await this.resolveTenantContext(user, effectiveTenant);
+    if (!ctx) {
+      throw new BadRequestException('Invalid tenant context for updating HOD scope');
+    }
+    const slug = ctx.tenantSlug;
+    const schema = `tenant_${slug}`;
+
+    const { hodUserId, departmentIds } = dto;
+    if (!hodUserId) {
+      throw new BadRequestException('hodUserId is required');
+    }
+
+    // Verify HOD user exists in tenant schema
+    const checkUser = await this.ds.query(
+      `SELECT id, name, email, role, assigned_roles FROM "${schema}".users WHERE id::text = $1 LIMIT 1`,
+      [hodUserId],
+    ).catch(() => []);
+
+    if (checkUser.length === 0) {
+      throw new NotFoundException(`HOD user with ID ${hodUserId} not found in tenant ${slug}`);
+    }
+
+    const hod = checkUser[0];
+
+    // Ensure user has HOD in assigned_roles or role
+    const assignedRolesStr = hod.assigned_roles || '';
+    const rolesList = assignedRolesStr.split(',').map((r: string) => r.trim().toUpperCase()).filter(Boolean);
+    if (!rolesList.includes('HOD') && (hod.role || '').toUpperCase() !== 'HOD') {
+      rolesList.push('HOD');
+      await this.ds.query(
+        `UPDATE "${schema}".users SET assigned_roles = $1 WHERE id::text = $2`,
+        [rolesList.join(','), hodUserId],
+      ).catch(() => {});
+    }
+
+    // Begin updates using transaction
+    const runner = this.ds.createQueryRunner();
+    await runner.connect();
+    await runner.startTransaction();
+
+    try {
+      if (!departmentIds || departmentIds.length === 0) {
+        await runner.query(
+          `UPDATE "${schema}".departments SET hod_user_id = NULL WHERE hod_user_id::text = $1`,
+          [hodUserId],
+        );
+      } else {
+        await runner.query(
+          `UPDATE "${schema}".departments 
+           SET hod_user_id = NULL 
+           WHERE hod_user_id::text = $1 AND id::text != ALL($2::text[])`,
+          [hodUserId, departmentIds],
+        );
+
+        await runner.query(
+          `UPDATE "${schema}".departments 
+           SET hod_user_id = $1 
+           WHERE id::text = ANY($2::text[])`,
+          [hodUserId, departmentIds],
+        );
+      }
+
+      await runner.commitTransaction();
+    } catch (err: any) {
+      await runner.rollbackTransaction();
+      this.logger.error(`Failed to update HOD scope for ${hodUserId}: ${err.message}`);
+      throw new BadRequestException(`Failed to update HOD scope: ${err.message}`);
+    } finally {
+      await runner.release();
+    }
+
+    // Fetch updated linked departments
+    const updatedLinked = await this.ds.query(
+      `SELECT d.id, d.name, d.code, d.branch_cd, d.course_cd, COALESCE(c.name, d.course_name, 'General / Other') AS course_name
+       FROM "${schema}".departments d
+       LEFT JOIN "${schema}".courses c ON c.course_cd = d.course_cd OR c.code = d.course_cd
+       WHERE d.hod_user_id::text = $1
+       ORDER BY d.name ASC`,
+      [hodUserId],
+    ).catch(() => []);
+
+    return {
+      success: true,
+      message: `HOD academic scope updated successfully. ${updatedLinked.length} department(s) linked to ${hod.name}.`,
+      hodId: hodUserId,
+      hodName: hod.name,
+      linkedCount: updatedLinked.length,
+      linkedDepartments: updatedLinked,
+    };
+  }
+}

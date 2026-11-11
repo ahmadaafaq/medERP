@@ -194,11 +194,19 @@ export class ExaminationController {
     @Tenant() tenantSlug: string,
     @Query('departmentId') departmentId?: string,
     @Query('status') statusFilter?: string,
+    @Query('userId') queryUserId?: string,
+    @Query('empId') queryEmpId?: string,
     @CurrentUser() user?: any,
     @Req() req?: any,
+    @Headers('x-user-id') headerUserId?: string,
+    @Headers('x-emp-id') headerEmpId?: string,
   ) {
     const activeUser = this.extractUserFromReq(req, user);
+    const effectiveUserId = (queryUserId || headerUserId || activeUser?.sub || activeUser?.id || activeUser?.userId || '').trim() || undefined;
+    const effectiveEmpId = (queryEmpId || headerEmpId || activeUser?.emp_id || activeUser?.empId || '').trim() || undefined;
     return this.examinationService.getPendingQPForHod(tenantSlug, departmentId, statusFilter || 'PENDING_DQAC_APPROVAL', {
+      userId: effectiveUserId,
+      empId: effectiveEmpId,
       user: activeUser,
     });
   }

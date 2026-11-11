@@ -312,7 +312,13 @@ export default function FacultyMarksPage() {
 
   // ── Paper States ──────────────────────────────────────────────────────
   const [allFetchedPapers, setAllFetchedPapers] = useState<ExamPaper[]>([]);
-  const [selectedPaperId, setSelectedPaperId] = useState<string>('');
+  const [selectedPaperId, setSelectedPaperId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const p = new URLSearchParams(window.location.search).get('paperId');
+      return p || '';
+    }
+    return '';
+  });
 
   // Filter papers strictly by selected subject
   const filteredPapers = useMemo(() => {
@@ -1198,7 +1204,11 @@ export default function FacultyMarksPage() {
 
         if (mapped.length > 0) {
           setAllFetchedPapers(mapped);
-          if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
+          const urlPaperId = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('paperId') : '';
+          const matchedUrlPaper = urlPaperId ? mapped.find(p => p.id === urlPaperId) : null;
+          if (matchedUrlPaper) {
+            setSelectedPaperId(matchedUrlPaper.id);
+          } else if (!selectedPaperId || !mapped.find(p => p.id === selectedPaperId)) {
             setSelectedPaperId(mapped[0].id);
           }
           return;

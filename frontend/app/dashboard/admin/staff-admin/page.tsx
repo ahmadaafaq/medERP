@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import Sidebar from '../../../../components/Sidebar';
 import Header from '../../../../components/Header';
+import HodScopeManager from '../../../../components/admin/HodScopeManager';
 
 interface College {
   id: string;
@@ -176,6 +177,7 @@ export default function StaffAdminPage() {
 
   // Direct create admin modal
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [hodScopeModalUser, setHodScopeModalUser] = useState<Faculty | null>(null);
   const [newAdminData, setNewAdminData] = useState({
     name: '',
     email: '',
@@ -1023,7 +1025,19 @@ export default function StaffAdminPage() {
                           </td>
 
                           <td className="pr-6 py-4 text-right">
-                            <div className="relative inline-block text-left" data-dropdown-container="true">
+                            <div className="flex items-center justify-end gap-2">
+                              {staffRoles.includes('HOD') && (
+                                <button
+                                  type="button"
+                                  onClick={() => setHodScopeModalUser(fac)}
+                                  className="h-9 px-3 rounded-xl font-bold text-xs inline-flex items-center gap-1.5 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 border border-purple-200/80 dark:border-purple-800/60 transition-all shadow-xs cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                                  title="Link Multiple Courses & Branches to this HOD"
+                                >
+                                  <span>🔗</span>
+                                  <span>Link Scope</span>
+                                </button>
+                              )}
+                              <div className="relative inline-block text-left" data-dropdown-container="true">
                               <button
                                 type="button"
                                 onClick={() => setOpenDropdownId(openDropdownId === fac.id ? null : fac.id)}
@@ -1152,6 +1166,7 @@ export default function StaffAdminPage() {
                                   </div>
                                 </div>
                               )}
+                              </div>
                             </div>
                           </td>
                         </tr>
@@ -1374,6 +1389,40 @@ export default function StaffAdminPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* HOD Course & Branch Scope Modal (Option B) */}
+      {hodScopeModalUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 rounded-[24px] max-w-5xl w-full max-h-[92vh] overflow-y-auto shadow-2xl border border-slate-200 dark:border-slate-800 p-6">
+            <div className="flex items-center justify-between pb-4 mb-4 border-b border-slate-200 dark:border-slate-800">
+              <div>
+                <div className="text-[11px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-wider">HOD Academic Jurisdiction</div>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>🔗</span>
+                  <span>Link Courses & Branches — {hodScopeModalUser.name}</span>
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHodScopeModalUser(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 flex items-center justify-center font-bold text-sm transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <HodScopeManager
+              role="admin"
+              initialHodUserId={hodScopeModalUser.id}
+              isModal={true}
+              onClose={() => setHodScopeModalUser(null)}
+              onScopeSaved={() => {
+                fetchFaculties();
+              }}
+            />
           </div>
         </div>
       )}

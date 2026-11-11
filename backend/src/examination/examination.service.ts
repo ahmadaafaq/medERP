@@ -569,6 +569,7 @@ export class ExaminationService {
       createdBy?: string;
       subjectId?: string;
       role?: string;
+      isExplicitDeptFilter?: boolean;
     },
     user?: any,
   ) {
@@ -592,19 +593,46 @@ export class ExaminationService {
     const userId = user?.userId || user?.sub || user?.id || filters?.createdBy || filters?.facultyId || null;
     const validUserId = userId && this.isUUID(userId) ? userId : null;
 
+    let hodScope: any = null;
+
     if (!isAdmin) {
-      if (isHod || isDqac) {
-        // HOD & DQAC can preview question papers belonging to their department
-        const targetDept = filters?.departmentId || user?.departmentId || user?.department;
-        if (targetDept) {
-          if (this.isUUID(targetDept)) {
-            whereClauses.push(`p.department_id::text = $${pIdx++}`);
-            params.push(targetDept);
-          } else {
-            whereClauses.push(`(p.branch_cd = $${pIdx} OR p.department_id::text = $${pIdx})`);
-            params.push(targetDept);
-            pIdx++;
-          }
+      if (isDqac) {
+        // DQAC is the institution-wide Quality Assurance Cell.
+        // It audits papers across all departments/courses in the institution.
+        // We do NOT restrict DQAC by teacher profile departmentId (which hid papers from other departments).
+        // Any explicit department filter in query params is handled by the filters.departmentId check below.
+      } else if (isHod) {
+        // HOD can view all question papers created by faculty in their department/discipline scope
+        hodScope = await this.resolveHodScope(slug, {
+          departmentId: filters?.departmentId,
+          userId: user?.userId || user?.sub || user?.id,
+          empId: user?.emp_id || user?.empId,
+          courseCd: filters?.courseCd,
+          user,
+        });
+
+        if (hodScope.isRestricted && hodScope.departmentIds.length > 0) {
+          whereClauses.push(`(
+            p.department_id::text = ANY($${pIdx}::text[])
+            OR EXISTS (
+              SELECT 1 FROM departments d_scope
+              WHERE d_scope.id::text = ANY($${pIdx}::text[])
+                AND (
+                  (p.department_id::text = d_scope.id::text)
+                  OR (
+                    p.course_cd IS NOT NULL AND d_scope.course_cd IS NOT NULL AND p.course_cd = d_scope.course_cd
+                    AND p.branch_cd IS NOT NULL AND d_scope.branch_cd IS NOT NULL AND p.branch_cd = d_scope.branch_cd
+                  )
+                )
+            )
+            OR EXISTS (
+              SELECT 1 FROM faculty f2
+              WHERE (f2.user_id::text = p.created_by::text OR f2.id::text = p.created_by::text OR f2.id::text = p.faculty_id::text)
+                AND f2.department_id::text = ANY($${pIdx}::text[])
+            )
+          )`);
+          params.push(hodScope.departmentIds);
+          pIdx++;
         }
       } else {
         // Faculty strictly sees ONLY their prepared question papers (creator only)
@@ -619,6 +647,9 @@ export class ExaminationService {
             )
             OR p.created_by::text IN (
               SELECT user_id::text FROM faculty WHERE id::text = $${pIdx} OR emp_id = $${pIdx}
+            )
+            OR p.created_by::text IN (
+              SELECT id::text FROM faculty WHERE user_id::text = $${pIdx} OR emp_id = $${pIdx}
             )
             OR p.faculty_id::text = $${pIdx}
             OR p.faculty_id::text IN (
@@ -645,8 +676,19 @@ export class ExaminationService {
       }
     }
     if (filters?.departmentId && this.isUUID(filters.departmentId)) {
-      whereClauses.push(`p.department_id::text = $${pIdx++}`);
-      params.push(filters.departmentId);
+      // For HOD, hodScope already constrains papers to all departments/branches linked to this HOD.
+      // Do not restrict to a single department if it is the HOD profile department or if not an explicit sub-filter
+      const isHodProfileDept = isHod && (
+        filters.departmentId === user?.departmentId ||
+        filters.departmentId === user?.department_id ||
+        filters.departmentId === user?.fac_dept_id ||
+        filters.departmentId === user?.deptId ||
+        (hodScope?.departmentIds && hodScope.departmentIds.includes(filters.departmentId) && !filters.isExplicitDeptFilter)
+      );
+      if (!isHodProfileDept) {
+        whereClauses.push(`p.department_id::text = ${pIdx++}`);
+        params.push(filters.departmentId);
+      }
     }
     if (filters?.colgCd) {
       whereClauses.push(`p.colg_cd = $${pIdx++}`);
@@ -1919,6 +1961,26 @@ export class ExaminationService {
         anchorDeptIds.add(rawDeptId);
       }
 
+      // TERTIARY: Match user department string name/code from user record or options.user against departments table
+      if (anchorDeptIds.size === 0) {
+        const userDeptStr = (userRow?.department || options.user?.department || options.user?.departmentName || '').trim().toLowerCase();
+        if (userDeptStr) {
+          const matchedDepts = allDepts.filter((d: any) => {
+            const dName = (d.name || '').toLowerCase();
+            const dCode = (d.code || '').toLowerCase();
+            return dName === userDeptStr || dName.includes(userDeptStr) || userDeptStr.includes(dName) || (dCode && dCode === userDeptStr);
+          });
+          for (const md of matchedDepts) {
+            anchorDeptIds.add(md.id);
+          }
+        }
+      }
+
+      // If no anchors could be identified and no explicit departmentId was passed, allow unrestricted view
+      if (anchorDeptIds.size === 0 && !rawDeptId) {
+        result.isRestricted = false;
+      }
+
       // Compute discipline keys from anchors only
       const activeDisciplines = new Set<string>();
       for (const id of anchorDeptIds) {
@@ -2005,12 +2067,20 @@ export class ExaminationService {
           )
           OR EXISTS (
             SELECT 1 FROM faculty f2
-            WHERE f2.user_id::text = p.created_by::text
+            WHERE (f2.user_id::text = p.created_by::text OR f2.id::text = p.created_by::text OR f2.id::text = p.faculty_id::text)
               AND f2.department_id::text = ANY($${deptParamIdx}::text[])
           )
         )`;
-      } else if (scope.isRestricted && (userContext?.userId || userContext?.empId) && !scope.departmentIds.length && userContext?.user?.role !== 'ADMIN' && userContext?.user?.role !== 'SUPER_ADMIN') {
-        whereClause += ` AND 1 = 0`;
+      } else if (scope.isRestricted && !scope.departmentIds.length) {
+        // DQAC is a college-wide quality auditor; do NOT hard-block when pending-dqac filter is active.
+        const callerRole = (userContext?.user?.role || '').toUpperCase();
+        const isDqacOrAdminCaller = callerRole.includes('DQAC') || callerRole.includes('ADMIN') || callerRole.includes('PRINCIPAL');
+        const isPendingDqacFilter = statusFilter === 'PENDING_DQAC_APPROVAL' || statusFilter === 'PENDING_AUDIT';
+        const hasIdentifiedUser = !!(userContext?.userId || userContext?.empId);
+        if (hasIdentifiedUser && !isDqacOrAdminCaller && !isPendingDqacFilter) {
+          whereClause += ` AND 1 = 0`;
+        }
+        // Otherwise: no dept restriction — all papers matching the status filter are returned
       } else if (departmentId && this.isUUID(departmentId)) {
         params.push(departmentId);
         whereClause += ` AND p.department_id::text = $${params.length}`;
@@ -2122,6 +2192,8 @@ export class ExaminationService {
       return res[0] || { success: true, status: 'DQAC_APPROVED' };
     } else if (dto.action === 'postpone' || dto.action === 'reschedule') {
       const newExamDate = dto.examDate || dto.newExamDate || dto.exam_date || null;
+      const paperSet = dto.paperSet || dto.paper_set || null;
+      const targetSectionsJson = dto.targetSections ? JSON.stringify(dto.targetSections) : null;
       const res = await this.tenantSchemaService.queryInTenant(
         slug,
         `UPDATE examination_papers 
@@ -2129,9 +2201,11 @@ export class ExaminationService {
              dqac_status = CASE WHEN $1 = 'reschedule' THEN dqac_status ELSE 'POSTPONED' END,
              exam_date = COALESCE($2, exam_date),
              dqac_remarks = COALESCE($3, dqac_remarks),
+             paper_set = COALESCE($4, paper_set),
+             target_sections = COALESCE($5::jsonb, target_sections),
              updated_at = NOW() 
-         WHERE id::text = $4 RETURNING *`,
-        [dto.action, newExamDate ? new Date(newExamDate) : null, actionRemarks || (dto.action === 'reschedule' ? 'Examination rescheduled by DQAC.' : 'Examination postponed by DQAC.'), dto.paperId],
+         WHERE id::text = $6 RETURNING *`,
+        [dto.action, newExamDate ? new Date(newExamDate) : null, actionRemarks || (dto.action === 'reschedule' ? 'Examination rescheduled by DQAC.' : 'Examination postponed by DQAC.'), paperSet, targetSectionsJson, dto.paperId],
       );
       if (paper.created_by) {
         const notifTitle = dto.action === 'reschedule' ? 'Examination Rescheduled by DQAC' : 'Examination Postponed by DQAC';

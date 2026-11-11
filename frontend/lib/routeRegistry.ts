@@ -109,6 +109,11 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   '/dashboard/admin/repository': [
     { role: 'ADMIN', menuKey: 'admin_repository', label: 'Academic Repository' },
   ],
+  '/dashboard/admin/hod-linker': [
+    { role: 'ADMIN', menuKey: 'admin_hod_linker', label: 'HOD Course & Branch Linker' },
+    { role: 'ADMIN', menuKey: 'admin_staff_admin', label: 'HOD Course & Branch Linker' },
+    { role: 'ADMIN', menuKey: 'admin_staff_master', label: 'HOD Course & Branch Linker' },
+  ],
   '/dashboard/admin/staff-admin': [
     { role: 'ADMIN', menuKey: 'admin_staff_admin', label: 'Make Staff as Admin' },
   ],
@@ -175,6 +180,12 @@ export const ROUTE_REGISTRY: Record<string, RoutePermissionConfig[]> = {
   ],
   '/dashboard/clerk/timetable-design': [
     { role: 'CLERK', menuKey: 'clerk_timetable_designer', label: 'Timetable Designer (Submit HOD)' },
+  ],
+  '/dashboard/clerk/hod-linker': [
+    { role: 'CLERK', menuKey: 'clerk_hod_linker', label: 'HOD Department Scope' },
+    { role: 'CLERK', menuKey: 'admin_hod_linker', label: 'HOD Department Scope' },
+    { role: 'CLERK', menuKey: 'clerk_subject_linker', label: 'HOD Department Scope' },
+    { role: 'CLERK', menuKey: 'clerk_staff_master', label: 'HOD Department Scope' },
   ],
   '/dashboard/clerk/subject-linker': [
     { role: 'CLERK', menuKey: 'clerk_subject_linker', label: 'Course & Subject Linker' },

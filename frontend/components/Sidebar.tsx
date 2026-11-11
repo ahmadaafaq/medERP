@@ -894,6 +894,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                 </Link>
               )}
 
+              {(isAllowed('admin_hod_linker', '/dashboard/admin/hod-linker') || isAllowed('admin_staff_admin') || isAllowed('admin_staff_master') || isAllowed('admin_subject_linker')) && (
+                <Link href="/dashboard/admin/hod-linker" data-active={isLinkActive('/dashboard/admin/hod-linker') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/hod-linker')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                  </svg>
+                  <span>HOD Course & Branch Linker</span>
+                </Link>
+              )}
+
               {isAllowed('admin_subject_linker') && (
                 <Link href="/dashboard/admin/subject-linker" data-active={isLinkActive('/dashboard/admin/subject-linker') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/subject-linker')}>
                   <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -2033,6 +2042,16 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
                   <span>Course & Subject Linker</span>
+                </Link>
+              )}
+
+
+              {(isAllowed('clerk_hod_linker', '/dashboard/clerk/hod-linker') || isAllowed('admin_hod_linker', '/dashboard/admin/hod-linker') || isAllowed('clerk_staff_master') || isAllowed('clerk_subject_linker')) && (
+                <Link href="/dashboard/clerk/hod-linker" data-active={(isLinkActive('/dashboard/clerk/hod-linker') || isLinkActive('/dashboard/admin/hod-linker')) ? 'true' : undefined} className={getLinkClass('/dashboard/clerk/hod-linker')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-indigo-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+                  </svg>
+                  <span>HOD Department Scope</span>
                 </Link>
               )}
 

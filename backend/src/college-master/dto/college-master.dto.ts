@@ -1,5 +1,5 @@
 import {
-  IsString, IsOptional, IsBoolean, IsNumber,
+  IsString, IsOptional, IsBoolean, IsNumber, IsArray,
   IsDateString, MaxLength, MinLength, IsEmail,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -531,3 +531,15 @@ export class UpdateResidencyDto extends PartialType(CreateResidencyDto) {
   isActive?: boolean;
 }
 
+
+// ─── 10. HOD SCOPE LINKER ───────────────────────────────────────────────────
+export class UpdateHodScopeDto {
+  @ApiProperty({ example: '41a6bd13-efc4-4dea-a257-f698075391b1' })
+  @IsString()
+  hodUserId: string;
+
+  @ApiProperty({ example: ['b9b2bdea-a8a2-4552-861f-f589c8299ffd'], type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  departmentIds: string[];
+}

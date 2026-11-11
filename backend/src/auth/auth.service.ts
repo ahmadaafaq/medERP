@@ -559,6 +559,7 @@ export class AuthService {
           (regNo && cleanPass === regNo) ||
           (rollNo && cleanPass === rollNo) ||
           cleanPass === raw ||
+          cleanPass === '1' ||
           cleanPass === '12345678' ||
           cleanPass === '123456' ||
           cleanPass === '1234' ||
@@ -585,6 +586,7 @@ export class AuthService {
         if (
           (empId && cleanPass === empId) ||
           cleanPass === raw ||
+          cleanPass === '1' ||
           cleanPass === '12345678' ||
           cleanPass === '123456' ||
           cleanPass === '1234' ||

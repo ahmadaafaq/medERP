@@ -47,21 +47,50 @@ function HodQPApprovalCard() {
   const [papers, setPapers] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actioning, setActioning] = useState<string | null>(null);
+  const [cardFilter, setCardFilter] = useState<'ALL' | 'PENDING_DQAC' | 'READY_HOD' | 'CHANGES' | 'DRAFT' | 'POSTPONED'>('ALL');
 
   const load = async () => {
     setLoading(true);
     try {
       const { slug, empId, userId, headers } = getTenantHeaders();
-      const qp = new URLSearchParams({ tenant: slug });
-      // NOTE: Do NOT send departmentId for HOD requests — backend resolves HOD scope
-      // from userId/empId directly (via faculty.department_id + hod_user_id).
-      // Sending stale localStorage departmentId would interfere with scope resolution.
+      const u = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
+      const deptId = u.department_id || u.departmentId || localStorage.getItem('department_id') || '';
+
+      const qp = new URLSearchParams({ tenant: slug, role: 'HOD' });
       if (userId) qp.set('userId', userId);
       if (empId) qp.set('empId', empId);
-      const r = await fetch(`${API_BASE}/exams/papers/pending-hod-approval?${qp.toString()}`, { headers });
-      const d = await r.json();
-      setPapers(Array.isArray(d) ? d : (d.data || []));
-    } catch { setPapers([]); } finally { setLoading(false); }
+
+      let list: any[] = [];
+      try {
+        const r = await fetch(`${API_BASE}/exams/papers?${qp.toString()}`, {
+          headers: { ...headers, 'x-user-role': 'HOD' },
+          cache: 'no-store',
+        });
+        if (r.ok) {
+          const d = await r.json();
+          list = Array.isArray(d) ? d : (d.data || []);
+        }
+      } catch {}
+
+      if (list.length === 0) {
+        try {
+          const r2 = await fetch(`/api/v1/exams/papers?${qp.toString()}`, {
+            headers: { ...headers, 'x-user-role': 'HOD' },
+            cache: 'no-store',
+          });
+          if (r2.ok) {
+            const d2 = await r2.json();
+            list = Array.isArray(d2) ? d2 : (d2.data || []);
+          }
+        } catch {}
+      }
+
+      setPapers(list);
+    } catch {
+      setPapers([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { load(); }, []);
@@ -72,12 +101,30 @@ function HodQPApprovalCard() {
     try {
       const { slug, headers } = getTenantHeaders();
       await fetch(`${API_BASE}/exams/papers/hod-action?tenant=${slug}`, {
-        method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
         body: JSON.stringify({ paperId, action, remarks }),
       });
       await load();
-    } catch { } finally { setActioning(null); }
+    } catch {} finally {
+      setActioning(null);
+    }
   };
+
+  const pendingDqacCount = papers.filter(p => p.status === 'PENDING_DQAC_APPROVAL' || p.status === 'RESUBMITTED').length;
+  const readyHodCount = papers.filter(p => p.status === 'DQAC_APPROVED' || p.status === 'PENDING_HOD_APPROVAL').length;
+  const changesCount = papers.filter(p => p.status === 'CHANGES_REQUESTED').length;
+  const draftCount = papers.filter(p => p.status === 'DRAFT').length;
+  const postponedCount = papers.filter(p => p.status === 'POSTPONED').length;
+
+  const filteredPapers = papers.filter((p) => {
+    if (cardFilter === 'DRAFT') return p.status === 'DRAFT';
+    if (cardFilter === 'POSTPONED') return p.status === 'POSTPONED';
+    if (cardFilter === 'PENDING_DQAC') return p.status === 'PENDING_DQAC_APPROVAL' || p.status === 'RESUBMITTED';
+    if (cardFilter === 'READY_HOD') return p.status === 'DQAC_APPROVED' || p.status === 'PENDING_HOD_APPROVAL';
+    if (cardFilter === 'CHANGES') return p.status === 'CHANGES_REQUESTED';
+    return true;
+  });
 
   return (
     <div className="p-6 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-sm space-y-4">
@@ -85,45 +132,219 @@ function HodQPApprovalCard() {
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-xl">📋</div>
           <div>
-            <h3 className="font-extrabold text-sm text-[#1B1E28] dark:text-white">Question Paper Approvals</h3>
-            <p className="text-[11px] text-slate-500">Clerk-submitted papers awaiting HOD review</p>
+            <h3 className="font-extrabold text-sm text-[#1B1E28] dark:text-white">Department Question Papers &amp; DQAC Audit</h3>
+            <p className="text-[11px] text-slate-500">Track faculty paper submissions, DQAC quality checks &amp; HOD sign-off</p>
           </div>
         </div>
-        <Link href="/dashboard/hod/qp-approvals" className="text-xs font-bold text-[#5B4BFF] hover:underline">View All →</Link>
+        <Link href="/dashboard/hod/qp-approvals" className="text-xs font-bold text-[#5B4BFF] hover:underline">
+          View All ({papers.length}) →
+        </Link>
       </div>
+
+      {/* Filter Tabs */}
+      <div className="flex items-center gap-1.5 flex-wrap pt-1">
+        <button
+          type="button"
+          onClick={() => setCardFilter('ALL')}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+            cardFilter === 'ALL'
+              ? 'bg-[#5B4BFF] text-white shadow-xs'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
+          }`}
+        >
+          All ({papers.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCardFilter('READY_HOD')}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+            cardFilter === 'READY_HOD'
+              ? 'bg-indigo-600 text-white shadow-xs'
+              : 'bg-indigo-50 dark:bg-indigo-950/40 text-indigo-700 dark:text-indigo-300 hover:bg-indigo-100'
+          }`}
+        >
+          ⭐ Ready for Sign-off ({readyHodCount})
+        </button>
+        <button
+          type="button"
+          onClick={() => setCardFilter('PENDING_DQAC')}
+          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+            cardFilter === 'PENDING_DQAC'
+              ? 'bg-purple-600 text-white shadow-xs'
+              : 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100'
+          }`}
+        >
+          🔍 In DQAC Audit ({pendingDqacCount})
+        </button>
+        {draftCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setCardFilter('DRAFT')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              cardFilter === 'DRAFT'
+                ? 'bg-slate-700 text-white shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200'
+            }`}
+          >
+            📝 Faculty Drafts ({draftCount})
+          </button>
+        )}
+        {postponedCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setCardFilter('POSTPONED')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              cardFilter === 'POSTPONED'
+                ? 'bg-orange-600 text-white shadow-xs'
+                : 'bg-orange-50 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300 hover:bg-orange-100'
+            }`}
+          >
+            ⏸️ Postponed ({postponedCount})
+          </button>
+        )}
+        {changesCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setCardFilter('CHANGES')}
+            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              cardFilter === 'CHANGES'
+                ? 'bg-rose-600 text-white shadow-xs'
+                : 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100'
+            }`}
+          >
+            ⚠️ Changes ({changesCount})
+          </button>
+        )}
+      </div>
+
       {loading ? (
-        <div className="flex items-center gap-2 py-4"><div className="w-4 h-4 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" /><span className="text-xs text-slate-400">Loading...</span></div>
-      ) : papers.length === 0 ? (
-        <div className="py-8 text-center space-y-2"><span className="text-3xl">✅</span><p className="text-sm font-bold text-slate-500">No pending approvals</p></div>
+        <div className="flex items-center gap-2 py-6">
+          <div className="w-4 h-4 border-2 border-[#5B4BFF] border-t-transparent rounded-full animate-spin" />
+          <span className="text-xs text-slate-400">Loading department papers...</span>
+        </div>
+      ) : filteredPapers.length === 0 ? (
+        <div className="py-8 text-center space-y-2">
+          <span className="text-3xl">📋</span>
+          <p className="text-sm font-bold text-slate-500">No question papers matching this status</p>
+        </div>
       ) : (
-        <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
-          {papers.map((p) => (
-            <div key={p.id} className="p-3 rounded-xl bg-orange-50 dark:bg-orange-900/10 border border-orange-200 dark:border-orange-800/30 flex gap-3">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-extrabold text-[#1B1E28] dark:text-white truncate">{p.name}</p>
-                <p className="text-[11px] text-slate-500">{p.subject_name || p.code} · {p.type || 'THEORY'} · {p.max_marks}M</p>
-                <span className={`text-[10px] font-bold ${
-                  p.status === 'DQAC_APPROVED' ? 'text-indigo-600' :
-                  p.status === 'PENDING_DQAC_APPROVAL' ? 'text-purple-600' :
-                  'text-orange-600'
-                }`}>
-                  {p.status === 'DQAC_APPROVED' ? '⭐ DQAC Approved (Ready for HOD Sign-off)' :
-                   p.status === 'PENDING_DQAC_APPROVAL' ? '🔍 Pending DQAC Audit' :
-                   '⏳ Pending HOD Approval'}
-                </span>
+        <div className="space-y-3 max-h-80 overflow-y-auto pr-1">
+          {filteredPapers.map((p) => {
+            const isReadyForHod = p.status === 'DQAC_APPROVED' || p.status === 'PENDING_HOD_APPROVAL';
+            const isPendingDqac = p.status === 'PENDING_DQAC_APPROVAL' || p.status === 'RESUBMITTED';
+            const isChangesReq = p.status === 'CHANGES_REQUESTED';
+            const isApproved = p.status === 'HOD_APPROVED';
+
+            return (
+              <div
+                key={p.id}
+                className={`p-3.5 rounded-xl border flex flex-col gap-2 transition-all ${
+                  isReadyForHod
+                    ? 'bg-indigo-50/60 dark:bg-indigo-950/20 border-indigo-200 dark:border-indigo-800/40'
+                    : isPendingDqac
+                    ? 'bg-purple-50/50 dark:bg-purple-950/20 border-purple-200 dark:border-purple-800/40'
+                    : isChangesReq
+                    ? 'bg-rose-50/50 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/40'
+                    : 'bg-slate-50 dark:bg-slate-800/30 border-slate-200 dark:border-slate-800'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-extrabold text-[#1B1E28] dark:text-white truncate">{p.name}</p>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                      <span className="font-semibold text-slate-800 dark:text-slate-200">{p.subject_name || p.code}</span>
+                      <span> · </span>
+                      <span>Faculty: <b className="text-indigo-600 dark:text-indigo-400">{p.creator_name || 'Department Faculty'}</b></span>
+                      <span> · </span>
+                      <span>{p.max_marks || 20}M</span>
+                    </p>
+                    <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                      <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                        isReadyForHod
+                          ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-200'
+                          : isPendingDqac
+                          ? 'bg-purple-100 text-purple-800 dark:bg-purple-900/50 dark:text-purple-200'
+                          : isChangesReq
+                          ? 'bg-rose-100 text-rose-800 dark:bg-rose-900/50 dark:text-rose-200'
+                          : isApproved
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-200'
+                          : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300'
+                      }`}>
+                        {isReadyForHod ? '⭐ DQAC Approved (Ready for HOD Sign-off)' :
+                         isPendingDqac ? '🔍 In DQAC Quality Audit' :
+                         isChangesReq ? '⚠️ DQAC Changes Requested' :
+                         isApproved ? '✅ HOD Approved' :
+                         p.status}
+                      </span>
+                      {p.paper_set && (
+                        <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-slate-200/70 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                          {p.paper_set}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="flex gap-1.5 flex-shrink-0 items-center">
+                    {isReadyForHod ? (
+                      <>
+                        <button
+                          onClick={() => act(p.id, 'approve')}
+                          disabled={actioning === p.id}
+                          className="px-2.5 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold disabled:opacity-50 cursor-pointer shadow-xs"
+                          title="Authorize and certify paper"
+                        >
+                          ✓ Authorize
+                        </button>
+                        <Link
+                          href={`/dashboard/hod/qp-approvals?paperId=${p.id}&action=review`}
+                          className="px-2.5 py-1.5 rounded-lg bg-[#5B4BFF] hover:bg-[#4A3AFF] text-white text-xs font-bold transition-all shadow-xs"
+                        >
+                          Review
+                        </Link>
+                      </>
+                    ) : isPendingDqac ? (
+                      <Link
+                        href={`/dashboard/hod/qp-approvals?paperId=${p.id}&action=preview`}
+                        className="px-2.5 py-1.5 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 hover:bg-purple-100 text-xs font-bold border border-purple-200 dark:border-purple-800"
+                      >
+                        Track Audit →
+                      </Link>
+                    ) : isChangesReq ? (
+                      <Link
+                        href={`/dashboard/hod/qp-approvals?paperId=${p.id}&action=preview`}
+                        className="px-2.5 py-1.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 hover:bg-rose-100 text-xs font-bold border border-rose-200 dark:border-rose-800"
+                      >
+                        View Remarks →
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/dashboard/hod/qp-approvals?paperId=${p.id}&action=print`}
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-300 text-xs font-bold"
+                      >
+                        View Paper
+                      </Link>
+                    )}
+                  </div>
+                </div>
+
+                {/* DQAC Remarks Callout */}
+                {p.dqac_remarks && (
+                  <div className="text-[11px] p-2 rounded-lg bg-white/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-slate-600 dark:text-slate-300">
+                    <span className="font-bold text-indigo-600 dark:text-indigo-400">DQAC Directive / Remarks: </span>
+                    <span className="italic">"{p.dqac_remarks}"</span>
+                  </div>
+                )}
               </div>
-              <div className="flex gap-1.5 flex-shrink-0 items-start mt-1">
-                <button onClick={() => act(p.id, 'approve')} disabled={actioning === p.id} className="px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-xs font-extrabold disabled:opacity-50">✓ Approve</button>
-                <button onClick={() => act(p.id, 'reject')} disabled={actioning === p.id} className="px-3 py-1.5 rounded-lg bg-rose-100 dark:bg-rose-900/30 hover:bg-rose-500 hover:text-white text-rose-600 text-xs font-extrabold disabled:opacity-50">✕ Reject</button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
+
       {papers.length > 0 && (
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-orange-500/10 text-orange-600 text-[11px] font-extrabold">
-          <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />{papers.length} awaiting review
-        </span>
+        <div className="flex items-center justify-between text-[11px] text-slate-500 pt-1 border-t border-slate-100 dark:border-slate-800">
+          <span>{papers.length} total department examination papers</span>
+          <span className="font-semibold text-indigo-600 dark:text-indigo-400">{readyHodCount} awaiting HOD final sign-off</span>
+        </div>
       )}
     </div>
   );

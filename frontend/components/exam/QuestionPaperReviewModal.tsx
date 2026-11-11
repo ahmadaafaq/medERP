@@ -305,7 +305,7 @@ export default function QuestionPaperReviewModal({
           <div className="px-5 py-2.5 bg-indigo-50/80 dark:bg-indigo-950/30 border-b border-indigo-100 dark:border-indigo-900/40 text-xs text-indigo-900 dark:text-indigo-200 flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="font-bold uppercase tracking-wider text-[10px] px-1.5 py-0.5 bg-indigo-200 dark:bg-indigo-800 text-indigo-900 dark:text-indigo-100 rounded">
-                HOD REVIEW MODE
+                {userRole === 'DQAC' ? 'DQAC QUALITY AUDIT MODE' : userRole === 'HOD' ? 'HOD REVIEW & MONITORING MODE' : 'EXAMINATION REVIEW MODE'}
               </span>
               <span>Review individual questions below. You can approve questions or mark them for <b>Replace</b>, <b>Remove</b>, or <b>Adjust Marks</b>.</span>
             </div>
@@ -460,20 +460,12 @@ export default function QuestionPaperReviewModal({
 
             {/* Sections & Questions */}
             {(() => {
-              const isTheoryPaper = (paper?.type || '').toUpperCase() === 'THEORY';
-              const displaySections = sections.filter((section: any) => {
-                if (isTheoryPaper && (section.type === 'PRACTICAL' || String(section.title || '').toLowerCase().includes('practical'))) {
-                  return false;
-                }
-                return true;
-              });
+              const displaySections = sections;
 
               if (displaySections.length === 0) {
                 return (
                   <div className="py-12 text-center text-slate-400 italic font-sans border border-dashed border-slate-300 dark:border-slate-700 rounded-xl my-4">
-                    {isTheoryPaper
-                      ? 'No theory sections or questions configured in this paper draft.'
-                      : 'No sections or questions configured in this paper draft.'}
+                    No sections or questions configured in this paper draft.
                   </div>
                 );
               }
@@ -481,9 +473,14 @@ export default function QuestionPaperReviewModal({
               return (
                 <div className="space-y-6">
                   {displaySections.map((section: any, sIdx: number) => {
-                    const sQuestions: any[] = (section.questions || section.selectedQuestions || [])
-                      .filter((q: any) => !isTheoryPaper || (q.mode !== 'PRACTICAL' && !q.is_practical && q.type !== 'PRACTICAL'));
-                    const sPracticals: any[] = isTheoryPaper ? [] : (section.practicalComponents || []);
+                    const sQuestions: any[] = (
+                      (Array.isArray(section.questions) && section.questions.length > 0 ? section.questions : null) ||
+                      (Array.isArray(section.selectedQuestions) && section.selectedQuestions.length > 0 ? section.selectedQuestions : null) ||
+                      (Array.isArray(section.pickedQuestions) && section.pickedQuestions.length > 0 ? section.pickedQuestions : null) ||
+                      (Array.isArray(section.items) && section.items.length > 0 ? section.items : null) ||
+                      []
+                    );
+                    const sPracticals: any[] = section.practicalComponents || [];
 
                     // Calculate Section Attempt Rules and Formatted Instruction Line
                     let reqN = section.requiredToAttempt ?? section.required_to_attempt;
@@ -506,7 +503,7 @@ export default function QuestionPaperReviewModal({
                     }
 
                     // Total questions pool in section
-                    const totalM = Math.max(sQuestions.length, Number(targetM) || 0, (reqN ? Number(reqN) + 1 : 0));
+                    const totalM = (Number(targetM) && Number(targetM) > 0) ? Number(targetM) : Math.max(sQuestions.length, reqN ? Number(reqN) : 0);
                     const isChoice = rule === 'CHOICE' || (reqN && Number(reqN) < totalM);
 
                     // Calculate marks per question across the section
@@ -648,10 +645,23 @@ export default function QuestionPaperReviewModal({
                                       <div className="ml-5 mt-2 space-y-1 sub-questions font-sans text-xs">
                                         {subQs.map((sq: any, sqIdx: number) => {
                                           const sqMark = sq.customMarks ?? sq.marks ?? sq.defaultMarks ?? sq.max_marks ?? sq.maxMarks ?? 1;
+                                          const sqImg = sq.image_url || sq.imageUrl || sq.image || sq.diagramUrl || sq.diagram_url;
                                           return (
-                                            <div key={sq.id || sqIdx} className="flex items-baseline justify-between gap-2 sub-q-row">
-                                              <span><b>{sq.label || `${String.fromCharCode(97 + sqIdx)})`}</b> {sq.questionText || sq.question_text}</span>
-                                              <span className="text-slate-500 font-mono font-bold shrink-0">[{sqMark} M]</span>
+                                            <div key={sq.id || sqIdx} className="space-y-1 sub-q-row py-0.5">
+                                              <div className="flex items-baseline justify-between gap-2">
+                                                <span><b>{sq.label || `${String.fromCharCode(97 + sqIdx)})`}</b> {sq.questionText || sq.question_text || sq.text}</span>
+                                                <span className="text-slate-500 font-mono font-bold shrink-0">[{sqMark} M]</span>
+                                              </div>
+                                              {sqImg && (
+                                                <div className="mt-1 ml-4">
+                                                  <img
+                                                    src={sqImg}
+                                                    alt={`Diagram for ${sq.label || sqIdx + 1}`}
+                                                    className="q-img max-h-48 max-w-full object-contain rounded border border-slate-300 dark:border-slate-700 bg-white p-1 shadow-xs cursor-pointer hover:opacity-95"
+                                                    onClick={() => setPreviewImage({ src: sqImg, title: `${sq.label || ''} ${sq.questionText || ''}` })}
+                                                  />
+                                                </div>
+                                              )}
                                             </div>
                                           );
                                         })}
@@ -688,7 +698,7 @@ export default function QuestionPaperReviewModal({
                                       : [];
                                     const computedQMarks = subQs.length > 0
                                       ? subQs.reduce((sum: number, sq: any) => sum + Number(sq.customMarks ?? sq.marks ?? sq.defaultMarks ?? sq.max_marks ?? sq.maxMarks ?? 0), 0)
-                                      : Number(q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 1);
+                                      : Number(q.customMarks ?? q.marks ?? q.max_marks ?? q.defaultMarks ?? section.defaultMarksPerQuestion ?? section.default_marks_per_question ?? 5);
                                     return (
                                       <span className="font-mono font-bold text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded">
                                         [{computedQMarks} M]
@@ -703,7 +713,7 @@ export default function QuestionPaperReviewModal({
                                 <div className="mt-3 pt-3 border-t border-slate-200 dark:border-slate-700/60 no-print font-sans space-y-2">
                                   <div className="flex flex-wrap items-center justify-between gap-2">
                                     <span className="text-[11px] font-extrabold uppercase text-slate-500">
-                                      HOD Review for Q{qIdx + 1}:
+                                      {userRole === 'DQAC' ? 'DQAC Audit' : userRole === 'HOD' ? 'HOD Review' : 'Review'} for Q{qIdx + 1}:
                                     </span>
                                     <div className="flex items-center gap-1.5 flex-wrap">
                                       <button

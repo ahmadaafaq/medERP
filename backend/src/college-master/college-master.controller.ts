@@ -12,6 +12,7 @@ import {
   CreateProfessionalDto, UpdateProfessionalDto,
   CreateGroupDto, UpdateGroupDto,
   CreateResidencyDto, UpdateResidencyDto,
+  UpdateHodScopeDto,
 } from './dto/college-master.dto';
 import { Roles } from '../common/decorators/roles.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -699,5 +700,33 @@ export class CollegeMasterController {
   ) {
     const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
     return this.collegeMasterService.deleteResidency(id, effectiveTenant);
+  }
+
+  // ─── 10. HOD SCOPE LINKER ──────────────────────────────────────────────────
+  @Get('hod-scope')
+  @ApiOperation({ summary: 'Get HOD Scope (HODs, Courses, and Departments with Linkage)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN, UserRole.CLERK)
+  async getHodScopes(
+    @Query('tenant') tenant?: string,
+    @Query('college_id') collegeId?: string,
+    @Query('colg_cd') colgCd?: string,
+    @Query('all_faculty') allFaculty?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : (tenant || collegeId);
+    return this.collegeMasterService.getHodScopes(effectiveTenant, user, collegeId, colgCd, allFaculty === 'true');
+  }
+
+  @Post('hod-scope')
+  @ApiOperation({ summary: 'Update HOD Academic Scope (Link/Unlink Courses & Branches)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN, UserRole.CLERK)
+  async updateHodScope(
+    @Body() dto: UpdateHodScopeDto,
+    @Query('tenant') tenant?: string,
+    @Query('college_id') collegeId?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : (tenant || collegeId);
+    return this.collegeMasterService.updateHodScope(dto, effectiveTenant, user);
   }
 }

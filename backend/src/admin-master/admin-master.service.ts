@@ -401,17 +401,17 @@ export class AdminMasterService {
   private async listColleges(): Promise<any[]> {
     try {
       const rows = await this.ds.query(`
-        SELECT DISTINCT ON (slug) id, COALESCE(code, slug) AS code, name, slug, domain, plan, primary_color, is_active
+        SELECT DISTINCT ON (slug) id, code, name, slug, domain, plan, primary_color, is_active
         FROM (
-          SELECT t.id, COALESCE(t.code, t.slug) AS code, t.name, t.slug, t.domain, t.plan, t.primary_color, t.is_active
+          SELECT t.id, t.code AS code, t.name, t.slug, t.domain, t.plan, t.primary_color, t.is_active, 1 AS prio
           FROM public.tenants t
           WHERE t.is_active = true
           UNION ALL
-          SELECT f.id, f.slug AS code, f.title AS name, f.slug, f.domain, 'enterprise' AS plan, f.theme_color AS primary_color, true AS is_active
+          SELECT f.id, NULL::text AS code, f.title AS name, f.slug, f.domain, 'enterprise' AS plan, f.theme_color AS primary_color, true AS is_active, 2 AS prio
           FROM public.firms f
           WHERE f.status IN ('ACTIVE', 'TRIAL')
         ) combined
-        ORDER BY slug
+        ORDER BY slug, (CASE WHEN code ~ '^[0-9]+$' THEN 0 WHEN code IS NOT NULL AND code != '' AND code != slug THEN 1 ELSE 2 END) ASC, prio ASC
       `);
       return (rows || []).sort((a: any, b: any) => {
         const aNum = parseInt(a.code, 10);
@@ -959,9 +959,15 @@ export class AdminMasterService {
     if (tenantSlug && tenantSlug !== 'all') {
       const slug = await this.resolveTenantSlug(tenantSlug);
       const targetCollege = colleges.find(c => c.slug === slug || c.code === slug || c.id === slug);
-      const collegeId = targetCollege?.id || slug;
-      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS Institution' : slug.toUpperCase());
-      const collegeCode = targetCollege?.code || '';
+      let collegeCode = targetCollege?.code || '';
+      if (!collegeCode || !/^\d+$/.test(collegeCode)) {
+        if (slug.toLowerCase().includes('srms-cet-bareilly') || slug === 'srms-cet') collegeCode = '1';
+        else if (slug.toLowerCase().includes('srms-cetr')) collegeCode = '2';
+        else if (slug.toLowerCase().includes('srms-ims')) collegeCode = '11';
+        else collegeCode = '1';
+      }
+      const collegeId = collegeCode;
+      const collegeName = targetCollege?.name || (slug.toLowerCase().includes('srms') ? 'SRMS CET,BAREILLY' : slug.toUpperCase());
       const schema = `tenant_${slug}`;
 
       try {
@@ -1054,7 +1060,7 @@ export class AdminMasterService {
 
         return rows.map((r: any) => ({
           ...r,
-          college_id: collegeId,
+          college_id: collegeCode || collegeId,
           college_name: collegeName,
           college_code: collegeCode,
           college_slug: slug,
@@ -3307,9 +3313,9 @@ export class AdminMasterService {
     return rows.map((r: any) => ({
       ...r,
       section: this.normalizeSectionCode(r.section),
-      college_id: currentCollege?.id,
-      college_name: currentCollege?.name,
-      college_code: currentCollege?.code,
+      college_id: (/^\d+$/.test(String(currentCollege?.code || '')) ? String(currentCollege?.code) : (targetSlug.includes('srms-cet') ? '1' : String(currentCollege?.code || '1'))),
+      college_name: currentCollege?.name || 'SRMS CET,BAREILLY',
+      college_code: (/^\d+$/.test(String(currentCollege?.code || '')) ? String(currentCollege?.code) : (targetSlug.includes('srms-cet') ? '1' : String(currentCollege?.code || '1'))),
       college_slug: currentCollege?.slug || targetSlug,
     }));
   }

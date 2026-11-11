@@ -769,13 +769,13 @@ export default function FacultyAssessmentMasterPage() {
   const renderPaperStatusBadge = (status: string) => {
     switch (status) {
       case 'PENDING_DQAC_APPROVAL':
-        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">🔍 PENDING DQAC AUDIT</span>;
-      case 'DQAC_APPROVED':
-        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">✨ DQAC APPROVED</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#EEF2FF] text-[#5B4BFF] border border-[#5B4BFF]/30">⏳ PENDING DQAC AUDIT</span>;
       case 'PENDING_HOD_APPROVAL':
-        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#FFF4EC] text-[#F36C21] border border-[#F36C21]/30">⏳ PENDING HOD</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-amber-100 text-amber-800 border border-amber-300">⏳ PENDING HOD APPROVAL</span>;
+      case 'DQAC_APPROVED':
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-indigo-100 text-indigo-700 border border-indigo-200">⭐ DQAC APPROVED</span>;
       case 'HOD_APPROVED':
-        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">✓ HOD APPROVED</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#E6F9F3] text-[#00C48C] border border-[#00C48C]/30">✅ HOD APPROVED</span>;
       case 'CHANGES_REQUESTED':
         return <span className="px-2.5 py-0.5 rounded-full text-[9px] font-black bg-[#FEECEB] text-[#F04438] border border-[#F04438]/30">⚠️ CHANGES REQUESTED</span>;
       case 'POSTPONED':
@@ -832,20 +832,25 @@ export default function FacultyAssessmentMasterPage() {
       if (res.ok) {
         const json = await res.json();
         const list = Array.isArray(json?.data) ? json.data : Array.isArray(json) ? json : [];
-        // STRICT CONFIDENTIALITY: Faculty can ONLY view question papers that they prepared.
-        // Other faculties from the same department cannot view it.
+        // STRICT CONFIDENTIALITY: Backend already filtered by createdBy — trust it.
+        // Client-side re-filter only as a soft safety net using real user ids (no hardcoded UUIDs).
         const isFaculty = !userRole || userRole === 'FACULTY' || userRole === 'TEACHER' || userRole === 'INSTRUCTOR';
-        const userIds = [u.id, u.sub, u.faculty_id, u.emp_id, typeof window !== 'undefined' ? localStorage.getItem('empid') : null, typeof window !== 'undefined' ? localStorage.getItem('userId') : null]
-          .filter(Boolean)
-          .map(x => String(x).toLowerCase());
+        const userIds = [
+          u.id, u.sub, u.faculty_id, u.emp_id, u.empId, u.username,
+          u.profile?.id, u.profile?.faculty_id,
+          typeof window !== 'undefined' ? localStorage.getItem('empid') : null,
+          typeof window !== 'undefined' ? localStorage.getItem('userId') : null,
+        ].filter(Boolean).map(x => String(x).toLowerCase());
 
-        const filtered = isFaculty
-          ? (userIds.length > 0
-            ? list.filter((p: any) => {
-              const pCreated = String(p.created_by || p.faculty_id || '').toLowerCase();
-              return !pCreated || userIds.includes(pCreated);
+        // If backend returned papers for a specific createdBy query, trust the result directly.
+        // Only apply soft filter when userIds is non-empty AND we have no createdBy in the query (admin-like access).
+        const filtered = (isFaculty && userId && userIds.length > 0)
+          ? list.filter((p: any) => {
+              const pCreated = String(p.created_by || '').toLowerCase();
+              const pFac = String(p.faculty_id || '').toLowerCase();
+              // Pass if created_by is empty (backend pre-filtered) or matches any known user identifier
+              return !pCreated || userIds.includes(pCreated) || (pFac && userIds.includes(pFac));
             })
-            : list)
           : list;
         setCreatedPapersList(filtered);
       }
@@ -935,27 +940,51 @@ export default function FacultyAssessmentMasterPage() {
 
     if (Array.isArray(rawSections) && rawSections.length > 0) {
       const mappedSecs = rawSections.map((sec: any, idx: number) => {
-        const rawQs = Array.isArray(sec.pickedQuestions) && sec.pickedQuestions.length > 0
-          ? sec.pickedQuestions
-          : Array.isArray(sec.questions) ? sec.questions : [];
+        const rawQs = (
+          (Array.isArray(sec.questions) && sec.questions.length > 0 ? sec.questions : null) ||
+          (Array.isArray(sec.pickedQuestions) && sec.pickedQuestions.length > 0 ? sec.pickedQuestions : null) ||
+          (Array.isArray(sec.selectedQuestions) && sec.selectedQuestions.length > 0 ? sec.selectedQuestions : null) ||
+          (Array.isArray(sec.items) && sec.items.length > 0 ? sec.items : null) ||
+          []
+        );
 
-        const formattedQs = rawQs.map((q: any) => ({
-          questionId: q.id || q.questionId,
-          questionText: q.question_text || q.questionText || 'Question Prompt',
-          mode: q.mode || (sec.type === 'DESC' ? 'DESC' : 'MCQ'),
-          topic: q.topic,
-          competencyCode: q.competency_code || q.competencyCode,
-          defaultMarks: Number(q.customMarks || q.defaultMarks || q.max_marks || q.maxMarks || 2),
-          customMarks: Number(q.customMarks || q.defaultMarks || q.max_marks || q.maxMarks || 2),
-          optionA: q.option_a || q.optionA,
-          optionB: q.option_b || q.optionB,
-          optionC: q.option_c || q.optionC,
-          optionD: q.option_d || q.optionD,
-          correctOption: q.correct_option || q.correctOption,
-          subQuestions: Array.isArray(q.sub_questions) ? q.sub_questions : (Array.isArray(q.subQuestions) ? q.subQuestions : []),
-          imageUrl: q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url || null,
-          image_url: q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url || null,
-        }));
+        const formattedQs = rawQs.map((q: any) => {
+          let rawSubs = q.sub_questions || q.subQuestions;
+          if (typeof rawSubs === 'string') {
+            try { rawSubs = JSON.parse(rawSubs); } catch {}
+          }
+          const subQs = Array.isArray(rawSubs) ? rawSubs : [];
+          let computedMarks = 0;
+          if (subQs.length > 0) {
+            computedMarks = subQs.reduce((sum: number, sq: any) => sum + Number(sq.marks ?? sq.customMarks ?? sq.max_marks ?? 1), 0);
+          }
+          if (!computedMarks || computedMarks <= 0) {
+            computedMarks = Number(q.customMarks ?? q.marks ?? q.defaultMarks ?? q.max_marks ?? q.maxMarks ?? 2);
+          }
+          const img = q.image_url || q.imageUrl || q.image || q.diagramUrl || q.diagram_url || null;
+
+          return {
+            questionId: q.id || q.questionId,
+            questionText: q.question_text || q.questionText || q.text || 'Question Prompt',
+            text: q.question_text || q.questionText || q.text || 'Question Prompt',
+            mode: q.mode || (sec.type === 'DESC' ? 'DESC' : 'MCQ'),
+            topic: q.topic,
+            competencyCode: q.competency_code || q.competencyCode,
+            defaultMarks: computedMarks,
+            customMarks: computedMarks,
+            marks: computedMarks,
+            max_marks: computedMarks,
+            optionA: q.option_a || q.optionA,
+            optionB: q.option_b || q.optionB,
+            optionC: q.option_c || q.optionC,
+            optionD: q.option_d || q.optionD,
+            correctOption: q.correct_option || q.correctOption,
+            subQuestions: subQs,
+            sub_questions: subQs,
+            imageUrl: img,
+            image_url: img,
+          };
+        });
 
         const rawTargetM = sec.targetQuestionsCount ?? sec.target_questions_count;
         const targetCount = rawTargetM !== undefined && rawTargetM !== null && rawTargetM !== '' ? Number(rawTargetM) : '';
@@ -1202,8 +1231,10 @@ export default function FacultyAssessmentMasterPage() {
       const newItems = targetQuestions
         .filter(tq => !existingIds.includes(tq.id))
         .map(tq => {
-          const chosenMarks = pickerTotalMarks[tq.id] !== undefined ? pickerTotalMarks[tq.id] : Number(tq.max_marks || 2);
           let chosenSubs = tq.sub_questions || (tq as any).subQuestions;
+          if (typeof chosenSubs === 'string') {
+            try { chosenSubs = JSON.parse(chosenSubs); } catch {}
+          }
           if (Array.isArray(chosenSubs) && pickerSubMarks[tq.id]) {
             chosenSubs = chosenSubs.map((sq: any) => {
               const k = sq.id || sq.label;
@@ -1213,22 +1244,37 @@ export default function FacultyAssessmentMasterPage() {
               };
             });
           }
+          let chosenMarks = pickerTotalMarks[tq.id] !== undefined ? pickerTotalMarks[tq.id] : undefined;
+          if (chosenMarks === undefined) {
+            if (Array.isArray(chosenSubs) && chosenSubs.length > 0) {
+              chosenMarks = chosenSubs.reduce((sum: number, sq: any) => sum + Number(sq.marks || 1), 0);
+            } else if (tq.max_marks && Number(tq.max_marks) > 0) {
+              chosenMarks = Number(tq.max_marks);
+            } else {
+              chosenMarks = Number(sec.defaultMarksPerQuestion || 2);
+            }
+          }
+          const img = tq.image_url || tq.imageUrl || (tq as any).image || (tq as any).diagramUrl || (tq as any).diagram_url || null;
           return {
             questionId: tq.id,
             questionText: tq.question_text,
+            text: tq.question_text,
             mode: tq.mode,
             topic: tq.topic,
             competencyCode: tq.competency_code,
-            defaultMarks: Number(tq.max_marks || 2),
+            defaultMarks: chosenMarks,
             customMarks: chosenMarks,
+            marks: chosenMarks,
+            max_marks: chosenMarks,
             optionA: tq.option_a,
             optionB: tq.option_b,
             optionC: tq.option_c,
             optionD: tq.option_d,
             correctOption: tq.correct_option,
-            subQuestions: chosenSubs,
-            imageUrl: tq.image_url || tq.imageUrl || (tq as any).image || (tq as any).diagramUrl || (tq as any).diagram_url || null,
-            image_url: tq.image_url || tq.imageUrl || (tq as any).image || (tq as any).diagramUrl || (tq as any).diagram_url || null,
+            subQuestions: Array.isArray(chosenSubs) ? chosenSubs : [],
+            sub_questions: Array.isArray(chosenSubs) ? chosenSubs : [],
+            imageUrl: img,
+            image_url: img,
           };
         });
       return {
@@ -1256,8 +1302,10 @@ export default function FacultyAssessmentMasterPage() {
     setPaperSections(prev => prev.map(sec => {
       if (sec.id !== secId) return sec;
       if (sec.questions.some((q: any) => q.questionId === targetQ.id)) return sec;
-      const chosenMarks = pickerTotalMarks[targetQ.id] !== undefined ? pickerTotalMarks[targetQ.id] : Number(targetQ.max_marks || 2);
       let chosenSubs = targetQ.sub_questions || (targetQ as any).subQuestions;
+      if (typeof chosenSubs === 'string') {
+        try { chosenSubs = JSON.parse(chosenSubs); } catch {}
+      }
       if (Array.isArray(chosenSubs) && pickerSubMarks[targetQ.id]) {
         chosenSubs = chosenSubs.map((sq: any) => {
           const k = sq.id || sq.label;
@@ -1267,6 +1315,17 @@ export default function FacultyAssessmentMasterPage() {
           };
         });
       }
+      let chosenMarks = pickerTotalMarks[targetQ.id] !== undefined ? pickerTotalMarks[targetQ.id] : undefined;
+      if (chosenMarks === undefined) {
+        if (Array.isArray(chosenSubs) && chosenSubs.length > 0) {
+          chosenMarks = chosenSubs.reduce((sum: number, sq: any) => sum + Number(sq.marks || 1), 0);
+        } else if (targetQ.max_marks && Number(targetQ.max_marks) > 0) {
+          chosenMarks = Number(targetQ.max_marks);
+        } else {
+          chosenMarks = Number(targetSection?.defaultMarksPerQuestion || 2);
+        }
+      }
+      const img = targetQ.image_url || targetQ.imageUrl || (targetQ as any).image || (targetQ as any).diagramUrl || (targetQ as any).diagram_url || null;
       return {
         ...sec,
         questions: [
@@ -1274,19 +1333,23 @@ export default function FacultyAssessmentMasterPage() {
           {
             questionId: targetQ.id,
             questionText: targetQ.question_text,
+            text: targetQ.question_text,
             mode: targetQ.mode,
             topic: targetQ.topic,
             competencyCode: targetQ.competency_code,
-            defaultMarks: Number(targetQ.max_marks || 2),
+            defaultMarks: chosenMarks,
             customMarks: chosenMarks,
+            marks: chosenMarks,
+            max_marks: chosenMarks,
             optionA: targetQ.option_a,
             optionB: targetQ.option_b,
             optionC: targetQ.option_c,
             optionD: targetQ.option_d,
             correctOption: targetQ.correct_option,
-            subQuestions: chosenSubs,
-            imageUrl: targetQ.image_url || targetQ.imageUrl || (targetQ as any).image || (targetQ as any).diagramUrl || (targetQ as any).diagram_url || null,
-            image_url: targetQ.image_url || targetQ.imageUrl || (targetQ as any).image || (targetQ as any).diagramUrl || (targetQ as any).diagram_url || null,
+            subQuestions: Array.isArray(chosenSubs) ? chosenSubs : [],
+            sub_questions: Array.isArray(chosenSubs) ? chosenSubs : [],
+            imageUrl: img,
+            image_url: img,
           }
         ]
       };
@@ -1315,7 +1378,7 @@ export default function FacultyAssessmentMasterPage() {
               marks: Number(((Number(sq.marks || 1) / oldTotalRaw) * newMarks).toFixed(2))
             }));
           }
-          return { ...q, customMarks: newMarks, subQuestions: updatedSubs };
+          return { ...q, customMarks: newMarks, marks: newMarks, max_marks: newMarks, defaultMarks: newMarks, subQuestions: updatedSubs };
         })
       };
     }));
@@ -1335,7 +1398,7 @@ export default function FacultyAssessmentMasterPage() {
             return sq;
           });
           const newQTotal = updatedSubs.reduce((sum: number, sq: any) => sum + Number(sq.marks || 0), 0);
-          return { ...q, customMarks: newQTotal, subQuestions: updatedSubs };
+          return { ...q, customMarks: newQTotal, marks: newQTotal, max_marks: newQTotal, defaultMarks: newQTotal, subQuestions: updatedSubs };
         })
       };
     }));
@@ -2132,19 +2195,22 @@ export default function FacultyAssessmentMasterPage() {
       if (res.ok) {
         const json = await res.json();
         const list = Array.isArray(json) ? json : Array.isArray(json?.data) ? json.data : [];
-        // STRICT CONFIDENTIALITY: Faculty can ONLY view question papers that they prepared.
+        // STRICT CONFIDENTIALITY: Backend already filtered by createdBy - trust it.
+        // Client-side re-filter only as a soft safety net (no hardcoded UUIDs).
         const isFaculty = !userRole || userRole === 'FACULTY' || userRole === 'TEACHER' || userRole === 'INSTRUCTOR';
-        const userIds = [u.id, u.sub, u.faculty_id, u.emp_id, typeof window !== 'undefined' ? localStorage.getItem('empid') : null, typeof window !== 'undefined' ? localStorage.getItem('userId') : null]
-          .filter(Boolean)
-          .map(x => String(x).toLowerCase());
+        const userIds = [
+          u.id, u.sub, u.faculty_id, u.emp_id, u.empId, u.username,
+          u.profile?.id, u.profile?.faculty_id,
+          typeof window !== 'undefined' ? localStorage.getItem('empid') : null,
+          typeof window !== 'undefined' ? localStorage.getItem('userId') : null,
+        ].filter(Boolean).map(x => String(x).toLowerCase());
 
-        const filtered = isFaculty
-          ? (userIds.length > 0
-            ? list.filter((p: any) => {
-              const pCreated = String(p.created_by || p.faculty_id || '').toLowerCase();
-              return !pCreated || userIds.includes(pCreated);
+        const filtered = (isFaculty && userId && userIds.length > 0)
+          ? list.filter((p: any) => {
+              const pCreated = String(p.created_by || '').toLowerCase();
+              const pFac = String(p.faculty_id || '').toLowerCase();
+              return !pCreated || userIds.includes(pCreated) || (pFac && userIds.includes(pFac));
             })
-            : list)
           : list;
         // Map to UI shape
         const mapped = filtered.map((p: any) => ({
@@ -2531,7 +2597,52 @@ export default function FacultyAssessmentMasterPage() {
         examDate: examDate ? new Date(examDate).toISOString() : null,
         exam_date: examDate ? new Date(examDate).toISOString() : null,
         type: paperType,
-        sections: paperSections,
+        sections: paperSections.map((sec: any) => {
+          const qsList = (
+            (Array.isArray(sec.questions) && sec.questions.length > 0 ? sec.questions : null) ||
+            (Array.isArray(sec.pickedQuestions) && sec.pickedQuestions.length > 0 ? sec.pickedQuestions : null) ||
+            (Array.isArray(sec.selectedQuestions) && sec.selectedQuestions.length > 0 ? sec.selectedQuestions : null) ||
+            (Array.isArray(sec.items) && sec.items.length > 0 ? sec.items : null) ||
+            []
+          );
+          const mappedQuestions = qsList.map((q: any) => {
+            let rawSubs = q.subQuestions || q.sub_questions;
+            if (typeof rawSubs === 'string') {
+              try { rawSubs = JSON.parse(rawSubs); } catch {}
+            }
+            const parsedSubs = Array.isArray(rawSubs) ? rawSubs : [];
+            let qMarks = 0;
+            if (parsedSubs.length > 0) {
+              qMarks = parsedSubs.reduce((sum: number, sq: any) => sum + Number(sq.marks || sq.customMarks || 1), 0);
+            }
+            if (!qMarks || qMarks <= 0) {
+              const assigned = Number(q.customMarks ?? q.marks);
+              qMarks = assigned && assigned > 0 ? assigned : Number(q.max_marks ?? q.defaultMarks ?? 5);
+            }
+            const img = q.imageUrl || q.image_url || null;
+            return {
+              ...q,
+              id: q.questionId || q.id,
+              questionId: q.questionId || q.id,
+              text: q.questionText || q.text || '',
+              questionText: q.questionText || q.text || '',
+              question_text: q.questionText || q.text || '',
+              marks: qMarks,
+              customMarks: qMarks,
+              defaultMarks: qMarks,
+              max_marks: qMarks,
+              subQuestions: parsedSubs,
+              sub_questions: parsedSubs,
+              imageUrl: img,
+              image_url: img,
+            };
+          });
+          return {
+            ...sec,
+            questions: mappedQuestions,
+            questionIds: mappedQuestions.map((q: any) => q.questionId || q.id),
+          };
+        }),
         status: statusToSave,
         departmentId: resolvedDeptId,
         colgCd: academicCascade?.college?.colg_cd ? String(academicCascade.college.colg_cd) : (slug.toLowerCase().includes('srms') ? '1' : null),
@@ -2558,6 +2669,10 @@ export default function FacultyAssessmentMasterPage() {
         setShowPaperEditor(false);
         setEditingPaperId(null);
         return;
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        const errMsg = errJson?.message || (Array.isArray(errJson?.errors) ? errJson.errors.join(", ") : "Failed to save paper to database");
+        setAlert({ type: "error", message: `Server error: ${errMsg}` });
       }
     } catch (e) {
       console.error('Save paper error', e);
@@ -3503,7 +3618,7 @@ export default function FacultyAssessmentMasterPage() {
                           <div className="p-3 border-t border-[#E7EAF3] dark:border-slate-800 bg-[#F8FAFC]/90 dark:bg-slate-800/40">
                             {isPaperApproved(paper) ? (
                               /* APPROVED STATE: 4 perfectly aligned action tiles */
-                              <div className="grid grid-cols-4 gap-2">
+                              <div className="grid grid-cols-5 gap-1.5">
                                 {/* 1. View Paper */}
                                 <button
                                   type="button"
@@ -3513,6 +3628,17 @@ export default function FacultyAssessmentMasterPage() {
                                 >
                                   <Eye className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
                                   <span className="text-[10px] font-black tracking-tight leading-none">View</span>
+                                </button>
+
+                                {/* 2. Enter Marks */}
+                                <button
+                                  type="button"
+                                  onClick={() => { window.location.href = `/dashboard/faculty/marks?paperId=${paper.id}`; }}
+                                  className="group/btn flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-xl bg-[#EEF2FF] hover:bg-[#5B4BFF] text-[#5B4BFF] hover:text-white border border-[#5B4BFF]/30 shadow-sm hover:shadow transition-all duration-150 cursor-pointer active:scale-95"
+                                  title="Enter Student Marks for this paper"
+                                >
+                                  <Award className="w-4 h-4 group-hover/btn:scale-110 transition-transform" />
+                                  <span className="text-[10px] font-black tracking-tight leading-none">Marks</span>
                                 </button>
 
                                 {/* 2. Clone Set */}
@@ -5198,6 +5324,50 @@ export default function FacultyAssessmentMasterPage() {
                                                     📚 {q.topic || 'General Accounting / Concepts'}
                                                   </span>
                                                 </div>
+                                                {/* Sub-questions display with marks and diagrams */}
+                                                {(() => {
+                                                  const subParts = (q.sub_questions && Array.isArray(q.sub_questions) && q.sub_questions.length > 0)
+                                                    ? q.sub_questions
+                                                    : (q.subQuestions && Array.isArray(q.subQuestions) && q.subQuestions.length > 0)
+                                                    ? q.subQuestions
+                                                    : [];
+                                                  if (subParts.length === 0) return null;
+                                                  return (
+                                                    <div className="mt-2.5 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700/60 space-y-1.5">
+                                                      <div className="text-[10px] font-black uppercase text-[#5B4BFF] tracking-wider">
+                                                        Sub-Questions ({subParts.length} Parts):
+                                                      </div>
+                                                      <div className="space-y-1">
+                                                        {subParts.map((sq: any, sIdx: number) => {
+                                                          const sqMark = sq.customMarks ?? sq.marks ?? sq.defaultMarks ?? sq.max_marks ?? sq.maxMarks ?? 1;
+                                                          const sqImg = sq.image_url || sq.imageUrl || sq.image || sq.diagramUrl || sq.diagram_url;
+                                                          return (
+                                                            <div key={sq.id || sIdx} className="text-xs space-y-1">
+                                                              <div className="flex items-baseline justify-between gap-2">
+                                                                <span className="text-slate-700 dark:text-slate-300">
+                                                                  <b className="font-mono text-[#5B4BFF] font-black">{sq.label || `${String.fromCharCode(97 + sIdx)})`}</b> {sq.questionText || sq.question_text || sq.text}
+                                                                </span>
+                                                                <span className="px-2 py-0.5 rounded-md bg-[#EEF2FF] text-[#5B4BFF] font-mono font-black text-[10px] shrink-0 border border-[#5B4BFF]/20">
+                                                                  {sqMark} M
+                                                                </span>
+                                                              </div>
+                                                              {sqImg && (
+                                                                <div className="ml-3 mt-1">
+                                                                  <img
+                                                                    src={sqImg}
+                                                                    alt="Sub-question diagram"
+                                                                    className="h-12 w-20 object-contain rounded border border-slate-300 dark:border-slate-600 bg-white p-0.5 shadow-xs cursor-pointer hover:scale-105 transition-transform"
+                                                                    onClick={() => setViewingImageModal({ src: sqImg, title: `${sq.label || ''} Diagram` })}
+                                                                  />
+                                                                </div>
+                                                              )}
+                                                            </div>
+                                                          );
+                                                        })}
+                                                      </div>
+                                                    </div>
+                                                  );
+                                                })()}
                                               </div>
                                             </div>
 

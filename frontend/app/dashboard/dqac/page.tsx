@@ -224,7 +224,7 @@ export default function DQACDashboardPage() {
                           </td>
                           <td className="py-3 px-3 text-right">
                             <Link
-                              href="/dashboard/dqac/qp-approvals"
+                              href={`/dashboard/dqac/qp-approvals?paperId=${p.id}&action=audit`}
                               className="px-2.5 py-1 rounded-lg bg-[#5B4BFF] hover:bg-[#4A3AFF] text-white text-[11px] font-bold transition-all inline-flex items-center gap-1 shadow-xs"
                             >
                               <span>Audit</span>

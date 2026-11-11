@@ -5,6 +5,9 @@
 		},
 		{
 			"path": "../../../../latest-medERP/med-erp"
+		},
+		{
+			"path": "../../../../../../../UNICAMPUS_BACKUP_DB"
 		}
 	],
 	"settings": {}

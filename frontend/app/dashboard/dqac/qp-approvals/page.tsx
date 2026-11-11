@@ -51,47 +51,61 @@ export default function DQACQPApprovalsPage() {
   const [modalMode, setModalMode] = useState<'review' | 'preview' | 'print'>('review');
   const [modalOpen, setModalOpen] = useState(false);
 
-  // Postpone Modal State
+  // Postpone & Schedule / Set Allocation Modal State
   const [postponeModalOpen, setPostponeModalOpen] = useState(false);
   const [postponePaper, setPostponePaper] = useState<any | null>(null);
+  const [postponeMode, setPostponeMode] = useState<'postpone' | 'reschedule'>('postpone');
   const [postponeReason, setPostponeReason] = useState('');
   const [postponeDate, setPostponeDate] = useState('');
+  const [postponeSet, setPostponeSet] = useState('Set A');
+  const [postponeSectionMode, setPostponeSectionMode] = useState<'all' | 'specific'>('all');
+  const [postponeSelectedSections, setPostponeSelectedSections] = useState<string[]>(['Section A', 'Section B']);
   const [postponeLoading, setPostponeLoading] = useState(false);
 
   const loadPapers = async () => {
     setLoading(true);
     try {
       const { slug, headers } = getH();
-      let routePath = `/api/v1/exams/papers?tenant=${slug}&role=DQAC`;
-      let fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&role=DQAC`;
-
+      let statusParam = '';
       if (filterTab === 'PENDING_AUDIT') {
-        routePath = `/api/v1/exams/papers/pending-dqac-approval?tenant=${slug}`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=PENDING_HOD_APPROVAL&role=DQAC`;
+        statusParam = 'status=PENDING_DQAC_APPROVAL,RESUBMITTED';
       } else if (filterTab === 'DQAC_APPROVED') {
-        routePath = `/api/v1/exams/papers?tenant=${slug}&status=DQAC_APPROVED&role=DQAC`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=DQAC_APPROVED&role=DQAC`;
+        statusParam = 'status=DQAC_APPROVED';
       } else if (filterTab === 'HOD_APPROVED') {
-        routePath = `/api/v1/exams/papers/approved?tenant=${slug}`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=HOD_APPROVED`;
+        statusParam = 'status=HOD_APPROVED';
       } else if (filterTab !== 'ALL') {
-        routePath = `/api/v1/exams/papers?tenant=${slug}&status=${filterTab}&role=DQAC`;
-        fallbackPath = `${API_BASE}/exams/papers?tenant=${slug}&status=${filterTab}&role=DQAC`;
+        statusParam = `status=${filterTab}`;
       }
+
+      const queryParts = [`tenant=${slug}`, 'role=DQAC'];
+      if (statusParam) queryParts.push(statusParam);
+
+      const primaryUrl = `${API_BASE}/exams/papers?${queryParts.join('&')}`;
+      const relUrl = `/api/v1/exams/papers?${queryParts.join('&')}`;
 
       let list: any[] = [];
       try {
-        const r = await fetch(routePath, { headers: { ...headers, 'x-tenant-slug': slug, 'x-user-role': 'DQAC' }, cache: 'no-store' });
+        const r = await fetch(primaryUrl, {
+          headers: { ...headers, 'x-tenant-slug': slug, 'x-user-role': 'DQAC' },
+          cache: 'no-store',
+        });
         if (r.ok) {
           const d = await r.json();
           list = Array.isArray(d) ? d : (d.data || []);
-        } else {
-          throw new Error('Local route error');
         }
-      } catch {
-        const r2 = await fetch(fallbackPath, { headers, cache: 'no-store' });
-        const d2 = await r2.json();
-        list = Array.isArray(d2) ? d2 : (d2.data || []);
+      } catch {}
+
+      if (list.length === 0) {
+        try {
+          const r2 = await fetch(relUrl, {
+            headers: { ...headers, 'x-tenant-slug': slug, 'x-user-role': 'DQAC' },
+            cache: 'no-store',
+          });
+          if (r2.ok) {
+            const d2 = await r2.json();
+            list = Array.isArray(d2) ? d2 : (d2.data || []);
+          }
+        } catch {}
       }
 
       // Load tenant-specific courses from college-master
@@ -218,7 +232,7 @@ export default function DQACQPApprovalsPage() {
       });
       if (data && data.success !== false) {
         await loadPapers();
-        alert('⭐ Question paper approved by DQAC! It is now certified for HOD final sign-off.');
+        alert('⭐ Question paper approved by DQAC! Faculty can now preview the approved paper and apply marks.');
       } else {
         alert(data?.message || 'Failed to approve paper.');
       }
@@ -248,7 +262,7 @@ export default function DQACQPApprovalsPage() {
       });
       if (data && data.success !== false) {
         await loadPapers();
-        alert('⭐ Question paper approved by DQAC with section allocation!');
+        alert('⭐ Question paper approved by DQAC! Faculty can now preview the approved paper and apply marks.');
       } else {
         alert(data?.message || 'Failed to approve paper.');
       }
@@ -283,10 +297,19 @@ export default function DQACQPApprovalsPage() {
     }
   };
 
-  const handleOpenPostpone = (paper: any) => {
+  const handleOpenPostpone = (paper: any, mode: 'postpone' | 'reschedule' = 'postpone') => {
     setPostponePaper(paper);
-    setPostponeReason(paper.dqac_remarks || 'Scheduled examination postponed by DQAC quality assurance.');
+    setPostponeMode(mode);
+    setPostponeReason(paper.dqac_remarks || (mode === 'postpone' ? 'Scheduled examination postponed by DQAC quality assurance.' : 'Exam date and set distribution updated by DQAC.'));
     setPostponeDate(paper.exam_date ? new Date(paper.exam_date).toISOString().slice(0, 10) : '');
+    setPostponeSet(paper.paper_set || 'Set A');
+    if (paper.target_sections && Array.isArray(paper.target_sections) && !paper.target_sections.includes('All')) {
+      setPostponeSectionMode('specific');
+      setPostponeSelectedSections(paper.target_sections);
+    } else {
+      setPostponeSectionMode('all');
+      setPostponeSelectedSections(['Section A', 'Section B']);
+    }
     setPostponeModalOpen(true);
   };
 
@@ -294,20 +317,26 @@ export default function DQACQPApprovalsPage() {
     if (!postponePaper) return;
     setPostponeLoading(true);
     try {
+      const targetSecs = postponeSectionMode === 'all'
+        ? ['All', 'Section A', 'Section B']
+        : (postponeSelectedSections.length > 0 ? postponeSelectedSections : ['Section A']);
+
       const data = await executeDqacAction({
         paperId: postponePaper.id,
-        action: 'postpone',
-        remarks: postponeReason || 'Examination postponed by DQAC quality assurance.',
+        action: postponeMode === 'reschedule' ? 'reschedule' : 'postpone',
+        remarks: postponeReason || (postponeMode === 'reschedule' ? 'Examination rescheduled and set allocated by DQAC.' : 'Examination postponed by DQAC quality assurance.'),
         examDate: postponeDate || undefined,
+        paperSet: postponeSet,
+        targetSections: targetSecs,
         version: Number(postponePaper.version || 1),
       });
       if (data && data.success !== false) {
         await loadPapers();
         setPostponeModalOpen(false);
         setPostponePaper(null);
-        alert('⏸️ Question paper has been marked as Postponed. The submitting faculty has been notified.');
+        alert(postponeMode === 'reschedule' ? '📅 Examination schedule and set distribution updated successfully!' : '⏸️ Question paper has been marked as Postponed. The submitting faculty has been notified.');
       } else {
-        alert(data?.message || 'Failed to postpone paper.');
+        alert(data?.message || 'Failed to update paper schedule.');
       }
     } catch (err: any) {
       alert(`Error: ${err.message}`);
@@ -356,7 +385,7 @@ export default function DQACQPApprovalsPage() {
               {[
                 { key: 'PENDING_AUDIT', label: '🔍 Pending Quality Audit' },
                 { key: 'DQAC_APPROVED', label: '⭐ DQAC Approved' },
-                { key: 'HOD_APPROVED', label: '✅ HOD Approved' },
+                { key: 'HOD_APPROVED', label: '✅ HOD can Track' },
                 { key: 'CHANGES_REQUESTED', label: '⚠️ Changes Requested' },
                 { key: 'POSTPONED', label: '⏸️ Postponed' },
                 { key: 'DRAFT', label: '📝 Drafts' },
@@ -452,8 +481,12 @@ export default function DQACQPApprovalsPage() {
                             </div>
                           </td>
                           <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
-                            <div className="font-semibold">{formatCourseName(paper.course_cd, paper.course_name)}</div>
-                            <span className="text-[10px] text-slate-400">{formatSemester(paper.semester)}</span>
+                            <div className="font-semibold">
+                              {formatCourseName(paper.course_cd, paper.course_name) || paper.course_name || (paper.course_cd === '1' ? 'B.Tech' : (paper.course_cd ? `Course ${paper.course_cd}` : 'B.Tech'))}
+                            </div>
+                            <span className="text-[10px] text-slate-400">
+                              {formatSemester(paper.semester) || (paper.semester ? (String(paper.semester).toLowerCase().includes('sem') ? paper.semester : `Semester ${paper.semester}`) : 'Semester 5')}
+                            </span>
                           </td>
                           <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
                             <div>{paper.subject_name || paper.subject_code || '—'}</div>
@@ -536,18 +569,18 @@ export default function DQACQPApprovalsPage() {
         />
       )}
 
-      {/* Postpone Examination Paper Confirmation Modal */}
+      {/* Postpone / Reschedule Examination Paper & Set Allocation Modal */}
       {postponeModalOpen && postponePaper && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-white dark:bg-slate-900 rounded-[22px] border border-orange-200 dark:border-orange-800/60 shadow-2xl max-w-lg w-full p-6 space-y-4 animate-fadeIn">
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-10 h-10 rounded-xl bg-orange-100 dark:bg-orange-950/60 text-orange-600 flex items-center justify-center font-bold text-lg">
-                  ⏸️
+                  {postponeMode === 'reschedule' ? '📅' : '⏸️'}
                 </div>
                 <div>
                   <h3 className="font-extrabold text-base text-[#1B1E28] dark:text-white">
-                    Postpone Examination Paper
+                    {postponeMode === 'reschedule' ? 'Schedule Exam Date & Set Allocation' : 'Postpone Examination Paper'}
                   </h3>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
                     {postponePaper.name} ({postponePaper.code})
@@ -557,15 +590,42 @@ export default function DQACQPApprovalsPage() {
               <button
                 type="button"
                 onClick={() => setPostponeModalOpen(false)}
-                className="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center"
+                className="w-8 h-8 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 flex items-center justify-center cursor-pointer"
               >
                 ✕
               </button>
             </div>
 
+            {/* Action Type Selector */}
+            <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 gap-1">
+              <button
+                type="button"
+                onClick={() => setPostponeMode('postpone')}
+                className={`flex-1 py-1.5 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                  postponeMode === 'postpone'
+                    ? 'bg-orange-500 text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                }`}
+              >
+                ⏸️ Postpone Examination
+              </button>
+              <button
+                type="button"
+                onClick={() => setPostponeMode('reschedule')}
+                className={`flex-1 py-1.5 text-xs font-extrabold rounded-lg transition-all cursor-pointer ${
+                  postponeMode === 'reschedule'
+                    ? 'bg-[#5B4BFF] text-white shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
+                }`}
+              >
+                📅 Reschedule & Set Allocation
+              </button>
+            </div>
+
+            {/* Date Input */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                <span>📅 New Rescheduled Exam Date (Optional):</span>
+                <span>📅 Scheduled Examination Date:</span>
                 {postponePaper.exam_date && (
                   <span className="text-[11px] text-slate-400">Current: {new Date(postponePaper.exam_date).toLocaleDateString()}</span>
                 )}
@@ -574,23 +634,102 @@ export default function DQACQPApprovalsPage() {
                 type="date"
                 value={postponeDate}
                 onChange={(e) => setPostponeDate(e.target.value)}
-                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                className="w-full text-xs p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               />
             </div>
 
+            {/* Paper Set Selection */}
             <div className="space-y-1.5">
               <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Reason for Postponement / Directive to Faculty:
+                Paper Set Variant:
+              </label>
+              <div className="flex gap-2">
+                {['Set A', 'Set B', 'Set C', 'Set D'].map((st) => (
+                  <button
+                    key={st}
+                    type="button"
+                    onClick={() => setPostponeSet(st)}
+                    className={`flex-1 py-1.5 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
+                      postponeSet === st
+                        ? 'bg-indigo-600 text-white border-indigo-600'
+                        : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {st}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Section Distribution Strategy */}
+            <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800 space-y-2">
+              <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 block">
+                Section Distribution Decision:
+              </span>
+              <div className="space-y-1.5">
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="modalSecMode"
+                    checked={postponeSectionMode === 'all'}
+                    onChange={() => {
+                      setPostponeSectionMode('all');
+                      setPostponeSelectedSections(['Section A', 'Section B']);
+                    }}
+                    className="text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                  />
+                  <span>Common Set (Same in all sections: Section A & Section B)</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs font-semibold text-slate-800 dark:text-slate-200 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="modalSecMode"
+                    checked={postponeSectionMode === 'specific'}
+                    onChange={() => setPostponeSectionMode('specific')}
+                    className="text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                  />
+                  <span>Decide specific section for this set:</span>
+                </label>
+
+                {postponeSectionMode === 'specific' && (
+                  <div className="flex items-center gap-3 pl-5 pt-1">
+                    {['Section A', 'Section B', 'Section C'].map((sec) => (
+                      <label key={sec} className="flex items-center gap-1.5 text-xs font-medium text-slate-700 dark:text-slate-300 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={postponeSelectedSections.includes(sec)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setPostponeSelectedSections((prev: string[]) => [...prev, sec]);
+                            } else {
+                              setPostponeSelectedSections((prev: string[]) => prev.filter((s: string) => s !== sec));
+                            }
+                          }}
+                          className="rounded text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                        />
+                        <span>{sec}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Directive / Remarks */}
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                {postponeMode === 'reschedule' ? 'DQAC Directive / Academic Directives:' : 'Reason for Postponement / Directive to Faculty:'}
               </label>
               <textarea
                 value={postponeReason}
                 onChange={(e) => setPostponeReason(e.target.value)}
-                rows={3}
-                placeholder="e.g. Incomplete syllabus coverage in sections, rescheduled as per DQAC academic audit."
-                className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+                rows={2}
+                placeholder={postponeMode === 'reschedule' ? 'e.g. Scheduled for mid-term unit test with assigned set distribution.' : 'e.g. Incomplete syllabus coverage in sections, rescheduled as per DQAC academic audit.'}
+                className="w-full text-xs p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-800/50 text-[#1B1E28] dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
               />
               <p className="text-[11px] text-slate-400">
-                The submitting faculty will receive an instant notification with these postponement directives.
+                The submitting faculty will receive an instant notification with these quality directives.
               </p>
             </div>
 
@@ -607,9 +746,13 @@ export default function DQACQPApprovalsPage() {
                 type="button"
                 onClick={handleConfirmPostpone}
                 disabled={postponeLoading}
-                className="px-4 py-2 rounded-xl text-xs font-black bg-orange-600 hover:bg-orange-700 text-white shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                className={`px-4 py-2 rounded-xl text-xs font-black text-white shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50 ${
+                  postponeMode === 'reschedule'
+                    ? 'bg-[#5B4BFF] hover:bg-[#4A3AFF]'
+                    : 'bg-orange-600 hover:bg-orange-700'
+                }`}
               >
-                {postponeLoading ? 'Postponing...' : 'Confirm Postpone'}
+                {postponeLoading ? 'Saving...' : postponeMode === 'reschedule' ? 'Save Schedule & Sets' : 'Confirm Postpone'}
               </button>
             </div>
           </div>
