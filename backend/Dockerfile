@@ -26,7 +26,7 @@ FROM base AS builder
 
 WORKDIR /app
 
-RUN npm ci --include=dev
+RUN npm ci --include=dev --no-audit --fund=false
 
 COPY . .
 
@@ -41,7 +41,7 @@ ENV NODE_ENV=production
 
 COPY package*.json ./
 RUN apk add --no-cache python3 make g++ \
- && npm ci --omit=dev \
+ && npm ci --omit=dev --no-audit --fund=false \
  && apk del python3 make g++
 
 # Copy compiled output and static assets from builder
