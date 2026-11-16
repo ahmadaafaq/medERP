@@ -1,6 +1,6 @@
 import {
   IsDateString, IsString, IsOptional,
-  IsArray, ValidateNested, IsEnum, ArrayMinSize,
+  IsArray, ValidateNested, IsEnum, ArrayMinSize, IsBoolean,
   IsNotEmpty,
 } from 'class-validator';
 import { Type } from 'class-transformer';
@@ -27,6 +27,16 @@ export class AttendanceEntryDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @ApiPropertyOptional({ description: 'Leave Type ID if status is EXCUSED' })
+  @IsOptional()
+  @IsString()
+  leaveTypeId?: string;
+
+  @ApiPropertyOptional({ description: 'Whether session is excused from denominator' })
+  @IsOptional()
+  @IsBoolean()
+  isExcused?: boolean;
 }
 
 export class CreateSessionDto {
@@ -78,6 +88,26 @@ export class CreateSessionDto {
   @IsOptional()
   @IsString()
   timetableSlotId?: string;
+
+  @ApiPropertyOptional({ description: 'Group ID for practical/clinical/community sessions' })
+  @IsOptional()
+  @IsString()
+  groupId?: string;
+
+  @ApiPropertyOptional({ description: 'Group type e.g. PRACTICAL, CLINICAL, COMMUNITY' })
+  @IsOptional()
+  @IsString()
+  groupType?: string;
+
+  @ApiPropertyOptional({ description: 'Section ID for theory sessions' })
+  @IsOptional()
+  @IsString()
+  sectionId?: string;
+
+  @ApiPropertyOptional({ description: 'Phase ID for medical/professional courses' })
+  @IsOptional()
+  @IsString()
+  phaseId?: string;
 
   @ApiProperty({ type: [AttendanceEntryDto] })
   @IsArray()

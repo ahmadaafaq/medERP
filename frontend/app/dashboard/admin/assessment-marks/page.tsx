@@ -418,7 +418,7 @@ export default function AdminAssessmentMarksPage() {
         fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null),
         fetch(`${API_BASE}/admin-master/departments?tenant=${slug}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${slug}`, { headers }).catch(() => null),
-        fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/exams/papers?tenant=${slug}&role=ADMIN`, { headers }).catch(() => null),
       ]);
 
       // 1. Courses

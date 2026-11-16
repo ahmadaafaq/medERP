@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import Sidebar from '../../../components/Sidebar';
 import Header from '../../../components/Header';
@@ -78,6 +78,38 @@ export default function AdminDashboard() {
     slug: '',
     schema: '',
   });
+
+  // Only show SRMS-specific Biometric Punches & Leave Intelligence Ledger for tenants with 'srms' keyword
+  const isSrmsTenant = useMemo(() => {
+    let slug = '';
+    let name = '';
+    if (typeof window !== 'undefined') {
+      try {
+        const u = JSON.parse(localStorage.getItem('user') || '{}');
+        slug = u?.tenantSlug || u?.tenant || u?.slug || '';
+        name = u?.collegeName || u?.tenantName || '';
+      } catch (e) {}
+      if (!slug) {
+        slug =
+          localStorage.getItem('tenantSlug') ||
+          localStorage.getItem('selectedTenant') ||
+          localStorage.getItem('college_slug') ||
+          '';
+      }
+      if (!name) {
+        name = localStorage.getItem('collegeName') || localStorage.getItem('tenantName') || '';
+      }
+    }
+    if (!slug) {
+      slug = collegeInfo?.slug || selectedCollegeSlug || '';
+    }
+    if (!name && collegeInfo?.name) {
+      name = collegeInfo.name;
+    }
+    const cleanSlug = String(slug).toLowerCase().trim().replace(/^tenant[_-]/, '');
+    const cleanName = String(name).toLowerCase().trim();
+    return cleanSlug.includes('srms') || cleanName.includes('srms');
+  }, [collegeInfo?.slug, collegeInfo?.name, selectedCollegeSlug]);
 
   // License & Renewal Slip state
   const [licenseInfo, setLicenseInfo] = useState<{
@@ -740,200 +772,8 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* Top 3 Career, Research & Placement Innovation Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-
-                {/* Card 1: Placement Drives & Latest Company with Applied Candidate Avatars */}
-                <Link
-                  href="/dashboard/admin/placement"
-                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all block group relative overflow-hidden space-y-2.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
-                      Placement Drives & Hiring
-                    </span>
-                    <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#F36C21] to-amber-500 text-white flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform">
-                      💼
-                    </span>
-                  </div>
-
-                  {/* Total Drives & Total Applied */}
-                  <div className="flex items-baseline justify-between">
-                    <p className="text-2xl font-black text-[#F36C21]">
-                      {placementStats.loading ? '...' : `${placementStats.totalDrives} Drives`}
-                    </p>
-                    <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">
-                      {placementStats.totalApplicants} Applied
-                    </span>
-                  </div>
-
-                  {/* Top / Latest Company Profile Highlight */}
-                  {placementStats.latestCompany ? (
-                    <div className="p-2 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-800/40 flex items-center justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 text-xs font-black text-[#1B1E28] dark:text-white truncate">
-                          <span className="text-sm">🏢</span>
-                          <span className="truncate">{placementStats.latestCompany}</span>
-                        </div>
-                        <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 truncate">
-                          {placementStats.latestRole} {placementStats.packageDetails ? `(${placementStats.packageDetails})` : ''}
-                        </p>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2">
-                      <span className="text-sm">💼</span>
-                      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-                        No active placement drives registered yet.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Side-by-Side Applied Status & Stacked Student Profile Photos */}
-                  <div className="flex items-center justify-between pt-0.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-black border border-amber-500/20">
-                        Active: {placementStats.totalDrives}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-black border border-indigo-500/20">
-                        Applied: {placementStats.totalApplicants}
-                      </span>
-                    </div>
-
-                    {/* Stacked Candidate Avatar Circles with Real Profile Photos */}
-                    {placementStats.applicantList.length > 0 ? (
-                      <div className="flex items-center -space-x-2">
-                        {placementStats.applicantList.slice(0, 3).map((app, idx) => (
-                          <div
-                            key={app.id || idx}
-                            className="relative w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 shadow-sm flex items-center justify-center font-black text-[8px] text-white"
-                            style={{
-                              backgroundColor: idx === 0 ? '#F36C21' : idx === 1 ? '#5B4BFF' : '#00C48C',
-                              zIndex: 10 - idx,
-                            }}
-                            title={`${app.name} (${app.course})`}
-                          >
-                            {app.photo ? (
-                              <img
-                                src={app.photo}
-                                alt={app.name}
-                                className="w-full h-full object-cover"
-                                onError={(e) => {
-                                  (e.target as HTMLElement).style.display = 'none';
-                                }}
-                              />
-                            ) : null}
-                            <span>{app.initials}</span>
-                          </div>
-                        ))}
-                        {placementStats.totalApplicants > 3 && (
-                          <div
-                            className="relative w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 flex items-center justify-center font-black text-[8px] ring-2 ring-white dark:ring-slate-900 shadow-sm"
-                            style={{ zIndex: 5 }}
-                            title={`${placementStats.totalApplicants - 3} more applied candidates`}
-                          >
-                            +{placementStats.totalApplicants - 3}
-                          </div>
-                        )}
-                      </div>
-                    ) : (
-                      <span className="text-[10px] text-slate-400 font-mono">0 applicants</span>
-                    )}
-                  </div>
-
-                  {/* Footer */}
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold">
-                    <span className="text-amber-600 dark:text-amber-400">
-                      ✨ {placementStats.totalDrives > 0 ? 'Active Campus Hiring' : 'Campus Hiring Ready'}
-                    </span>
-                    <span className="text-[#F36C21] group-hover:underline">Manage Drives ➔</span>
-                  </div>
-                </Link>
-
-                {/* Card 2: Project Scores & Repositories */}
-                <Link
-                  href="/dashboard/admin/repository"
-                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition-all block group relative overflow-hidden space-y-2.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
-                      Project Repositories & R&D
-                    </span>
-                    <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00C48C] to-teal-400 text-white flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform">
-                      💻
-                    </span>
-                  </div>
-
-                  {/* Total Projects & Evaluation Score */}
-                  <div className="flex items-baseline justify-between">
-                    <p className="text-2xl font-black text-[#00C48C]">
-                      {repoStats.loading ? '...' : `${repoStats.totalRepos} Projects`}
-                    </p>
-                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/20">
-                      Avg: {repoStats.latestScore}
-                    </span>
-                  </div>
-
-                  {/* Latest Student Info with Profile Photo, Course & Batch */}
-                  {repoStats.totalRepos > 0 && repoStats.studentName ? (
-                    <>
-                      <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-700/80 flex items-center gap-2.5">
-                        {/* Student Profile Photo */}
-                        <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 shadow-sm flex items-center justify-center font-black text-[11px] text-slate-600 dark:text-slate-200">
-                          {repoStats.studentPhoto ? (
-                            <img
-                              src={repoStats.studentPhoto}
-                              alt={repoStats.studentName}
-                              className="w-full h-full object-cover"
-                              onError={(e) => {
-                                (e.target as HTMLElement).style.display = 'none';
-                              }}
-                            />
-                          ) : null}
-                          <span>{repoStats.studentName.charAt(0) || 'S'}</span>
-                        </div>
-
-                        {/* Student Details & Course/Batch */}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-black text-[#1B1E28] dark:text-white truncate line-clamp-1">
-                            {repoStats.studentName}
-                          </p>
-                          <p className="text-[10px] text-[#5B4BFF] dark:text-indigo-400 font-bold truncate">
-                            {repoStats.courseName} • {repoStats.batchName}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* Latest Project Title */}
-                      <p className="text-xs text-[#1B1E28] dark:text-slate-200 font-bold line-clamp-1 truncate">
-                        📂 {repoStats.latestTitle}
-                      </p>
-                    </>
-                  ) : (
-                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2">
-                      <span className="text-sm">📁</span>
-                      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
-                        No student project repositories submitted yet.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Footer */}
-                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold">
-                    <span className="text-emerald-700 dark:text-emerald-400">
-                      ⭐ {repoStats.totalRepos > 0 ? `Grade ${repoStats.latestGrade} (${repoStats.pendingReviews} Pending)` : '0 Pending Reviews'}
-                    </span>
-                    <span className="text-[#00C48C] group-hover:underline">Repository Hub ➔</span>
-                  </div>
-                </Link>
-
-                {/* Card 3: Incubation Records & Startup Ventures with Side-by-Side Avatars & Hustle Board Modal */}
-                <IncubationCellCard role="admin" />
-
-              </div>
-
-              {/* 1–5. Top KPI Cards Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5 sm:gap-5">
+              {/* 1. Core Academic KPI Cards Grid: Student Enrollments, Faculty, Punches & Exam Papers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
                 {/* Card 1: Total Enrolled Students */}
                 <Link
                   href="/dashboard/admin/student-master"
@@ -1077,8 +917,173 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </Link>
+              </div>
 
-                {/* Card 5: Internship Tracks & Live Applicants Progress */}
+              {/* Real-time Student Attendance Cohort Analysis & Topper Hustle Leaderboard */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                <FacultyBatchAttendanceAnalytics />
+                <FacultyTopperHustleBoard />
+              </div>
+
+              {/* 5 & 6. Mid Section: Marks Results & Department Timetable Schedule */}
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
+                <div className="lg:col-span-5 flex flex-col">
+                  <StudentAssessmentMarksCard
+                    role="admin"
+                    initialData={marksSummary}
+                    collegeName={collegeInfo.name.split(',')[0]}
+                  />
+                </div>
+                <div className="lg:col-span-7 flex flex-col">
+                  <DepartmentTimetableCard
+                    role="admin"
+                    initialData={timetable}
+                  />
+                </div>
+              </div>
+
+              {/* 4. Lesson Upload, Notices & Communication Hub */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
+                <RecentLessonsWidget role="ADMIN" />
+                <NoticeDashboardWidget role="admin" />
+                <ChatDashboardWidget role="ADMIN" chatUrl="/dashboard/admin/chat" />
+              </div>
+
+              {/* Digital Library & Academic Catalog Card */}
+              <LibraryDashboardCard role="admin" />
+
+              {/* HOD-Approved Question Papers Print Card */}
+              <AdminApprovedQPCard />
+
+              {/* 6. SRMS-Exclusive Staff Biometric Punches & Leave Intelligence Ledger */}
+              {isSrmsTenant && (
+                <div className="grid grid-cols-1 gap-6">
+                  <FacultyDailyPunchWidget />
+                  <FacultyLeaveLedgerWidget />
+                </div>
+              )}
+
+              {/* 8. Career Drives, Startup Ventures, Internships & Student Projects (Placed at Last) */}
+              <div className="space-y-3 pt-2">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase text-slate-500 dark:text-slate-400 tracking-wider flex items-center gap-2">
+                    <span>🚀</span>
+                    <span>Career Drives, Startup Ventures, Internships & Student Projects</span>
+                  </h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+                  {/* Card 1: Placement Drives & Latest Company with Applied Candidate Avatars */}
+                <Link
+                  href="/dashboard/admin/placement"
+                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all block group relative overflow-hidden space-y-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                      Placement Drives & Hiring
+                    </span>
+                    <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#F36C21] to-amber-500 text-white flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform">
+                      💼
+                    </span>
+                  </div>
+
+                  {/* Total Drives & Total Applied */}
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-2xl font-black text-[#F36C21]">
+                      {placementStats.loading ? '...' : `${placementStats.totalDrives} Drives`}
+                    </p>
+                    <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">
+                      {placementStats.totalApplicants} Applied
+                    </span>
+                  </div>
+
+                  {/* Top / Latest Company Profile Highlight */}
+                  {placementStats.latestCompany ? (
+                    <div className="p-2 rounded-xl bg-amber-50/60 dark:bg-amber-950/30 border border-amber-200/50 dark:border-amber-800/40 flex items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 text-xs font-black text-[#1B1E28] dark:text-white truncate">
+                          <span className="text-sm">🏢</span>
+                          <span className="truncate">{placementStats.latestCompany}</span>
+                        </div>
+                        <p className="text-[10px] font-bold text-amber-700 dark:text-amber-300 truncate">
+                          {placementStats.latestRole} {placementStats.packageDetails ? `(${placementStats.packageDetails})` : ''}
+                        </p>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2">
+                      <span className="text-sm">💼</span>
+                      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+                        No active placement drives registered yet.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Side-by-Side Applied Status & Stacked Student Profile Photos */}
+                  <div className="flex items-center justify-between pt-0.5">
+                    <div className="flex items-center gap-1.5">
+                      <span className="px-2 py-0.5 rounded-md bg-amber-500/10 text-amber-700 dark:text-amber-300 text-[10px] font-black border border-amber-500/20">
+                        Active: {placementStats.totalDrives}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 text-[10px] font-black border border-indigo-500/20">
+                        Applied: {placementStats.totalApplicants}
+                      </span>
+                    </div>
+
+                    {/* Stacked Candidate Avatar Circles with Real Profile Photos */}
+                    {placementStats.applicantList.length > 0 ? (
+                      <div className="flex items-center -space-x-2">
+                        {placementStats.applicantList.slice(0, 3).map((app, idx) => (
+                          <div
+                            key={app.id || idx}
+                            className="relative w-6 h-6 rounded-full overflow-hidden flex-shrink-0 bg-slate-200 dark:bg-slate-700 ring-2 ring-white dark:ring-slate-900 shadow-sm flex items-center justify-center font-black text-[8px] text-white"
+                            style={{
+                              backgroundColor: idx === 0 ? '#F36C21' : idx === 1 ? '#5B4BFF' : '#00C48C',
+                              zIndex: 10 - idx,
+                            }}
+                            title={`${app.name} (${app.course})`}
+                          >
+                            {app.photo ? (
+                              <img
+                                src={app.photo}
+                                alt={app.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                            ) : null}
+                            <span>{app.initials}</span>
+                          </div>
+                        ))}
+                        {placementStats.totalApplicants > 3 && (
+                          <div
+                            className="relative w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 text-amber-600 dark:text-amber-400 flex items-center justify-center font-black text-[8px] ring-2 ring-white dark:ring-slate-900 shadow-sm"
+                            style={{ zIndex: 5 }}
+                            title={`${placementStats.totalApplicants - 3} more applied candidates`}
+                          >
+                            +{placementStats.totalApplicants - 3}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-[10px] text-slate-400 font-mono">0 applicants</span>
+                    )}
+                  </div>
+
+                  {/* Footer */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold">
+                    <span className="text-amber-600 dark:text-amber-400">
+                      ✨ {placementStats.totalDrives > 0 ? 'Active Campus Hiring' : 'Campus Hiring Ready'}
+                    </span>
+                    <span className="text-[#F36C21] group-hover:underline">Manage Drives ➔</span>
+                  </div>
+                </Link>
+
+                  {/* Card 3: Incubation Records & Startup Ventures with Side-by-Side Avatars & Hustle Board Modal */}
+                <IncubationCellCard role="admin" />
+
+                  {/* Card 5: Internship Tracks & Live Applicants Progress */}
                 <Link
                   href="/dashboard/admin/internships"
                   className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md hover:border-[#5B4BFF] dark:hover:border-[#5B4BFF] transition-all group cursor-pointer block"
@@ -1117,47 +1122,84 @@ export default function AdminDashboard() {
                     </div>
                   </div>
                 </Link>
-              </div>
 
-              {/* 3 Key Communication & Academic Hub Widgets Side-by-Side in One Unified Row */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-stretch">
-                <ChatDashboardWidget role="ADMIN" chatUrl="/dashboard/admin/chat" />
-                <NoticeDashboardWidget role="admin" />
-                <RecentLessonsWidget role="ADMIN" />
-              </div>
+                  {/* Card 2: Project Scores & Repositories */}
+                <Link
+                  href="/dashboard/admin/repository"
+                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md hover:border-emerald-400 dark:hover:border-emerald-600 transition-all block group relative overflow-hidden space-y-2.5"
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                      Project Repositories & R&D
+                    </span>
+                    <span className="w-8 h-8 rounded-xl bg-gradient-to-tr from-[#00C48C] to-teal-400 text-white flex items-center justify-center text-sm shadow-sm group-hover:scale-110 transition-transform">
+                      💻
+                    </span>
+                  </div>
 
-              {/* Digital Library & Academic Catalog Card */}
-              <LibraryDashboardCard role="admin" />
+                  {/* Total Projects & Evaluation Score */}
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-2xl font-black text-[#00C48C]">
+                      {repoStats.loading ? '...' : `${repoStats.totalRepos} Projects`}
+                    </p>
+                    <span className="px-2 py-0.5 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 text-[10px] font-black border border-emerald-500/20">
+                      Avg: {repoStats.latestScore}
+                    </span>
+                  </div>
 
-              {/* Real-time Student Attendance Cohort Analysis & Topper Hustle Leaderboard */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
-                <FacultyBatchAttendanceAnalytics />
-                <FacultyTopperHustleBoard />
-              </div>
+                  {/* Latest Student Info with Profile Photo, Course & Batch */}
+                  {repoStats.totalRepos > 0 && repoStats.studentName ? (
+                    <>
+                      <div className="p-2.5 rounded-xl bg-[#F8FAFC] dark:bg-slate-800/60 border border-[#E7EAF3] dark:border-slate-700/80 flex items-center gap-2.5">
+                        {/* Student Profile Photo */}
+                        <div className="relative w-8 h-8 rounded-full overflow-hidden flex-shrink-0 bg-slate-200 dark:bg-slate-700 border border-slate-300 dark:border-slate-600 shadow-sm flex items-center justify-center font-black text-[11px] text-slate-600 dark:text-slate-200">
+                          {repoStats.studentPhoto ? (
+                            <img
+                              src={repoStats.studentPhoto}
+                              alt={repoStats.studentName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                          ) : null}
+                          <span>{repoStats.studentName.charAt(0) || 'S'}</span>
+                        </div>
 
-              {/* 5 & 6. Mid Section: Marks Results & Department Timetable Schedule */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
-                <div className="lg:col-span-5 flex flex-col">
-                  <StudentAssessmentMarksCard
-                    role="admin"
-                    initialData={marksSummary}
-                    collegeName={collegeInfo.name.split(',')[0]}
-                  />
+                        {/* Student Details & Course/Batch */}
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-[#1B1E28] dark:text-white truncate line-clamp-1">
+                            {repoStats.studentName}
+                          </p>
+                          <p className="text-[10px] text-[#5B4BFF] dark:text-indigo-400 font-bold truncate">
+                            {repoStats.courseName} • {repoStats.batchName}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Latest Project Title */}
+                      <p className="text-xs text-[#1B1E28] dark:text-slate-200 font-bold line-clamp-1 truncate">
+                        📂 {repoStats.latestTitle}
+                      </p>
+                    </>
+                  ) : (
+                    <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex items-center gap-2">
+                      <span className="text-sm">📁</span>
+                      <p className="text-[11px] font-medium text-slate-500 dark:text-slate-400 truncate">
+                        No student project repositories submitted yet.
+                      </p>
+                    </div>
+                  )}
+
+                  {/* Footer */}
+                  <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[10px] font-bold">
+                    <span className="text-emerald-700 dark:text-emerald-400">
+                      ⭐ {repoStats.totalRepos > 0 ? `Grade ${repoStats.latestGrade} (${repoStats.pendingReviews} Pending)` : '0 Pending Reviews'}
+                    </span>
+                    <span className="text-[#00C48C] group-hover:underline">Repository Hub ➔</span>
+                  </div>
+                </Link>
                 </div>
-                <div className="lg:col-span-7 flex flex-col">
-                  <DepartmentTimetableCard
-                    role="admin"
-                    initialData={timetable}
-                  />
-                </div>
-              </div>
-
-              {/* HOD-Approved Question Papers Print Card */}
-              <AdminApprovedQPCard />
-
-              <div className="grid grid-cols-1 gap-6">
-                <FacultyDailyPunchWidget />
-                <FacultyLeaveLedgerWidget />
               </div>
 
               {/* 7. Bottom System Health & Isolation Card */}
@@ -1360,23 +1402,9 @@ function AdminDashboardSkeleton() {
         <div className="w-36 h-9 bg-slate-200 dark:bg-slate-800 rounded-xl" />
       </div>
 
-      {/* Top 3 Innovation Cards Skeleton */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-48 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
-            <div className="flex justify-between items-center">
-              <div className="w-32 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
-              <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800 rounded-lg" />
-            </div>
-            <div className="w-24 h-7 bg-slate-200 dark:bg-slate-800 rounded" />
-            <div className="w-full h-12 bg-slate-200 dark:bg-slate-800 rounded-xl" />
-          </div>
-        ))}
-      </div>
-
-      {/* 5 KPI Cards Grid Skeleton */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-        {[1, 2, 3, 4, 5].map((i) => (
+      {/* Top 4 KPI Cards Grid Skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        {[1, 2, 3, 4].map((i) => (
           <div key={i} className="h-36 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
             <div className="flex justify-between items-center">
               <div className="w-24 h-3 bg-slate-200 dark:bg-slate-800 rounded" />
@@ -1388,10 +1416,46 @@ function AdminDashboardSkeleton() {
         ))}
       </div>
 
-      {/* 3 Widgets Grid Skeleton */}
+      {/* Left/Right Attendance Analytics & Hustle Board Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        {[1, 2].map((i) => (
+          <div key={i} className="h-72 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
+            <div className="w-40 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-full h-48 bg-slate-100 dark:bg-slate-800/50 rounded-xl" />
+          </div>
+        ))}
+      </div>
+
+      {/* Marks & Timetable Grid Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        <div className="lg:col-span-5 h-80 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
+          <div className="w-36 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="w-full h-56 bg-slate-100 dark:bg-slate-800/50 rounded-xl" />
+        </div>
+        <div className="lg:col-span-7 h-80 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
+          <div className="w-44 h-5 bg-slate-200 dark:bg-slate-800 rounded" />
+          <div className="w-full h-56 bg-slate-100 dark:bg-slate-800/50 rounded-xl" />
+        </div>
+      </div>
+
+      {/* 3 Academic Hub Widgets Grid Skeleton */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {[1, 2, 3].map((i) => (
           <div key={i} className="h-64 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5" />
+        ))}
+      </div>
+
+      {/* Bottom 4 Innovation, Drives, Internships & Projects Cards Skeleton */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        {[1, 2, 3, 4].map((i) => (
+          <div key={i} className="h-48 rounded-[22px] bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 shadow-soft p-5 space-y-3">
+            <div className="flex justify-between items-center">
+              <div className="w-32 h-4 bg-slate-200 dark:bg-slate-800 rounded" />
+              <div className="w-7 h-7 bg-slate-200 dark:bg-slate-800 rounded-lg" />
+            </div>
+            <div className="w-24 h-7 bg-slate-200 dark:bg-slate-800 rounded" />
+            <div className="w-full h-12 bg-slate-200 dark:bg-slate-800 rounded-xl" />
+          </div>
         ))}
       </div>
     </div>

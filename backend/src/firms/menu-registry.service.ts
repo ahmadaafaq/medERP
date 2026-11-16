@@ -150,9 +150,10 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.ADMIN, menu_key: 'admin_college_master_professionals', menu_label: '3. Academic Year', route_path: '/dashboard/admin/college-master#professionals', parent_menu_key: 'admin_college_master', sort_order: 23, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_college_master_batches', menu_label: '4. Batch', route_path: '/dashboard/admin/college-master#batches', parent_menu_key: 'admin_college_master', sort_order: 24, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_college_master_branches', menu_label: '5. Departments & Specialties', route_path: '/dashboard/admin/college-master#branches', parent_menu_key: 'admin_college_master', sort_order: 25, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_groups', menu_label: '6. Section Groups', route_path: '/dashboard/admin/college-master#groups', parent_menu_key: 'admin_college_master', sort_order: 26, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_sessions', menu_label: '7. Session', route_path: '/dashboard/admin/college-master#sessions', parent_menu_key: 'admin_college_master', sort_order: 27, applicable_firm_mode: ApplicableFirmMode.BOTH },
-      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_residencies', menu_label: '8. Residency Category', route_path: '/dashboard/admin/college-master#residencies', parent_menu_key: 'admin_college_master', sort_order: 28, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_sections', menu_label: '6. Section Master', route_path: '/dashboard/admin/college-master#sections', parent_menu_key: 'admin_college_master', sort_order: 26, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_groups', menu_label: '7. Student Group Master', route_path: '/dashboard/admin/college-master#groups', parent_menu_key: 'admin_college_master', sort_order: 27, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_sessions', menu_label: '8. Session', route_path: '/dashboard/admin/college-master#sessions', parent_menu_key: 'admin_college_master', sort_order: 28, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_college_master_residencies', menu_label: '9. Residency Category', route_path: '/dashboard/admin/college-master#residencies', parent_menu_key: 'admin_college_master', sort_order: 29, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       { role: MenuRole.ADMIN, menu_key: 'admin_admin_master', menu_label: 'Admin Master (Units, Topics, Depts)', route_path: '/dashboard/admin/admin-master', sort_order: 30, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_departments', menu_label: '1. Department Master', route_path: '/dashboard/admin/admin-master#departments', parent_menu_key: 'admin_admin_master', sort_order: 31, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -163,12 +164,16 @@ export class MenuRegistryService implements OnModuleInit {
       { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_units', menu_label: '6. COs Master', route_path: '/dashboard/admin/admin-master#units', parent_menu_key: 'admin_admin_master', sort_order: 36, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_topics', menu_label: '7. Topic Master', route_path: '/dashboard/admin/admin-master#topics', parent_menu_key: 'admin_admin_master', sort_order: 37, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_competencies', menu_label: '8. Sub Topics', route_path: '/dashboard/admin/admin-master#sub-topics', parent_menu_key: 'admin_admin_master', sort_order: 38, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_pos', menu_label: '9. POs', route_path: '/dashboard/admin/admin-master#pos', parent_menu_key: 'admin_admin_master', sort_order: 39, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_peos', menu_label: '10. PEOs', route_path: '/dashboard/admin/admin-master#peos', parent_menu_key: 'admin_admin_master', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_admin_master_subject_merge', menu_label: '11. Subject Merge Master', route_path: '/dashboard/admin/admin-master#subject-merge', parent_menu_key: 'admin_admin_master', sort_order: 41, applicable_firm_mode: ApplicableFirmMode.BOTH },
 
       { role: MenuRole.ADMIN, menu_key: 'admin_student_master', menu_label: 'Student Master', route_path: '/dashboard/admin/student-master', sort_order: 40, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_staff_master', menu_label: 'Staff Master', route_path: '/dashboard/admin/staff-master', sort_order: 50, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_staff_admin', menu_label: 'Make Staff as Admin', route_path: '/dashboard/admin/staff-admin', sort_order: 55, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_hod_linker', menu_label: 'HOD Course & Branch Linker', route_path: '/dashboard/admin/hod-linker', sort_order: 58, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_subject_linker', menu_label: 'Subject Linker', route_path: '/dashboard/admin/subject-linker', sort_order: 60, applicable_firm_mode: ApplicableFirmMode.BOTH },
+      { role: MenuRole.ADMIN, menu_key: 'admin_subject_merge', menu_label: 'Subject Merge Master', route_path: '/dashboard/admin/admin-master?tab=subject-merge', sort_order: 65, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_timetable_design', menu_label: 'Design Timetable', route_path: '/dashboard/admin/timetable-design', sort_order: 70, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_attendance_master', menu_label: 'Attendance Portal Sync', route_path: '/dashboard/admin/attendance-master', sort_order: 80, applicable_firm_mode: ApplicableFirmMode.BOTH },
       { role: MenuRole.ADMIN, menu_key: 'admin_attendance_biometric', menu_label: 'Attendance — Bio-Metric/CCTV', route_path: '/dashboard/admin/attendance-biometric', sort_order: 90, applicable_firm_mode: ApplicableFirmMode.BOTH },
@@ -431,6 +436,21 @@ export class MenuRegistryService implements OnModuleInit {
       WHERE a.id < b.id
         AND a.role = b.role
         AND LOWER(TRIM(a.route_path)) = LOWER(TRIM(b.route_path));
+    `).catch(() => {});
+
+    // Ensure existing firms with College Master permissions automatically get Section Master permission
+    await this.dataSource.query(`
+      INSERT INTO public.firm_role_permissions (firm_id, role, menu_key, is_enabled, created_at, updated_at)
+      SELECT DISTINCT p.firm_id, 'ADMIN', 'admin_college_master_sections', true, NOW(), NOW()
+      FROM public.firm_role_permissions p
+      WHERE p.role = 'ADMIN'
+        AND p.menu_key IN ('admin_college_master', 'admin_college_master_groups', 'admin_college_master_colleges')
+        AND p.is_enabled = true
+        AND NOT EXISTS (
+          SELECT 1 FROM public.firm_role_permissions p2
+          WHERE p2.firm_id = p.firm_id AND p2.role = 'ADMIN' AND p2.menu_key = 'admin_college_master_sections'
+        )
+      ON CONFLICT (firm_id, role, menu_key) DO NOTHING;
     `).catch(() => {});
 
     this.logger.log(`Upserted and deduplicated ${count} menu items in menu_registry`);

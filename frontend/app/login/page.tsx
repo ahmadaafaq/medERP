@@ -231,6 +231,28 @@ const DEFAULT_COLLEGES: College[] = [
     },
   },
   {
+    code: 'mdis',
+    colg_cd: 'mdis',
+    name: 'MDIS',
+    slug: 'mdis',
+    domain: 'mdis.mederp.app',
+    plan: 'enterprise',
+    primary_color: '#5B4BFF',
+    logo_url: '/icon.png',
+    theme_config: {
+      logo_url: '/icon.png',
+      primary_color: '#5B4BFF',
+      secondary_color: '#7867FF',
+      accent_color: '#F36C21',
+      sidebar_bg: '#2D2575',
+      header_bg: '#2D2575',
+      page_bg: '#F6F8FC',
+      card_bg: '#FFFFFF',
+      card_radius: '22px',
+      theme_mode: 'LIGHT',
+    },
+  },
+  {
     code: 'team-university',
     colg_cd: 'team-university',
     name: 'TEAM UNIVERSITY',
@@ -274,6 +296,7 @@ export default function LoginPage() {
         if (stored) return stored;
       }
     }
+    if (colg.slug === 'mdis') return '/icon.png';
     if (colg.slug === 'team-university') return '/images/team-university-logo.png';
     if (colg.slug && colg.slug.startsWith('srms')) return '/srms-logo.png';
     return null;

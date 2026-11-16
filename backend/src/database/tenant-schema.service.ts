@@ -1556,6 +1556,12 @@ export class TenantSchemaService implements OnApplicationBootstrap {
         }
 
         try {
+          await this.ensureAttendanceAndAcademicPolicyTables(runner, schema);
+        } catch (tableErr: any) {
+          this.logger.warn(`Non-fatal warning in ensureAttendanceAndAcademicPolicyTables for ${slug}: ${tableErr.message}`);
+        }
+
+        try {
           await this.seedDefaultData(runner, slug);
         } catch (seedErr: any) {
           this.logger.warn(`Non-fatal warning in seedDefaultData for ${slug}: ${seedErr.message}`);
@@ -2986,6 +2992,288 @@ export class TenantSchemaService implements OnApplicationBootstrap {
       CREATE INDEX IF NOT EXISTS idx_med_pg_rec_cat ON "${schema}".medical_pg_logbook_records(category);
       CREATE INDEX IF NOT EXISTS idx_med_pg_rec_stat ON "${schema}".medical_pg_logbook_records(record_status);
       CREATE INDEX IF NOT EXISTS idx_med_pg_rec_stu ON "${schema}".medical_pg_logbook_records(student_id);
+    `).catch(() => {});
+  }
+
+
+  public async ensureAttendanceAndAcademicPolicyTables(runner: QueryRunner, schema: string): Promise<void> {
+    // 1. Extend professional_phases (supports MBBS 12/18 mo phases, Pharmacy, Engineering year systems)
+    await runner.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'professional_phases') THEN
+          ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS duration_months INT DEFAULT 12;
+          ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS start_date DATE;
+          ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS end_date DATE;
+          ALTER TABLE "${schema}".professional_phases ADD COLUMN IF NOT EXISTS phase_code VARCHAR(50);
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+    `).catch(() => {});
+
+    // 2. Extend subjects with attendance_status flag ('NO_LONGITUDINAL', 'IS_LONGITUDINAL', 'COMBINED')
+    await runner.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'subjects') THEN
+          ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(30) DEFAULT 'NO_LONGITUDINAL';
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+    `).catch(() => {});
+
+    // 3. Subject Merge Mappings (Per-phase / semester / academic hierarchy merge mapping)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".subject_merge_mappings (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        phase_id VARCHAR(100),
+        major_subject_id VARCHAR(100) NOT NULL,
+        child_subject_id VARCHAR(100) NOT NULL,
+        merge_mode VARCHAR(20) NOT NULL DEFAULT 'COMBINE',
+        colg_cd VARCHAR(50),
+        course_cd VARCHAR(50),
+        branch_cd VARCHAR(50),
+        batch_cd VARCHAR(50),
+        semester_cd VARCHAR(50),
+        phase_cd VARCHAR(50),
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      ALTER TABLE "${schema}".subject_merge_mappings ALTER COLUMN phase_id DROP NOT NULL;
+      ALTER TABLE "${schema}".subject_merge_mappings ALTER COLUMN major_subject_id TYPE VARCHAR(100);
+      ALTER TABLE "${schema}".subject_merge_mappings ALTER COLUMN child_subject_id TYPE VARCHAR(100);
+      ALTER TABLE "${schema}".subject_merge_mappings ALTER COLUMN phase_id TYPE VARCHAR(100);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS colg_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS course_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS branch_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS batch_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS semester_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS phase_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS sec_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS child_batch_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS child_semester_cd VARCHAR(50);
+      ALTER TABLE "${schema}".subject_merge_mappings ADD COLUMN IF NOT EXISTS child_sec_cd VARCHAR(50);
+
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_phase ON "${schema}".subject_merge_mappings(phase_id);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_major ON "${schema}".subject_merge_mappings(major_subject_id);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_child ON "${schema}".subject_merge_mappings(child_subject_id);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_colg ON "${schema}".subject_merge_mappings(colg_cd);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_course ON "${schema}".subject_merge_mappings(course_cd);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_branch ON "${schema}".subject_merge_mappings(branch_cd);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_batch ON "${schema}".subject_merge_mappings(batch_cd);
+      CREATE INDEX IF NOT EXISTS idx_sub_merge_sem ON "${schema}".subject_merge_mappings(semester_cd);
+    `).catch(() => {});
+
+    // 4. Sections Master (Batch Sections 1..10 scoped by College -> Course -> Branch -> Batch -> Semester/Phase)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".sections (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id UUID,
+        course_id UUID,
+        department_id UUID,
+        batch_id UUID NOT NULL,
+        phase_id UUID,
+        semester VARCHAR(50),
+        code VARCHAR(20) NOT NULL,
+        name VARCHAR(100) NOT NULL,
+        capacity INT DEFAULT 60,
+        is_default BOOLEAN DEFAULT false,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      ALTER TABLE "${schema}".sections ADD COLUMN IF NOT EXISTS college_id UUID;
+      ALTER TABLE "${schema}".sections ADD COLUMN IF NOT EXISTS course_id UUID;
+      ALTER TABLE "${schema}".sections ADD COLUMN IF NOT EXISTS department_id UUID;
+      ALTER TABLE "${schema}".sections ADD COLUMN IF NOT EXISTS phase_id UUID;
+      ALTER TABLE "${schema}".sections ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+      DROP INDEX IF EXISTS "${schema}".uq_batch_section_code_idx;
+      DO $$ BEGIN
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_batch_dept_sem_section_code_idx
+          ON "${schema}".sections (batch_id, COALESCE(department_id::text, ''), COALESCE(semester, ''), code);
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+      CREATE INDEX IF NOT EXISTS idx_sections_batch ON "${schema}".sections(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_sections_dept ON "${schema}".sections(department_id);
+
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'students') THEN
+          ALTER TABLE "${schema}".students ADD COLUMN IF NOT EXISTS section_id UUID;
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'student_admissions') THEN
+          ALTER TABLE "${schema}".student_admissions ADD COLUMN IF NOT EXISTS section_id UUID;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+    `).catch(() => {});
+
+    // 5. Extend groups_master and create student_group_members (Practical, Clinical, Community groups)
+    await runner.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'groups_master') THEN
+          ALTER TABLE "${schema}".groups_master ADD COLUMN IF NOT EXISTS group_type VARCHAR(30) DEFAULT 'PRACTICAL';
+          ALTER TABLE "${schema}".groups_master ADD COLUMN IF NOT EXISTS subject_id UUID;
+          ALTER TABLE "${schema}".groups_master ADD COLUMN IF NOT EXISTS phase_id UUID;
+          ALTER TABLE "${schema}".groups_master ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+          ALTER TABLE "${schema}".groups_master ADD COLUMN IF NOT EXISTS section_id UUID;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+
+      CREATE TABLE IF NOT EXISTS "${schema}".student_group_members (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL,
+        group_id UUID NOT NULL,
+        group_type VARCHAR(30) NOT NULL DEFAULT 'PRACTICAL',
+        from_date DATE,
+        to_date DATE,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_stud_grp_stud ON "${schema}".student_group_members(student_id);
+      CREATE INDEX IF NOT EXISTS idx_stud_grp_grp ON "${schema}".student_group_members(group_id);
+      CREATE INDEX IF NOT EXISTS idx_stud_grp_type ON "${schema}".student_group_members(group_type);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_stud_grp_unique ON "${schema}".student_group_members(student_id, group_id);
+      CREATE INDEX IF NOT EXISTS idx_groups_master_subj ON "${schema}".groups_master(subject_id);
+      CREATE INDEX IF NOT EXISTS idx_groups_master_phase ON "${schema}".groups_master(phase_id);
+      CREATE INDEX IF NOT EXISTS idx_groups_master_section ON "${schema}".groups_master(section_id);
+    `).catch(() => {});
+
+    // 6. Clinical Posting Rotations (Groups rotating through departments with date bounds)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".clinical_posting_rotations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        batch_id UUID NOT NULL,
+        phase_id UUID,
+        group_id UUID NOT NULL,
+        department_id UUID NOT NULL,
+        posting_name VARCHAR(200),
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_clin_rot_batch ON "${schema}".clinical_posting_rotations(batch_id);
+      CREATE INDEX IF NOT EXISTS idx_clin_rot_phase ON "${schema}".clinical_posting_rotations(phase_id);
+      CREATE INDEX IF NOT EXISTS idx_clin_rot_grp ON "${schema}".clinical_posting_rotations(group_id);
+      CREATE INDEX IF NOT EXISTS idx_clin_rot_dept ON "${schema}".clinical_posting_rotations(department_id);
+      CREATE INDEX IF NOT EXISTS idx_clin_rot_dates ON "${schema}".clinical_posting_rotations(start_date, end_date);
+    `).catch(() => {});
+
+    // 7. Extend attendance_sessions, attendance_records, and timetable_slots
+    await runner.query(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'attendance_sessions') THEN
+          ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS group_id UUID;
+          ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS group_type VARCHAR(30);
+          ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS phase_id UUID;
+          ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS section_id UUID;
+          ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS timetable_slot_id UUID;
+          ALTER TABLE "${schema}".attendance_sessions ADD COLUMN IF NOT EXISTS topic_covered TEXT;
+        END IF;
+
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'attendance_records') THEN
+          ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS leave_type_id UUID;
+          ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS is_excused BOOLEAN DEFAULT false;
+          ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS is_condoned BOOLEAN DEFAULT false;
+          ALTER TABLE "${schema}".attendance_records ADD COLUMN IF NOT EXISTS remarks TEXT;
+        END IF;
+
+        IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = '${schema}' AND table_name = 'timetable_slots') THEN
+          ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS group_id UUID;
+          ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS section_id UUID;
+          ALTER TABLE "${schema}".timetable_slots ADD COLUMN IF NOT EXISTS phase_id UUID;
+        END IF;
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+    `).catch(() => {});
+
+    // 8. Attendance Policies (Regulator-agnostic: AICTE, NMC, PCI, NBA)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".attendance_policies (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        college_id VARCHAR(50),
+        course_cd VARCHAR(50) NOT NULL,
+        academic_system VARCHAR(50) DEFAULT 'semester',
+        regulator VARCHAR(50) DEFAULT 'AICTE',
+        min_theory_pct NUMERIC(5,2) DEFAULT 75.00,
+        min_practical_pct NUMERIC(5,2) DEFAULT 80.00,
+        min_clinical_pct NUMERIC(5,2) DEFAULT 80.00,
+        min_aggregate_pct NUMERIC(5,2) DEFAULT 75.00,
+        eval_mode VARCHAR(30) DEFAULT 'SEPARATE',
+        condonation_floor_pct NUMERIC(5,2) DEFAULT 65.00,
+        condonation_max_pct NUMERIC(5,2) DEFAULT 75.00,
+        excuse_leaves_mode VARCHAR(30) DEFAULT 'EXCLUDE_DENOMINATOR',
+        is_active BOOLEAN DEFAULT true,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      DO $$ BEGIN
+        CREATE UNIQUE INDEX IF NOT EXISTS uq_policy_course_idx ON "${schema}".attendance_policies (course_cd, academic_system);
+      EXCEPTION WHEN OTHERS THEN NULL; END $$;
+      CREATE INDEX IF NOT EXISTS idx_att_policy_course ON "${schema}".attendance_policies(course_cd);
+    `).catch(() => {});
+
+    // Seed default policies if empty (covering Engineering, Management, Pharmacy, and Medical)
+    try {
+      const existingPolicies = await runner.query(`SELECT id FROM "${schema}".attendance_policies LIMIT 1`).catch(() => []);
+      if (existingPolicies.length === 0) {
+        await runner.query(`
+          INSERT INTO "${schema}".attendance_policies 
+            (course_cd, academic_system, regulator, min_theory_pct, min_practical_pct, min_clinical_pct, min_aggregate_pct, eval_mode, condonation_floor_pct, condonation_max_pct, excuse_leaves_mode)
+          VALUES
+            ('DEFAULT', 'semester', 'AICTE', 75.00, 75.00, 75.00, 75.00, 'SEPARATE', 65.00, 75.00, 'EXCLUDE_DENOMINATOR'),
+            ('B.Tech', 'semester', 'AICTE', 75.00, 75.00, 75.00, 75.00, 'SEPARATE', 65.00, 75.00, 'EXCLUDE_DENOMINATOR'),
+            ('MBA', 'semester', 'AICTE', 75.00, 75.00, 75.00, 75.00, 'AGGREGATE', 65.00, 75.00, 'EXCLUDE_DENOMINATOR'),
+            ('B.Pharm', 'semester', 'PCI', 80.00, 80.00, 80.00, 80.00, 'SEPARATE', 70.00, 80.00, 'EXCLUDE_DENOMINATOR'),
+            ('MBBS', 'professional', 'NMC', 75.00, 80.00, 80.00, 75.00, 'SEPARATE', 65.00, 75.00, 'EXCLUDE_DENOMINATOR')
+          ON CONFLICT (course_cd, academic_system) DO NOTHING;
+        `).catch(() => {});
+      }
+    } catch (e) {}
+
+    // 9. Attendance Record Audits (Complete audit trail of edits/modifications)
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".attendance_record_audits (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        record_id UUID NOT NULL,
+        session_id UUID NOT NULL,
+        student_id UUID NOT NULL,
+        old_status VARCHAR(20) NOT NULL,
+        new_status VARCHAR(20) NOT NULL,
+        changed_by UUID,
+        reason VARCHAR(500),
+        ip_address VARCHAR(50),
+        created_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_att_audit_record ON "${schema}".attendance_record_audits(record_id);
+      CREATE INDEX IF NOT EXISTS idx_att_audit_student ON "${schema}".attendance_record_audits(student_id);
+      CREATE INDEX IF NOT EXISTS idx_att_audit_session ON "${schema}".attendance_record_audits(session_id);
+    `).catch(() => {});
+
+    // 10. Attendance Condonation Workflow
+    await runner.query(`
+      CREATE TABLE IF NOT EXISTS "${schema}".attendance_condonations (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        student_id UUID NOT NULL,
+        academic_period_id UUID,
+        course_cd VARCHAR(50),
+        batch_id UUID,
+        phase_id UUID,
+        shortage_percentage NUMERIC(5,2) NOT NULL,
+        requested_by UUID,
+        hod_approved BOOLEAN DEFAULT false,
+        hod_approved_by UUID,
+        hod_approved_at TIMESTAMPTZ,
+        principal_approved BOOLEAN DEFAULT false,
+        principal_approved_by UUID,
+        principal_approved_at TIMESTAMPTZ,
+        fee_required BOOLEAN DEFAULT false,
+        fee_amount NUMERIC(10,2) DEFAULT 0,
+        fee_paid BOOLEAN DEFAULT false,
+        fee_receipt_no VARCHAR(100),
+        status VARCHAR(30) DEFAULT 'PENDING',
+        remarks TEXT,
+        created_at TIMESTAMPTZ DEFAULT NOW(),
+        updated_at TIMESTAMPTZ DEFAULT NOW()
+      );
+      CREATE INDEX IF NOT EXISTS idx_att_condon_student ON "${schema}".attendance_condonations(student_id);
+      CREATE INDEX IF NOT EXISTS idx_att_condon_batch ON "${schema}".attendance_condonations(batch_id);
     `).catch(() => {});
   }
 

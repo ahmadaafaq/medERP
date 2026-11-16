@@ -119,9 +119,10 @@ export class AttendanceController {
     @Query('branchCd') branchCd?: string,
     @Query('semester') semester?: string,
     @Query('section') section?: string,
+    @Query('groupId') groupId?: string,
   ) {
     return this.attendanceService.getStudentsForSlot(
-      tenantSlug, batchId, timetableSlotId, courseCd, branchCd, semester, section,
+      tenantSlug, batchId, timetableSlotId, courseCd, branchCd, semester, section, groupId,
     );
   }
 
@@ -291,5 +292,15 @@ export class AttendanceController {
     @Query() query: any,
   ) {
     return this.attendanceService.getSectionAttendanceMatrix(tenantSlug, query);
+  }
+
+  @Get('phase-summary/:phaseId')
+  @ApiOperation({ summary: 'Calculate Phase-wise & Combined MBBS attendance summary with policy rules' })
+  async getPhaseAttendanceSummary(
+    @Param('phaseId') phaseId: string,
+    @Query('student_id') studentId: string,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.attendanceService.calculatePhaseAttendanceSummary(phaseId, tenant, studentId);
   }
 }

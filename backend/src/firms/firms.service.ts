@@ -382,6 +382,22 @@ export class FirmsService {
   }
 
   /**
+   * Invalidate cached role permissions so newly synced menu registry updates take effect immediately
+   */
+  clearPermissionsCache(firmId?: string) {
+    if (!firmId) {
+      this.permissionsCache.clear();
+      return;
+    }
+    const needle = firmId.toLowerCase();
+    for (const key of Array.from(this.permissionsCache.keys())) {
+      if (key.startsWith(`${needle}:`) || key.includes(needle)) {
+        this.permissionsCache.delete(key);
+      }
+    }
+  }
+
+  /**
    * Get role permissions for firm (supports UUID, slug, numeric colg_cd, or title)
    */
   async getFirmPermissions(firmIdOrSlug: string, role?: string) {

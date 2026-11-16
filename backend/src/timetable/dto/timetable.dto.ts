@@ -60,6 +60,21 @@ export class CreateTimetableSlotDto {
   @IsString()
   groupName?: string;
 
+  @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a99' })
+  @IsOptional()
+  @IsString()
+  groupId?: string;
+
+  @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a98' })
+  @IsOptional()
+  @IsString()
+  sectionId?: string;
+
+  @ApiPropertyOptional({ example: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a97' })
+  @IsOptional()
+  @IsString()
+  phaseId?: string;
+
   @ApiPropertyOptional({ example: 'Action Potential' })
   @IsOptional()
   @IsString()

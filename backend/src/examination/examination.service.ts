@@ -137,7 +137,7 @@ export class ExaminationService {
 
         // Confidentiality check: if an existing paper belongs to another faculty, prevent overwrite
         const rawRole = (user?.role || (dto as any).role || '').toUpperCase();
-        const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+        const isAdmin = rawRole.includes('ADMIN') || rawRole.includes('PRINCIPAL') || rawRole === 'SUPER_ADMIN' || rawRole === 'COLLEGE_ADMIN' || rawRole === 'SUPERADMIN' || rawRole === 'ADMIN';
         const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
         if (ownerId && validUserId && String(ownerId) !== String(validUserId) && !isAdmin && !isHod) {
           throw new BadRequestException('Confidentiality violation: You cannot modify a question paper prepared by another faculty member.');
@@ -585,10 +585,10 @@ export class ExaminationService {
     //    Once approved, paper shows ONLY to the particular faculty who created it.
     //    Rest of faculties from the same department CANNOT view it under any circumstances.
     const rawRole = (user?.role || filters?.role || '').toUpperCase();
-    const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL' || rawRole === 'SUPERADMIN';
+    const isAdmin = rawRole.includes('ADMIN') || rawRole.includes('PRINCIPAL') || rawRole === 'SUPER_ADMIN' || rawRole === 'COLLEGE_ADMIN' || rawRole === 'SUPERADMIN' || rawRole === 'ADMIN';
     const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
     const isDqac = rawRole === 'DQAC';
-    const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
+    const isFaculty = rawRole.includes('FACULTY') || rawRole.includes('TEACHER') || rawRole.includes('INSTRUCTOR') || Boolean(filters?.facultyId);
 
     const userId = user?.userId || user?.sub || user?.id || filters?.createdBy || filters?.facultyId || null;
     const validUserId = userId && this.isUUID(userId) ? userId : null;
@@ -634,7 +634,7 @@ export class ExaminationService {
           params.push(hodScope.departmentIds);
           pIdx++;
         }
-      } else {
+      } else if (isFaculty) {
         // Faculty strictly sees ONLY their prepared question papers (creator only)
         // Even once DQAC/HOD approved, it only shows to the particular creator faculty.
         // Matches flexibly across UUID, employee ID, and faculty profile.
@@ -686,7 +686,7 @@ export class ExaminationService {
         (hodScope?.departmentIds && hodScope.departmentIds.includes(filters.departmentId) && !filters.isExplicitDeptFilter)
       );
       if (!isHodProfileDept) {
-        whereClauses.push(`p.department_id::text = ${pIdx++}`);
+        whereClauses.push(`p.department_id::text = $${pIdx++}`);
         params.push(filters.departmentId);
       }
     }
@@ -783,7 +783,7 @@ export class ExaminationService {
     // Strict confidentiality check on paper preview
     if (user) {
       const rawRole = (user.role || '').toUpperCase();
-      const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL' || rawRole === 'SUPERADMIN';
+      const isAdmin = rawRole.includes('ADMIN') || rawRole.includes('PRINCIPAL') || rawRole === 'SUPER_ADMIN' || rawRole === 'COLLEGE_ADMIN' || rawRole === 'SUPERADMIN' || rawRole === 'ADMIN';
       const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
       const isDqac = rawRole === 'DQAC';
       const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
@@ -1729,7 +1729,7 @@ export class ExaminationService {
 
     if (user) {
       const rawRole = (user.role || '').toUpperCase();
-      const isAdmin = rawRole === 'SUPER_ADMIN' || rawRole === 'ADMIN' || rawRole === 'PRINCIPAL';
+      const isAdmin = rawRole.includes('ADMIN') || rawRole.includes('PRINCIPAL') || rawRole === 'SUPER_ADMIN' || rawRole === 'COLLEGE_ADMIN' || rawRole === 'SUPERADMIN' || rawRole === 'ADMIN';
       const isHod = rawRole === 'HOD' || rawRole === 'HEAD_OF_DEPARTMENT';
       const isFaculty = rawRole === 'FACULTY' || rawRole === 'TEACHER' || rawRole === 'INSTRUCTOR';
       const userId = user.userId || user.sub || user.id || null;

@@ -646,7 +646,11 @@ async function handleStudentAttendance(request: NextRequest) {
     };
 
     let targetSlug = (tenantSlug || '').toLowerCase().trim().replace(/^tenant_/, '').replace(/^tenant-/, '');
-    if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
+    const rawColgStr = String(colg_cd || '').trim().toLowerCase();
+
+    if (rawColgStr.includes('team') || targetSlug.includes('team')) {
+      targetSlug = 'team-university';
+    } else if (!targetSlug || targetSlug === '1' || targetSlug === '2' || targetSlug === '11') {
       targetSlug = srmsCollegeSlugMap[String(colg_cd || '1')] || (colg_cd && String(colg_cd).length > 2 ? String(colg_cd) : 'team-university');
     }
     const schema = `tenant_${targetSlug}`;

@@ -90,6 +90,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         }
       } catch {}
       const rawSlug = (localStorage.getItem('tenantSlug') || '').toLowerCase();
+      if (rawSlug.includes('mdis')) return '/icon.png';
       if (rawSlug.includes('srms')) return '/srms-logo.png';
     }
     return null;
@@ -222,6 +223,8 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         resolvedName = storedName || userBrandName || 'ROHILKHAND MEDICAL COLLEGE & HOSPITAL';
       } else if (slug === 'apex-tech' || slug.includes('apex')) {
         resolvedName = storedName || userBrandName || 'APEX INSTITUTE OF TECHNOLOGY & MANAGEMENT';
+      } else if (slug === 'mdis' || slug.includes('mdis')) {
+        resolvedName = storedName || userBrandName || 'MDIS';
       } else if (slug === 'unicamp-med') {
         resolvedName = storedName || userBrandName || 'UNICAMPUS MEDICAL COLLEGE & HOSPITAL';
       } else if (slug.startsWith('srms') || slug.includes('srms')) {
@@ -291,6 +294,11 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
           else if (colgObj.theme_config?.logo_url) logoUrl = colgObj.theme_config.logo_url;
         }
       } catch {}
+    }
+
+    // Default MDIS institutional logo
+    if (!logoUrl && (slug.startsWith('mdis') || slug.includes('mdis'))) {
+      logoUrl = '/icon.png';
     }
 
     // Default SRMS institutional logo ONLY for actual SRMS institutions
@@ -909,6 +917,15 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
                   <span>Course & Subject Linker</span>
+                </Link>
+              )}
+
+              {(isAllowed('admin_subject_merge') || isAllowed('admin_admin_master')) && (
+                <Link href="/dashboard/admin/admin-master?tab=subject-merge" data-active={isLinkActive('/dashboard/admin/admin-master?tab=subject-merge') ? 'true' : undefined} className={getLinkClass('/dashboard/admin/admin-master?tab=subject-merge')}>
+                  <svg className="w-4 h-4 shrink-0 transition-transform group-hover:scale-110 text-orange-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                  </svg>
+                  <span>Subject Merge Master</span>
                 </Link>
               )}
 

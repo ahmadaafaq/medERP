@@ -1,6 +1,6 @@
 import {
   IsString, IsOptional, IsBoolean, IsNumber,
-  IsUUID, MaxLength, IsArray, IsObject,
+  IsUUID, MaxLength, IsArray, IsObject, IsDateString,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional, PartialType } from '@nestjs/swagger';
 
@@ -335,6 +335,16 @@ export class CreateSubjectMasterDto {
   @IsOptional()
   @IsBoolean()
   isLongitudinal?: boolean;
+
+  @ApiPropertyOptional({ example: 'NO_LONGITUDINAL', enum: ['NO_LONGITUDINAL', 'IS_LONGITUDINAL', 'COMBINED'] })
+  @IsOptional()
+  @IsString()
+  attendance_status?: string;
+
+  @ApiPropertyOptional({ example: 'NO_LONGITUDINAL', enum: ['NO_LONGITUDINAL', 'IS_LONGITUDINAL', 'COMBINED'] })
+  @IsOptional()
+  @IsString()
+  attendanceStatus?: string;
 
   @ApiPropertyOptional()
   @IsOptional()
@@ -1084,6 +1094,53 @@ export class CreateSubjectOfferingDto {
   @IsOptional()
   @IsBoolean()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsArray()
+  items?: Array<{
+    dtype_id?: string;
+    dtypeId?: string;
+    dtype_code?: string;
+    dtypeCode?: string;
+    hours_allotted?: number;
+    hoursAllotted?: number;
+  }>;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section_id?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sectionId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section_code?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sectionCode?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sec_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  secCd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section?: string;
 }
 
 export class UpdateSubjectOfferingDto extends PartialType(CreateSubjectOfferingDto) {
@@ -1828,3 +1885,174 @@ export class SavePoPeoMatrixDto {
 
 
 
+
+// ─── ATTENDANCE POLICY & MBBS MODULE DTOS ──────────────────────────────────
+export class UpsertAttendancePolicyDto {
+  @ApiProperty({ example: 'B.Tech' })
+  @IsString()
+  courseCd: string;
+
+  @ApiPropertyOptional({ example: 'semester' })
+  @IsOptional()
+  @IsString()
+  academicSystem?: string;
+
+  @ApiPropertyOptional({ example: 'AICTE' })
+  @IsOptional()
+  @IsString()
+  regulator?: string;
+
+  @ApiPropertyOptional({ example: 75.0 })
+  @IsOptional()
+  @IsNumber()
+  minTheoryPct?: number;
+
+  @ApiPropertyOptional({ example: 80.0 })
+  @IsOptional()
+  @IsNumber()
+  minPracticalPct?: number;
+
+  @ApiPropertyOptional({ example: 80.0 })
+  @IsOptional()
+  @IsNumber()
+  minClinicalPct?: number;
+
+  @ApiPropertyOptional({ example: 75.0 })
+  @IsOptional()
+  @IsNumber()
+  minAggregatePct?: number;
+
+  @ApiPropertyOptional({ example: 'SEPARATE', enum: ['SEPARATE', 'AGGREGATE'] })
+  @IsOptional()
+  @IsString()
+  evalMode?: string;
+
+  @ApiPropertyOptional({ example: 65.0 })
+  @IsOptional()
+  @IsNumber()
+  condonationFloorPct?: number;
+
+  @ApiPropertyOptional({ example: 75.0 })
+  @IsOptional()
+  @IsNumber()
+  condonationMaxPct?: number;
+
+  @ApiPropertyOptional({ example: 'EXCLUDE_DENOMINATOR', enum: ['EXCLUDE_DENOMINATOR', 'COUNT_AS_PRESENT', 'NONE'] })
+  @IsOptional()
+  @IsString()
+  excuseLeavesMode?: string;
+}
+
+export class CreateSubjectMergeMappingDto {
+  @ApiPropertyOptional({ example: 'phase-uuid' })
+  @IsOptional()
+  @IsString()
+  phaseId?: string;
+
+  @ApiProperty({ example: 'major-subject-uuid' })
+  @IsString()
+  majorSubjectId: string;
+
+  @ApiProperty({ example: 'child-subject-uuid' })
+  @IsString()
+  childSubjectId: string;
+
+  @ApiPropertyOptional({ example: 'COMBINE', enum: ['COMBINE', 'SEPARATE'] })
+  @IsOptional()
+  @IsString()
+  mergeMode?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  colg_cd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  course_cd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  branch_cd?: string;
+
+  @ApiPropertyOptional({ example: '2024' })
+  @IsOptional()
+  @IsString()
+  batch_cd?: string;
+
+  @ApiPropertyOptional({ example: '5' })
+  @IsOptional()
+  @IsString()
+  semester_cd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  phase_cd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  sec_cd?: string;
+
+  @ApiPropertyOptional({ example: '2024' })
+  @IsOptional()
+  @IsString()
+  child_batch_cd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  child_semester_cd?: string;
+
+  @ApiPropertyOptional({ example: '1' })
+  @IsOptional()
+  @IsString()
+  child_sec_cd?: string;
+
+  @ApiPropertyOptional({ example: true })
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class UpdateSubjectMergeMappingDto extends PartialType(CreateSubjectMergeMappingDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+}
+
+export class CreateClinicalRotationDto {
+  @ApiProperty({ example: 'batch-uuid' })
+  @IsString()
+  batchId: string;
+
+  @ApiPropertyOptional({ example: 'phase-uuid' })
+  @IsOptional()
+  @IsString()
+  phaseId?: string;
+
+  @ApiProperty({ example: 'group-uuid' })
+  @IsString()
+  groupId: string;
+
+  @ApiProperty({ example: 'department-uuid' })
+  @IsString()
+  departmentId: string;
+
+  @ApiPropertyOptional({ example: 'General Medicine Rotation' })
+  @IsOptional()
+  @IsString()
+  postingName?: string;
+
+  @ApiProperty({ example: '2025-09-01' })
+  @IsDateString()
+  startDate: string;
+
+  @ApiProperty({ example: '2025-10-31' })
+  @IsDateString()
+  endDate: string;
+}

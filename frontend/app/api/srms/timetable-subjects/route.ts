@@ -16,8 +16,13 @@ async function handleSubjectsFetch(params: {
   const { course, branch, batch, semester, section, colgcd, slug } = params;
 
   if (slug && !isSrmsTenant(slug)) {
-    // Non-SRMS tenant: Load directly from PostgreSQL Subject Linker (faculty_subjects + subjects + faculty)
+    // Non-SRMS tenant: Load strictly from PostgreSQL Subject Linker (faculty_subjects + subjects + faculty) scoped by Course/Branch/Batch/Semester/Section
     const schema = `tenant_${slug}`;
+    const brStr = branch && branch > 0 ? String(branch) : '';
+    const batStr = batch && batch > 0 ? String(batch) : '';
+    const semStr = semester && semester > 0 ? String(semester) : '';
+    const secStr = section && section > 0 ? String(section) : '';
+
     let dbSubs = await queryDb(
       `SELECT 
         COALESCE(s.code, fs.subject_id) AS id,
@@ -47,8 +52,12 @@ async function handleSubjectsFetch(params: {
       WHERE fs.is_active = true
         AND (
           $1 = '' OR $1 = '0' OR $1 = 'all' OR
-          fs.course_cd = $1 OR s.course_cd = $1 OR s.course_id::text = $1 OR fs.course_cd IS NULL
+          fs.course_cd = $1 OR s.course_cd = $1 OR s.course_id::text = $1
         )
+        AND ($2 = '' OR COALESCE(fs.branch_cd, s.branch_cd, '') = '' OR COALESCE(fs.branch_cd, s.branch_cd) = $2)
+        AND ($3 = '' OR COALESCE(fs.batch_cd, s.batch_cd, '') = '' OR COALESCE(fs.batch_cd, s.batch_cd) = $3)
+        AND ($4 = '' OR COALESCE(fs.sem_cd, s.sem_cd, '') = '' OR regexp_replace(COALESCE(fs.sem_cd, s.sem_cd, ''), '\D', '', 'g') = $4)
+        AND ($5 = '' OR COALESCE(fs.section, '') = '' OR fs.section = $5)
       UNION ALL
       SELECT 
         s.code AS id,
@@ -71,23 +80,28 @@ async function handleSubjectsFetch(params: {
       FROM "${schema}".subjects s
       WHERE s.is_active IS NOT FALSE
         AND ($1 = '' OR $1 = '0' OR $1 = 'all' OR s.course_cd = $1 OR s.course_id::text = $1)
+        AND ($2 = '' OR COALESCE(s.branch_cd, '') = '' OR s.branch_cd = $2)
+        AND ($3 = '' OR COALESCE(s.batch_cd, '') = '' OR s.batch_cd = $3)
+        AND ($4 = '' OR COALESCE(s.sem_cd, '') = '' OR regexp_replace(COALESCE(s.sem_cd, ''), '\D', '', 'g') = $4)
         AND NOT EXISTS (
           SELECT 1 FROM "${schema}".faculty_subjects fs2
           WHERE (fs2.subject_id::text = s.id::text OR fs2.subject_id::text = s.code::text)
             AND fs2.is_active = true
         )
       ORDER BY name ASC`,
-      [course]
+      [course, brStr, batStr, semStr, secStr]
     ).catch(() => []);
 
     if (!dbSubs || dbSubs.length === 0) {
-      // Fallback to subjects table directly if faculty_subjects returned empty or does not exist
       dbSubs = await queryDb(
-        `SELECT id, code, name AS sub_name, name, code AS sub_cd, code AS linkcd, 'N' AS electivests
+        `SELECT id, code, name AS sub_name, name, code AS sub_cd, code AS linkcd, 'N' AS electivests,
+                course_cd, branch_cd, batch_cd, sem_cd
          FROM "${schema}".subjects
-         WHERE (course_cd = $1 OR course_id::text = $1 OR $1 = '13' OR $1 = '0' OR $1 = 'all')
+         WHERE ($1 = '' OR $1 = '0' OR $1 = 'all' OR course_cd = $1 OR course_id::text = $1)
+           AND ($2 = '' OR COALESCE(branch_cd, '') = '' OR branch_cd = $2)
+           AND ($3 = '' OR COALESCE(sem_cd, '') = '' OR regexp_replace(COALESCE(sem_cd, ''), '\D', '', 'g') = $3)
          ORDER BY name ASC`,
-        [course]
+        [course, brStr, semStr]
       ).catch(() => []);
     }
 

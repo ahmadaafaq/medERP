@@ -13,9 +13,9 @@ import {
   CreateBranchDto, UpdateBranchDto,
   CreateSessionDto, UpdateSessionDto,
   CreateProfessionalDto, UpdateProfessionalDto,
-  CreateGroupDto, UpdateGroupDto,
+  CreateGroupDto, UpdateGroupDto, AssignGroupMembersDto,
   CreateResidencyDto, UpdateResidencyDto,
-  UpdateHodScopeDto,
+  CreateSectionDto, UpdateSectionDto, UpdateHodScopeDto,
 } from './dto/college-master.dto';
 import { UserRole } from '../common/enums/role.enum';
 
@@ -2899,59 +2899,260 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str);
   }
 
-  async listGroups(tenantSlug?: string, batchId?: string, departmentId?: string, user?: any) {
+  private async ensureGroupTableColumns(slug: string) {
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `ALTER TABLE groups_master ADD COLUMN IF NOT EXISTS group_type VARCHAR(50) DEFAULT 'PRACTICAL';
+       ALTER TABLE groups_master ADD COLUMN IF NOT EXISTS subject_id UUID;
+       ALTER TABLE groups_master ADD COLUMN IF NOT EXISTS phase_id UUID;
+       ALTER TABLE groups_master ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+       ALTER TABLE groups_master ADD COLUMN IF NOT EXISTS section_id UUID;`,
+    ).catch(() => {});
+  }
+
+  async listGroups(
+    tenantSlug?: string,
+    batchId?: string,
+    departmentId?: string,
+    user?: any,
+    sectionId?: string,
+    courseId?: string,
+    semester?: string,
+  ) {
     if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
       tenantSlug = user.tenantSlug;
     }
     const slug = await this.resolveTenantSlug(tenantSlug);
-    const collegeId = await this.getCollegeIdBySlug(slug);
+    await this.ensureGroupTableColumns(slug);
+    const colleges = await this.listColleges(user, slug).catch(() => []);
+    const targetCollege = colleges.find(
+      (c: any) =>
+        c.slug === slug ||
+        c.code === slug ||
+        c.id === slug ||
+        (slug === 'srms-cet-bareilly' && String(c.code || c.colg_cd) === '1') ||
+        (slug === 'srms-ims' && String(c.code || c.colg_cd) === '11'),
+    ) || colleges[0];
+    const collegeId = targetCollege?.id || await this.getCollegeIdBySlug(slug);
+    const collegeName = targetCollege?.name || '';
+    const collegeCode = targetCollege?.code || (slug === 'srms-cet-bareilly' ? '1' : slug === 'srms-ims' ? '11' : '');
+
+    let resolvedCourse: { id: string; code?: string; course_cd?: string } | null = null;
+    if (courseId) {
+      const cRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, code, course_cd FROM courses WHERE id::text = $1 OR code = $1 OR course_cd = $1 LIMIT 1`,
+        [String(courseId).trim()],
+      ).catch(() => []);
+      resolvedCourse = cRows.length > 0 ? cRows[0] : null;
+    }
+
+    const resolvedBatchId = batchId
+      ? (this.isUUID(batchId) ? batchId : await this.resolveBatchUuid(slug, batchId, resolvedCourse?.course_cd || resolvedCourse?.code, resolvedCourse?.id))
+      : null;
+
+    let resolvedDeptId: string | null = null;
+    if (departmentId) {
+      if (this.isUUID(departmentId)) {
+        resolvedDeptId = departmentId;
+      } else {
+        const crsCd = resolvedCourse?.course_cd || resolvedCourse?.code || '';
+        const dRows = crsCd
+          ? await this.tenantSchemaService.queryInTenant(
+              slug,
+              `SELECT id FROM departments WHERE (code = $1 OR branch_cd = $1 OR name ILIKE $1) AND course_cd = $2 LIMIT 1`,
+              [String(departmentId).trim(), crsCd],
+            ).catch(() => [])
+          : [];
+        if (dRows.length > 0) {
+          resolvedDeptId = dRows[0].id;
+        } else {
+          resolvedDeptId = await this.resolveDeptUuid(slug, departmentId);
+        }
+      }
+    }
+
+    const resolvedSecId = sectionId
+      ? await this.resolveSectionUuid(slug, sectionId, {
+          batchId: resolvedBatchId,
+          courseId: resolvedCourse?.id || null,
+          departmentId: resolvedDeptId,
+          semester: semester || null,
+        })
+      : null;
+
     const params: any[] = [];
     let sql = `
       SELECT g.*, 
              b.code AS batch_code, b.year AS batch_year, b.course_cd AS batch_course_cd,
              c.code AS course_code, c.name AS course_name, c.course_cd AS course_cd,
-             d.name AS department_name, d.code AS department_code
+             d.name AS department_name, d.code AS department_code,
+             sub.name AS subject_name, sub.code AS subject_code,
+             pp.name AS phase_name,
+             sec.code AS section_code, sec.name AS section_name,
+             COALESCE((SELECT COUNT(*) FROM student_group_members sgm WHERE sgm.group_id = g.id AND sgm.is_active = true), 0)::int AS member_count
       FROM groups_master g
       LEFT JOIN batches b ON b.id = g.batch_id
       LEFT JOIN courses c ON (c.id = g.course_id OR c.course_cd = b.course_cd OR c.code = b.course_cd)
       LEFT JOIN departments d ON d.id = g.department_id
+      LEFT JOIN subjects sub ON sub.id = g.subject_id
+      LEFT JOIN professional_phases pp ON pp.id = g.phase_id
+      LEFT JOIN sections sec ON sec.id = g.section_id
       WHERE 1=1
     `;
-    if (batchId && this.isUUID(batchId)) {
-      params.push(batchId);
+    if (resolvedBatchId) {
+      params.push(resolvedBatchId);
       sql += ` AND g.batch_id = $${params.length}`;
     }
-    if (departmentId && this.isUUID(departmentId)) {
-      params.push(departmentId);
-      sql += ` AND g.department_id = $${params.length}`;
+    if (resolvedDeptId) {
+      params.push(resolvedDeptId);
+      sql += ` AND (g.department_id = $${params.length} OR g.department_id IS NULL)`;
+    }
+    if (sectionId) {
+      if (resolvedSecId) {
+        params.push(resolvedSecId);
+        params.push(String(sectionId).trim());
+        sql += ` AND g.is_active = true AND (g.section_id = $${params.length - 1} OR sec.id = $${params.length - 1} OR sec.code = $${params.length})`;
+      } else {
+        params.push(String(sectionId).trim());
+        sql += ` AND g.is_active = true AND (sec.code = $${params.length} OR g.section_id::text = $${params.length})`;
+      }
+    }
+    if (semester) {
+      const semTrim = semester.trim();
+      params.push(semTrim);
+      const semIdx = params.length;
+      const isProfSem = semTrim.toLowerCase().includes('professional') || semTrim.toLowerCase().includes('phase');
+      const numMatch = !isProfSem ? semTrim.match(/(\d+)/) : null;
+      if (numMatch) {
+        params.push(numMatch[1]);
+        sql += ` AND (LOWER(TRIM(COALESCE(g.semester, ''))) = LOWER(TRIM($${semIdx})) OR regexp_replace(COALESCE(g.semester, ''), '\\D', '', 'g') = $${semIdx + 1})`;
+      } else {
+        sql += ` AND LOWER(TRIM(COALESCE(g.semester, ''))) = LOWER(TRIM($${semIdx}))`;
+      }
     }
     sql += ` ORDER BY g.code ASC, g.name ASC`;
 
-    const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params);
-    return rows.map(r => ({ ...r, college_id: collegeId }));
+    const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params).catch(async () => {
+      return this.tenantSchemaService.queryInTenant(slug, `
+        SELECT g.*, 
+               b.code AS batch_code, b.year AS batch_year, b.course_cd AS batch_course_cd,
+               c.code AS course_code, c.name AS course_name, c.course_cd AS course_cd,
+               d.name AS department_name, d.code AS department_code,
+               sec.code AS section_code, sec.name AS section_name
+        FROM groups_master g
+        LEFT JOIN batches b ON b.id = g.batch_id
+        LEFT JOIN courses c ON (c.id = g.course_id OR c.course_cd = b.course_cd OR c.code = b.course_cd)
+        LEFT JOIN departments d ON d.id = g.department_id
+        LEFT JOIN sections sec ON sec.id = g.section_id
+        ORDER BY g.code ASC, g.name ASC
+      `, []);
+    });
+    return rows.map(r => ({
+      ...r,
+      college_id: collegeId || r.college_id,
+      college_name: collegeName || r.college_name || '',
+      college_code: collegeCode || '',
+      college_slug: slug,
+    }));
+  }
+
+  private async resolveBatchUuid(slug: string, batchRef?: string | null, courseCd?: string | null, courseId?: string | null): Promise<string | null> {
+    if (!batchRef) return null;
+    if (this.isUUID(batchRef)) return batchRef;
+    const refStr = String(batchRef).trim();
+    if (courseCd || courseId) {
+      const scoped = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM batches WHERE (code = $1 OR batch_cd = $1 OR year::text = $1) AND (course_cd = $2 OR course_id::text = $3) LIMIT 1`,
+        [refStr, courseCd || '', courseId || ''],
+      ).catch(async () => {
+        return this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM batches WHERE (code = $1 OR year::text = $1) AND course_cd = $2 LIMIT 1`,
+          [refStr, courseCd || ''],
+        ).catch(() => []);
+      });
+      if (scoped.length > 0) return scoped[0].id;
+    }
+    const bRows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM batches WHERE code = $1 OR batch_cd = $1 OR year::text = $1 LIMIT 1`,
+      [refStr],
+    ).catch(async () => {
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM batches WHERE code = $1 OR year::text = $1 LIMIT 1`,
+        [refStr],
+      ).catch(() => []);
+    });
+    return bRows.length > 0 ? bRows[0].id : null;
+  }
+
+  private async resolveDeptUuid(slug: string, deptRef?: string | null): Promise<string | null> {
+    if (!deptRef) return null;
+    if (this.isUUID(deptRef)) return deptRef;
+    const dRows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT id FROM departments WHERE code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
+      [String(deptRef)],
+    ).catch(async () => {
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM departments WHERE code = $1 OR name ILIKE $1 LIMIT 1`,
+        [String(deptRef)],
+      ).catch(() => []);
+    });
+    return dRows.length > 0 ? dRows[0].id : null;
+  }
+
+  private async resolveSectionUuid(
+    slug: string,
+    sectionRef?: string | null,
+    scope?: { batchId?: string | null; courseId?: string | null; departmentId?: string | null; semester?: string | null },
+  ): Promise<string | null> {
+    if (!sectionRef) return null;
+    if (this.isUUID(sectionRef)) return sectionRef;
+    const refStr = String(sectionRef).trim();
+    const numVal = /^\d+$/.test(refStr) ? Number(refStr) : 0;
+    const legacyAlpha = numVal >= 1 && numVal <= 10 ? String.fromCharCode(64 + numVal) : '';
+    const params: any[] = [refStr, legacyAlpha];
+    let sql = `SELECT id FROM sections WHERE (code = $1 OR ($2 <> '' AND UPPER(code) = $2) OR name ILIKE $1) AND is_active = true`;
+    if (scope?.batchId) {
+      params.push(scope.batchId);
+      sql += ` AND batch_id = $${params.length}`;
+    }
+    if (scope?.courseId) {
+      params.push(scope.courseId);
+      sql += ` AND course_id = $${params.length}`;
+    }
+    if (scope?.departmentId) {
+      params.push(scope.departmentId);
+      sql += ` AND department_id = $${params.length}`;
+    }
+    if (scope?.semester) {
+      params.push(scope.semester);
+      sql += ` AND LOWER(TRIM(semester)) = LOWER(TRIM($${params.length}))`;
+    }
+    sql += ` ORDER BY (CASE WHEN code = $1 THEN 0 ELSE 1 END), created_at DESC LIMIT 1`;
+    const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params).catch(() => []);
+    if (rows.length > 0) return rows[0].id;
+
+    if (scope?.batchId) {
+      const fb = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM sections WHERE (code = $1 OR ($3 <> '' AND UPPER(code) = $3) OR name ILIKE $1) AND batch_id = $2 AND is_active = true ORDER BY (CASE WHEN code = $1 THEN 0 ELSE 1 END), created_at DESC LIMIT 1`,
+        [refStr, scope.batchId, legacyAlpha],
+      ).catch(() => []);
+      if (fb.length > 0) return fb[0].id;
+    }
+    return null;
   }
 
   async createGroup(dto: CreateGroupDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    let validBatchId = this.isUUID(dto.batchId) ? dto.batchId : null;
-    if (!validBatchId && dto.batchId) {
-      const bRows = await this.tenantSchemaService.queryInTenant(
-        slug,
-        `SELECT id FROM batches WHERE code = $1 OR batch_cd = $1 LIMIT 1`,
-        [String(dto.batchId)],
-      ).catch(() => []);
-      if (bRows.length > 0) validBatchId = bRows[0].id;
-    }
-
-    let validDeptId = this.isUUID(dto.departmentId) ? dto.departmentId : null;
-    if (!validDeptId && dto.departmentId) {
-      const dRows = await this.tenantSchemaService.queryInTenant(
-        slug,
-        `SELECT id FROM departments WHERE code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
-        [String(dto.departmentId)],
-      ).catch(() => []);
-      if (dRows.length > 0) validDeptId = dRows[0].id;
-    }
+    const validBatchId = await this.resolveBatchUuid(slug, dto.batchId);
+    const validDeptId = await this.resolveDeptUuid(slug, dto.departmentId);
 
     let validCourseId = this.isUUID(dto.courseId) ? dto.courseId : null;
     if (!validCourseId && dto.courseId) {
@@ -2963,39 +3164,74 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       if (cRows.length > 0) validCourseId = cRows[0].id;
     }
 
+    let validSubjectId = this.isUUID(dto.subjectId || dto.subject_id) ? (dto.subjectId || dto.subject_id) : null;
+    if (!validSubjectId && (dto.subjectId || dto.subject_id)) {
+      const sRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM subjects WHERE code = $1 OR sub_cd = $1 OR name ILIKE $1 LIMIT 1`,
+        [String(dto.subjectId || dto.subject_id)],
+      ).catch(() => []);
+      if (sRows.length > 0) validSubjectId = sRows[0].id;
+    }
+
+    const validPhaseId = this.isUUID(dto.phaseId || dto.phase_id) ? (dto.phaseId || dto.phase_id) : null;
+    const semester = dto.semester || dto.sem_cd || null;
+    const validSectionId = await this.resolveSectionUuid(slug, dto.sectionId || dto.section_id, {
+      batchId: validBatchId,
+      courseId: validCourseId,
+      departmentId: validDeptId,
+      semester,
+    });
+    if (!validSectionId) {
+      throw new BadRequestException(
+        'Section is required. Please select a linked Section from Section Master before saving a Student Group.',
+      );
+    }
     const validCollegeId = this.isUUID(dto.collegeId) ? dto.collegeId : null;
+    const groupType = dto.groupType || dto.group_type || 'PRACTICAL';
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO groups_master (code, name, college_id, course_id, batch_id, department_id, capacity, is_active)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+      `INSERT INTO groups_master (code, name, college_id, course_id, batch_id, department_id, subject_id, phase_id, section_id, semester, group_type, capacity, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, true)
        RETURNING *`,
-      [dto.code.toUpperCase(), dto.name, validCollegeId, validCourseId, validBatchId, validDeptId, dto.capacity || 50],
-    );
-    return rows[0];
+      [dto.code.toUpperCase(), dto.name, validCollegeId, validCourseId, validBatchId, validDeptId, validSubjectId, validPhaseId, validSectionId, semester, groupType, dto.capacity || 50],
+    ).catch(async () => {
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO groups_master (code, name, college_id, course_id, batch_id, department_id, subject_id, group_type, capacity, is_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true)
+         RETURNING *`,
+        [dto.code.toUpperCase(), dto.name, validCollegeId, validCourseId, validBatchId, validDeptId, validSubjectId, groupType, dto.capacity || 50],
+      ).catch(async () => {
+        return this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO groups_master (code, name, college_id, course_id, batch_id, department_id, capacity, is_active)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, true)
+           RETURNING *`,
+          [dto.code.toUpperCase(), dto.name, validCollegeId, validCourseId, validBatchId, validDeptId, dto.capacity || 50],
+        );
+      });
+    });
+
+    const createdGroup = rows[0];
+    let assignedCount = 0;
+    if (createdGroup && dto.studentIds && dto.studentIds.length > 0) {
+      const assignRes = await this.assignGroupMembers(
+        createdGroup.id,
+        { studentIds: dto.studentIds, groupType },
+        slug,
+      ).catch(() => ({ assignedCount: 0 }));
+      assignedCount = assignRes?.assignedCount || 0;
+    }
+
+    return { ...createdGroup, assignedCount };
   }
 
   async updateGroup(id: string, dto: UpdateGroupDto, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
-    let validBatchId = dto.batchId !== undefined ? (this.isUUID(dto.batchId) ? dto.batchId : null) : undefined;
-    if (dto.batchId && !validBatchId) {
-      const bRows = await this.tenantSchemaService.queryInTenant(
-        slug,
-        `SELECT id FROM batches WHERE code = $1 OR batch_cd = $1 LIMIT 1`,
-        [String(dto.batchId)],
-      ).catch(() => []);
-      if (bRows.length > 0) validBatchId = bRows[0].id;
-    }
-
-    let validDeptId = dto.departmentId !== undefined ? (this.isUUID(dto.departmentId) ? dto.departmentId : null) : undefined;
-    if (dto.departmentId && !validDeptId) {
-      const dRows = await this.tenantSchemaService.queryInTenant(
-        slug,
-        `SELECT id FROM departments WHERE code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
-        [String(dto.departmentId)],
-      ).catch(() => []);
-      if (dRows.length > 0) validDeptId = dRows[0].id;
-    }
+    const validBatchId = dto.batchId !== undefined ? await this.resolveBatchUuid(slug, dto.batchId) : undefined;
+    const validDeptId = dto.departmentId !== undefined ? await this.resolveDeptUuid(slug, dto.departmentId) : undefined;
 
     let validCourseId = dto.courseId !== undefined ? (this.isUUID(dto.courseId) ? dto.courseId : null) : undefined;
     if (dto.courseId && !validCourseId) {
@@ -3007,26 +3243,122 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       if (cRows.length > 0) validCourseId = cRows[0].id;
     }
 
+    const hasSubjectField = dto.subjectId !== undefined || dto.subject_id !== undefined;
+    const rawSubRef = dto.subjectId !== undefined ? dto.subjectId : dto.subject_id;
+    let validSubjectId: string | null | undefined = hasSubjectField ? (this.isUUID(rawSubRef) ? rawSubRef : null) : undefined;
+    if (rawSubRef && !validSubjectId) {
+      const sRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM subjects WHERE code = $1 OR sub_cd = $1 OR name ILIKE $1 LIMIT 1`,
+        [String(rawSubRef)],
+      ).catch(() => []);
+      if (sRows.length > 0) validSubjectId = sRows[0].id;
+    }
+
+    const validPhaseId = dto.phaseId !== undefined ? (this.isUUID(dto.phaseId) ? dto.phaseId : null) : undefined;
+    const semester = dto.semester !== undefined ? dto.semester : undefined;
+    const hasSectionField = dto.sectionId !== undefined || dto.section_id !== undefined;
+    const rawSectionRef = dto.sectionId !== undefined ? dto.sectionId : dto.section_id;
+    const validSectionId = hasSectionField
+      ? await this.resolveSectionUuid(slug, rawSectionRef, {
+          batchId: validBatchId ?? undefined,
+          courseId: validCourseId ?? undefined,
+          departmentId: validDeptId ?? undefined,
+          semester: semester ?? undefined,
+        })
+      : undefined;
+    if (hasSectionField && !validSectionId) {
+      throw new BadRequestException(
+        'A valid linked Section from Section Master is required for Student Group Master.',
+      );
+    }
+    const groupType = dto.groupType || dto.group_type;
+
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
       `UPDATE groups_master
        SET code = COALESCE($1, code),
            name = COALESCE($2, name),
-           course_id = COALESCE($3, course_id),
-           batch_id = COALESCE($4, batch_id),
-           department_id = COALESCE($5, department_id),
-           capacity = COALESCE($6, capacity),
-           is_active = COALESCE($7, is_active)
-       WHERE id = $8
+           course_id = CASE WHEN $13::boolean THEN $3 ELSE course_id END,
+           batch_id = CASE WHEN $14::boolean THEN $4 ELSE batch_id END,
+           department_id = CASE WHEN $15::boolean THEN $5 ELSE department_id END,
+           subject_id = CASE WHEN $16::boolean THEN $6 ELSE subject_id END,
+           phase_id = CASE WHEN $17::boolean THEN $7 ELSE phase_id END,
+           section_id = CASE WHEN $18::boolean THEN $19::uuid ELSE section_id END,
+           semester = COALESCE($8, semester),
+           group_type = COALESCE($9, group_type),
+           capacity = COALESCE($10, capacity),
+           is_active = COALESCE($11, is_active)
+       WHERE id = $12
        RETURNING *`,
-      [dto.code ? dto.code.toUpperCase() : undefined, dto.name, validCourseId, validBatchId, validDeptId, dto.capacity, dto.isActive, id],
-    );
+      [
+        dto.code ? dto.code.toUpperCase() : undefined,
+        dto.name,
+        validCourseId ?? null,
+        validBatchId ?? null,
+        validDeptId ?? null,
+        validSubjectId ?? null,
+        validPhaseId ?? null,
+        semester,
+        groupType,
+        dto.capacity,
+        dto.isActive,
+        id,
+        dto.courseId !== undefined,
+        dto.batchId !== undefined,
+        dto.departmentId !== undefined,
+        hasSubjectField,
+        dto.phaseId !== undefined,
+        hasSectionField,
+        validSectionId ?? null,
+      ],
+    ).catch(async () => {
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `UPDATE groups_master
+         SET code = COALESCE($1, code),
+             name = COALESCE($2, name),
+             course_id = COALESCE($3, course_id),
+             batch_id = COALESCE($4, batch_id),
+             department_id = COALESCE($5, department_id),
+             capacity = COALESCE($6, capacity),
+             is_active = COALESCE($7, is_active)
+         WHERE id = $8
+         RETURNING *`,
+        [dto.code ? dto.code.toUpperCase() : undefined, dto.name, validCourseId, validBatchId, validDeptId, dto.capacity, dto.isActive, id],
+      );
+    });
     if (rows.length === 0) throw new NotFoundException('Group not found');
-    return rows[0];
+
+    const updatedGroup = rows[0];
+    if (dto.studentIds !== undefined) {
+      if (dto.replaceMembers) {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `DELETE FROM student_group_members WHERE group_id = $1`,
+          [id],
+        ).catch(() => {});
+      }
+      if (dto.studentIds.length > 0) {
+        await this.assignGroupMembers(
+          id,
+          { studentIds: dto.studentIds, groupType: groupType || updatedGroup.group_type || 'PRACTICAL' },
+          slug,
+        ).catch(() => {});
+      }
+    }
+
+    return updatedGroup;
   }
 
   async deleteGroup(id: string, tenantSlug?: string) {
     const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM student_group_members WHERE group_id = $1`,
+      [id],
+    ).catch(() => {});
+
     await this.tenantSchemaService.queryInTenant(
       slug,
       `DELETE FROM groups_master WHERE id = $1`,
@@ -3035,7 +3367,403 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     return { success: true, message: 'Group deleted successfully' };
   }
 
-  // ─── 9. RESIDENCIES MASTER (HOSTEL / RESIDENCY CATEGORIES) ────────────────
+  // ─── 8b. STUDENT GROUP MEMBERS ALLOCATION ─────────────────────────────────
+  async getGroupMembers(groupId: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT sgm.id AS membership_id,
+              sgm.student_id,
+              sgm.group_id,
+              sgm.group_type,
+              sgm.from_date,
+              sgm.to_date,
+              sgm.is_active,
+              s.name AS student_name,
+              s.rollno,
+              s.registration_no,
+              s.batch_cd,
+              s.course_cd,
+              s.photo_url
+       FROM student_group_members sgm
+       JOIN students s ON s.id = sgm.student_id
+       WHERE sgm.group_id = $1 AND sgm.is_active = true
+       ORDER BY s.rollno ASC, s.name ASC`,
+      [groupId],
+    ).catch(() => []);
+    return rows;
+  }
+
+  async assignGroupMembers(groupId: string, dto: AssignGroupMembersDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+
+    const grpRows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM groups_master WHERE id = $1 LIMIT 1`,
+      [groupId],
+    ).catch(() => []);
+    if (!grpRows.length) throw new NotFoundException('Group not found');
+    const group = grpRows[0];
+    const groupType = dto.groupType || group.group_type || 'PRACTICAL';
+
+    let studentUuids: string[] = [];
+
+    // 1. Direct studentIds provided
+    if (dto.studentIds && dto.studentIds.length > 0) {
+      const validUuids = dto.studentIds.filter(id => this.isUUID(id));
+      const nonUuids = dto.studentIds.filter(id => !this.isUUID(id));
+      if (nonUuids.length > 0) {
+        const resolved = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM students WHERE rollno = ANY($1) OR registration_no = ANY($1)`,
+          [nonUuids],
+        ).catch(() => []);
+        studentUuids = [...validUuids, ...resolved.map((r: any) => r.id)];
+      } else {
+        studentUuids = validUuids;
+      }
+    }
+
+    // 2. Roll number range provided (e.g., startRollNo: '1', endRollNo: '35')
+    if (dto.startRollNo && dto.endRollNo) {
+      const batchCond = group.batch_id
+        ? `AND (s.batch_id::text = $3::text OR s.batch_cd::text = ANY(ARRAY[(SELECT code FROM batches WHERE id = $3 LIMIT 1), (SELECT year::text FROM batches WHERE id = $3 LIMIT 1)]))`
+        : '';
+      const params: any[] = [dto.startRollNo, dto.endRollNo];
+      if (group.batch_id) params.push(group.batch_id);
+
+      const rangeStudents = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT s.id FROM students s
+         WHERE (
+           (s.rollno ~ '^[0-9]+$' AND $1 ~ '^[0-9]+$' AND $2 ~ '^[0-9]+$' AND s.rollno::bigint BETWEEN $1::bigint AND $2::bigint)
+           OR (s.rollno >= $1 AND s.rollno <= $2)
+           OR (s.registration_no >= $1 AND s.registration_no <= $2)
+         )
+         ${batchCond}`,
+        params,
+      ).catch(() => []);
+      const rangeIds = rangeStudents.map((r: any) => r.id);
+      studentUuids = Array.from(new Set([...studentUuids, ...rangeIds]));
+    }
+
+    if (studentUuids.length === 0) {
+      return { success: false, message: 'No matching students found to assign', assignedCount: 0 };
+    }
+
+    // 2b. Enforce uniqueness for sub-groups (A–P) only: Group ALL is an umbrella batch group
+    // and never conflicts with sub-groups A–P (and vice versa).
+    const currentGroupCode = String(group.code || '').trim().toUpperCase();
+    const isAllGroup = currentGroupCode === 'ALL';
+    const conflictRows = isAllGroup
+      ? []
+      : await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT DISTINCT sgm.student_id
+           FROM student_group_members sgm
+           JOIN groups_master g ON g.id = sgm.group_id
+           WHERE sgm.student_id = ANY($1::uuid[])
+             AND sgm.is_active = true
+             AND g.id <> $2::uuid
+             AND UPPER(COALESCE(g.code, '')) <> 'ALL'
+             AND UPPER(COALESCE(sgm.group_type, g.group_type, 'PRACTICAL')) = UPPER($3)
+             AND (
+               ($4::uuid IS NOT NULL AND g.subject_id = $4::uuid)
+               OR ($4::uuid IS NULL AND g.subject_id IS NULL)
+             )`,
+          [studentUuids, groupId, groupType, group.subject_id || null],
+        ).catch(() => []);
+
+    const conflictedIds = new Set(conflictRows.map((r: any) => String(r.student_id)));
+    const eligibleUuids = studentUuids.filter((id) => !conflictedIds.has(String(id)));
+
+    if (eligibleUuids.length === 0) {
+      return {
+        success: false,
+        message: 'Selected student(s) are already allocated to another group for this Subject & Purpose Type',
+        assignedCount: 0,
+      };
+    }
+
+    // 3. Upsert student group memberships
+    let assigned = 0;
+    for (const stId of eligibleUuids) {
+      await this.tenantSchemaService.queryInTenant(
+        slug,
+        `INSERT INTO student_group_members (student_id, group_id, group_type, from_date, to_date, is_active)
+         VALUES ($1, $2, $3, $4, $5, true)
+         ON CONFLICT (student_id, group_id) DO UPDATE
+           SET group_type = EXCLUDED.group_type,
+               from_date = COALESCE(EXCLUDED.from_date, student_group_members.from_date),
+               to_date = COALESCE(EXCLUDED.to_date, student_group_members.to_date),
+               is_active = true,
+               updated_at = NOW()`,
+        [stId, groupId, groupType, dto.fromDate || null, dto.toDate || null],
+      ).catch(async () => {
+        await this.tenantSchemaService.queryInTenant(
+          slug,
+          `DELETE FROM student_group_members WHERE student_id = $1 AND group_id = $2`,
+          [stId, groupId],
+        ).catch(() => {});
+        return this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO student_group_members (student_id, group_id, group_type, from_date, to_date, is_active)
+           VALUES ($1, $2, $3, $4, $5, true)`,
+          [stId, groupId, groupType, dto.fromDate || null, dto.toDate || null],
+        );
+      });
+      assigned++;
+    }
+
+    return {
+      success: true,
+      message: `Successfully assigned ${assigned} student(s) to group ${group.name}`,
+      assignedCount: assigned,
+    };
+  }
+
+  async removeGroupMember(groupId: string, studentId: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM student_group_members WHERE group_id = $1 AND (student_id = $2 OR student_id::text = $2)`,
+      [groupId, studentId],
+    );
+    return { success: true, message: 'Student removed from group successfully' };
+  }
+
+  async getBatchStudentsForGroupAllocation(
+    batchId: string,
+    tenantSlug?: string,
+    subjectId?: string,
+    groupType?: string,
+    currentGroupId?: string,
+    courseId?: string,
+    departmentId?: string,
+    groupCode?: string,
+    sectionId?: string,
+  ) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+
+    // Resolve batch identifiers safely (id, code, batch_cd, year) across SRMS & standalone schemas
+    const bMeta = batchId
+      ? await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id::text, code, COALESCE(batch_cd, code) AS batch_cd, year::text AS year FROM batches WHERE id::text = $1 OR code = $1 OR batch_cd = $1 OR year::text = $1 LIMIT 1`,
+          [batchId],
+        ).catch(async () => {
+          return this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id::text, code, code AS batch_cd, year::text AS year FROM batches WHERE id::text = $1 OR code = $1 OR year::text = $1 LIMIT 1`,
+            [batchId],
+          ).catch(() => []);
+        })
+      : [];
+
+    const batchKeys = Array.from(
+      new Set(
+        [batchId, bMeta[0]?.id, bMeta[0]?.code, bMeta[0]?.batch_cd, bMeta[0]?.year]
+          .filter(Boolean)
+          .map((v) => String(v).trim()),
+      ),
+    );
+
+    // Resolve optional course keys
+    let courseKeys: string[] = [];
+    if (courseId && courseId !== 'all') {
+      const cMeta = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id::text, code, course_cd, name FROM courses WHERE id::text = $1 OR code = $1 OR course_cd = $1 LIMIT 1`,
+        [courseId],
+      ).catch(() => []);
+      courseKeys = Array.from(
+        new Set(
+          [courseId, cMeta[0]?.id, cMeta[0]?.code, cMeta[0]?.course_cd, cMeta[0]?.name]
+            .filter(Boolean)
+            .map((v) => String(v).trim()),
+        ),
+      );
+    }
+
+    // Resolve optional department/branch keys
+    let deptKeys: string[] = [];
+    if (departmentId && departmentId !== 'all') {
+      const dMeta = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id::text, code, COALESCE(branch_cd, code) AS branch_cd, name FROM departments WHERE id::text = $1 OR code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
+        [departmentId],
+      ).catch(async () => {
+        return this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id::text, code, code AS branch_cd, name FROM departments WHERE id::text = $1 OR code = $1 OR name ILIKE $1 LIMIT 1`,
+          [departmentId],
+        ).catch(() => []);
+      });
+      deptKeys = Array.from(
+        new Set(
+          [departmentId, dMeta[0]?.id, dMeta[0]?.code, dMeta[0]?.branch_cd, dMeta[0]?.name]
+            .filter(Boolean)
+            .map((v) => String(v).trim()),
+        ),
+      );
+    }
+
+    const params: any[] = [batchKeys];
+    let extraWhere = '';
+
+    if (courseKeys.length > 0) {
+      params.push(courseKeys);
+      const cIdx = params.length;
+      extraWhere += ` AND (
+        s.course_cd::text = ANY($${cIdx}::text[])
+        OR sa.course_id::text = ANY($${cIdx}::text[])
+        OR sa.course_code::text = ANY($${cIdx}::text[])
+        OR (s.course_cd IS NULL AND sa.course_code IS NULL)
+      )`;
+    }
+
+    if (deptKeys.length > 0) {
+      params.push(deptKeys);
+      const dIdx = params.length;
+      extraWhere += ` AND (
+        s.department_id::text = ANY($${dIdx}::text[])
+        OR s.branch_id::text = ANY($${dIdx}::text[])
+        OR sa.branch_id::text = ANY($${dIdx}::text[])
+        OR sa.branch_code::text = ANY($${dIdx}::text[])
+        OR sa.branch_name::text = ANY($${dIdx}::text[])
+        OR (s.department_id IS NULL AND (s.branch_id IS NULL OR s.branch_id = '') AND sa.branch_id IS NULL AND sa.branch_code IS NULL)
+      )`;
+    }
+
+    // Filter by sectionId when provided — avoids returning all 250 students (both sections) instead of 125 for one section
+    if (sectionId && sectionId !== '' && sectionId !== '0' && sectionId !== 'all') {
+      const secMeta = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id::text, code, COALESCE(name, code) AS name FROM sections WHERE id::text = $1 OR code = $1 LIMIT 1`,
+        [sectionId],
+      ).catch(() => []);
+      if (secMeta.length > 0) {
+        const secKeys = Array.from(new Set([sectionId, secMeta[0]?.id, secMeta[0]?.code].filter(Boolean).map((v) => String(v).trim())));
+        params.push(secKeys);
+        const secIdx = params.length;
+        extraWhere += ` AND (
+          sa.section_id::text = ANY($${secIdx}::text[])
+          OR sa.section_code = ANY($${secIdx}::text[])
+          OR sa.section = ANY($${secIdx}::text[])
+          OR s.section_id::text = ANY($${secIdx}::text[])
+          OR s.section_code = ANY($${secIdx}::text[])
+        )`;
+      }
+    }
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `WITH matched_students AS (
+         SELECT DISTINCT ON (COALESCE(NULLIF(TRIM(s.registration_no), ''), NULLIF(TRIM(s.rollno), ''), s.id::text))
+                s.id, s.name, s.rollno, s.registration_no, s.batch_cd, s.course_cd,
+                COALESCE(
+                  sa.branch_code,
+                  (SELECT COALESCE(d.code, d.branch_cd) FROM departments d WHERE (d.id::text = s.department_id::text OR ((d.code::text = s.branch_id::text OR d.branch_cd::text = s.branch_id::text) AND (d.course_cd IS NULL OR d.course_cd::text = s.course_cd::text))) LIMIT 1),
+                  s.branch_id
+                ) AS branch_code,
+                COALESCE(
+                  sa.branch_name,
+                  (SELECT d.name FROM departments d WHERE (d.id::text = s.department_id::text OR ((d.code::text = s.branch_id::text OR d.branch_cd::text = s.branch_id::text) AND (d.course_cd IS NULL OR d.course_cd::text = s.course_cd::text))) LIMIT 1)
+                ) AS department_name
+         FROM students s
+         LEFT JOIN student_admissions sa ON sa.student_id::text = s.id::text
+         WHERE (
+           s.batch_id::text = ANY($1::text[])
+           OR s.batch_cd::text = ANY($1::text[])
+           OR sa.batch_id::text = ANY($1::text[])
+           OR sa.batch_code::text = ANY($1::text[])
+         )
+         ${extraWhere}
+         ORDER BY COALESCE(NULLIF(TRIM(s.registration_no), ''), NULLIF(TRIM(s.rollno), ''), s.id::text), s.id DESC
+       )
+       SELECT ms.id, ms.name, ms.rollno, ms.registration_no, ms.batch_cd, ms.course_cd,
+              ms.branch_code, ms.department_name,
+              COALESCE(
+                json_agg(
+                  json_build_object(
+                    'group_id', g.id,
+                    'group_code', g.code,
+                    'group_name', g.name,
+                    'group_type', sgm.group_type,
+                    'subject_id', g.subject_id
+                  )
+                ) FILTER (WHERE g.id IS NOT NULL AND sgm.is_active = true),
+                '[]'::json
+              ) AS active_groups
+       FROM matched_students ms
+       LEFT JOIN student_group_members sgm ON sgm.student_id = ms.id AND sgm.is_active = true
+       LEFT JOIN groups_master g ON g.id = sgm.group_id
+       GROUP BY ms.id, ms.name, ms.rollno, ms.registration_no, ms.batch_cd, ms.course_cd, ms.branch_code, ms.department_name
+       ORDER BY ms.rollno ASC, ms.name ASC`,
+      params,
+    ).catch(async () => {
+      // Fallback query if student_admissions or departments.branch_cd is missing
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT s.id, s.name, s.rollno, s.registration_no, s.batch_cd, s.course_cd,
+                COALESCE(
+                  json_agg(
+                    json_build_object(
+                      'group_id', g.id,
+                      'group_code', g.code,
+                      'group_name', g.name,
+                      'group_type', sgm.group_type,
+                      'subject_id', g.subject_id
+                    )
+                  ) FILTER (WHERE g.id IS NOT NULL AND sgm.is_active = true),
+                  '[]'::json
+                ) AS active_groups
+         FROM students s
+         LEFT JOIN student_group_members sgm ON sgm.student_id = s.id AND sgm.is_active = true
+         LEFT JOIN groups_master g ON g.id = sgm.group_id
+         WHERE (s.batch_id::text = ANY($1::text[]) OR s.batch_cd::text = ANY($1::text[]))
+         GROUP BY s.id, s.name, s.rollno, s.registration_no, s.batch_cd, s.course_cd
+         ORDER BY s.rollno ASC, s.name ASC`,
+        [batchKeys],
+      ).catch(() => []);
+    });
+
+    return rows.map((st: any) => {
+      const activeGrps = Array.isArray(st.active_groups) ? st.active_groups : [];
+      const targetSubId = subjectId ? String(subjectId).trim() : '';
+      const targetGrpType = (groupType || 'PRACTICAL').toUpperCase();
+      const targetIsAll = String(groupCode || '').trim().toUpperCase() === 'ALL';
+
+      const isInCurrentGroup = currentGroupId
+        ? activeGrps.some((ag: any) => String(ag.group_id) === String(currentGroupId))
+        : false;
+
+      // Group ALL never blocks creating sub-groups (A–P), and sub-groups never block Group ALL.
+      const conflictingGroup = targetIsAll
+        ? undefined
+        : activeGrps.find((ag: any) => {
+            if (currentGroupId && String(ag.group_id) === String(currentGroupId)) return false;
+            if (String(ag.group_code || '').trim().toUpperCase() === 'ALL') return false;
+            if (String(ag.group_type || 'PRACTICAL').toUpperCase() !== targetGrpType) return false;
+            if (targetSubId) {
+              return ag.subject_id && String(ag.subject_id) === targetSubId;
+            }
+            // When selecting All Subjects / General, exclude students already in another General sub-group of the same purpose type
+            return !ag.subject_id;
+          });
+
+      return {
+        ...st,
+        is_in_current_group: isInCurrentGroup,
+        is_assigned_to_same_subject: !!conflictingGroup,
+        already_assigned_group_code: conflictingGroup ? conflictingGroup.group_code : null,
+        already_assigned_group_name: conflictingGroup ? conflictingGroup.group_name : null,
+      };
+    });
+  }
+
+
+    // ─── 9. RESIDENCIES MASTER (HOSTEL / RESIDENCY CATEGORIES) ────────────────
   private async ensureResidencyTable(slug: string) {
     await this.tenantSchemaService.queryInTenant(
       slug,
@@ -3372,4 +4100,297 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       linkedDepartments: updatedLinked,
     };
   }
+
+  // ─── 10. SECTIONS MASTER ──────────────────────────────────────────────────
+  async listSections(
+    batchId?: string,
+    tenantSlug?: string,
+    user?: any,
+    courseId?: string,
+    departmentId?: string,
+    semester?: string,
+    onlyLinked = false,
+  ) {
+    if (user && user.role && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) {
+      tenantSlug = user.tenantSlug;
+    }
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const colleges = await this.listColleges(user, slug).catch(() => []);
+    const targetCollege = colleges.find(
+      (c: any) =>
+        c.slug === slug ||
+        c.code === slug ||
+        c.id === slug ||
+        (slug === 'srms-cet-bareilly' && String(c.code || c.colg_cd) === '1') ||
+        (slug === 'srms-ims' && String(c.code || c.colg_cd) === '11'),
+    ) || colleges[0];
+    const collegeId = targetCollege?.id || await this.getCollegeIdBySlug(slug);
+    const collegeName = targetCollege?.name || '';
+    const collegeCode = targetCollege?.code || (slug === 'srms-cet-bareilly' ? '1' : slug === 'srms-ims' ? '11' : '');
+
+    // Ensure schema columns exist dynamically
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `ALTER TABLE sections ADD COLUMN IF NOT EXISTS college_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS course_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS department_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS phase_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS semester VARCHAR(50);`,
+    ).catch(() => {});
+
+    let resolvedCourse: { id: string; code?: string; course_cd?: string } | null = null;
+    if (courseId) {
+      const cRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id, code, course_cd FROM courses WHERE id::text = $1 OR code = $1 OR course_cd = $1 LIMIT 1`,
+        [String(courseId).trim()],
+      ).catch(() => []);
+      resolvedCourse = cRows.length > 0 ? cRows[0] : null;
+      if (!resolvedCourse) return [];
+    }
+
+    let resolvedBatchId: string | null = null;
+    if (batchId) {
+      resolvedBatchId = await this.resolveBatchUuid(
+        slug,
+        batchId,
+        resolvedCourse?.course_cd || resolvedCourse?.code,
+        resolvedCourse?.id,
+      );
+      if (!resolvedBatchId) return [];
+    }
+
+    let resolvedDept: { id: string; code?: string; branch_cd?: string; name?: string } | null = null;
+    if (departmentId) {
+      const deptStr = String(departmentId).trim();
+      const crsCd = resolvedCourse?.course_cd || resolvedCourse?.code || '';
+      const dRows = crsCd && !this.isUUID(deptStr)
+        ? await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id, code, branch_cd, name FROM departments WHERE (id::text = $1 OR code = $1 OR branch_cd = $1 OR name ILIKE $1) ORDER BY (CASE WHEN course_cd = $2 THEN 0 ELSE 1 END) ASC LIMIT 1`,
+            [deptStr, crsCd],
+          ).catch(() => [])
+        : await this.tenantSchemaService.queryInTenant(
+            slug,
+            `SELECT id, code, branch_cd, name FROM departments WHERE id::text = $1 OR code = $1 OR branch_cd = $1 OR name ILIKE $1 LIMIT 1`,
+            [deptStr],
+          ).catch(() => []);
+      resolvedDept = dRows.length > 0 ? dRows[0] : null;
+      if (!resolvedDept) return [];
+    }
+
+    const params: any[] = [];
+    let sql = `
+      SELECT s.*,
+             b.code AS batch_code, b.year AS batch_year, b.course_cd AS batch_course_cd,
+             c.code AS course_code, c.name AS course_name, c.course_cd AS course_cd,
+             d.name AS department_name, d.code AS department_code,
+             pp.name AS phase_name,
+             COALESCE((SELECT COUNT(*) FROM groups_master gm WHERE gm.section_id = s.id AND gm.is_active = true), 0)::int AS group_count
+      FROM sections s
+      LEFT JOIN batches b ON b.id = s.batch_id
+      LEFT JOIN courses c ON (c.id = s.course_id OR (s.course_id IS NULL AND (c.course_cd = b.course_cd OR c.code = b.course_cd)))
+      LEFT JOIN departments d ON d.id = s.department_id
+      LEFT JOIN professional_phases pp ON pp.id = s.phase_id
+      WHERE 1=1
+    `;
+    if (onlyLinked) {
+      sql += ` AND s.is_active = true AND s.department_id IS NOT NULL AND s.semester IS NOT NULL AND TRIM(s.semester) <> ''`;
+    }
+    if (resolvedBatchId) {
+      params.push(resolvedBatchId);
+      sql += ` AND s.batch_id = $${params.length}`;
+    }
+    if (resolvedCourse) {
+      params.push(resolvedCourse.id);
+      const idIdx = params.length;
+      const crsCd = resolvedCourse.course_cd || resolvedCourse.code || '';
+      if (crsCd) {
+        params.push(crsCd);
+        const cdIdx = params.length;
+        sql += ` AND (s.course_id = $${idIdx} OR c.id = $${idIdx} OR c.course_cd = $${cdIdx} OR c.code = $${cdIdx} OR b.course_cd = $${cdIdx})`;
+      } else {
+        sql += ` AND (s.course_id = $${idIdx} OR c.id = $${idIdx})`;
+      }
+    }
+    if (resolvedDept) {
+      params.push(resolvedDept.id);
+      const idIdx = params.length;
+      const dCode = resolvedDept.branch_cd || resolvedDept.code || '';
+      const dName = (resolvedDept.name || '').trim();
+      if (dCode && dName) {
+        params.push(dCode, dName);
+        sql += ` AND (s.department_id = $${idIdx} OR (COALESCE(d.branch_cd, d.code) = $${idIdx + 1} AND LOWER(TRIM(d.name)) = LOWER($${idIdx + 2})))`;
+      } else {
+        sql += ` AND s.department_id = $${idIdx}`;
+      }
+    }
+    if (semester) {
+      const semTrim = semester.trim();
+      params.push(semTrim);
+      const semIdx = params.length;
+      const isProfSem = semTrim.toLowerCase().includes('professional') || semTrim.toLowerCase().includes('phase');
+      const numMatch = !isProfSem ? semTrim.match(/(\d+)/) : null;
+      if (numMatch) {
+        params.push(numMatch[1]);
+        sql += ` AND (LOWER(TRIM(s.semester)) = LOWER(TRIM($${semIdx})) OR regexp_replace(COALESCE(s.semester, ''), '\\D', '', 'g') = $${semIdx + 1})`;
+      } else {
+        sql += ` AND LOWER(TRIM(s.semester)) = LOWER(TRIM($${semIdx}))`;
+      }
+    }
+    sql += ` ORDER BY (CASE WHEN s.code ~ '^[0-9]+$' THEN s.code::int ELSE 999 END) ASC, s.code ASC, s.name ASC`;
+
+    const rows = await this.tenantSchemaService.queryInTenant(slug, sql, params).catch(async () => {
+      if (onlyLinked) return [];
+      return this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT s.*, b.code AS batch_code, b.year AS batch_year FROM sections s LEFT JOIN batches b ON b.id = s.batch_id ORDER BY s.code ASC, s.name ASC`,
+        [],
+      ).catch(() => []);
+    });
+
+    return rows.map((r: any) => ({
+      ...r,
+      college_id: r.college_id || collegeId,
+      college_name: collegeName || '',
+      college_code: collegeCode || '',
+      college_slug: slug,
+    }));
+  }
+
+  async createSection(dto: CreateSectionDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const validBatchId = await this.resolveBatchUuid(slug, dto.batchId);
+    if (!validBatchId) {
+      throw new NotFoundException('Valid batch is required to create a section');
+    }
+    const validDeptId = await this.resolveDeptUuid(slug, dto.departmentId);
+
+    let validCourseId = this.isUUID(dto.courseId) ? dto.courseId : null;
+    if (!validCourseId && dto.courseId) {
+      const cRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM courses WHERE code = $1 OR course_cd = $1 LIMIT 1`,
+        [String(dto.courseId)],
+      ).catch(() => []);
+      if (cRows.length > 0) validCourseId = cRows[0].id;
+    }
+
+    let validCollegeId = this.isUUID(dto.collegeId) ? dto.collegeId : null;
+    if (!validCollegeId && dto.collegeId) {
+      const colRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM colleges WHERE id::text = $1 OR code = $1 OR colg_cd = $1 OR slug = $1 LIMIT 1`,
+        [String(dto.collegeId)],
+      ).catch(() => []);
+      if (colRows.length > 0) validCollegeId = colRows[0].id;
+    }
+    const validPhaseId = this.isUUID(dto.phaseId) ? dto.phaseId : null;
+    const codeVal = String(dto.code || '1').trim().toUpperCase();
+
+    // Ensure columns & flexible unique index exist
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `ALTER TABLE sections ADD COLUMN IF NOT EXISTS college_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS course_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS department_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS phase_id UUID;
+       ALTER TABLE sections ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
+       DROP INDEX IF EXISTS uq_batch_section_code_idx;
+       CREATE UNIQUE INDEX IF NOT EXISTS uq_batch_dept_sem_section_code_idx
+         ON sections (batch_id, COALESCE(department_id::text, ''), COALESCE(semester, ''), code);`,
+    ).catch(() => {});
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO sections (code, name, college_id, course_id, department_id, batch_id, phase_id, semester, capacity, is_default, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, true)
+       RETURNING *`,
+      [
+        codeVal,
+        dto.name,
+        validCollegeId,
+        validCourseId,
+        validDeptId,
+        validBatchId,
+        validPhaseId,
+        dto.semester || null,
+        dto.capacity || 60,
+        dto.isDefault ?? false,
+      ],
+    );
+    return rows[0];
+  }
+
+  async updateSection(id: string, dto: UpdateSectionDto, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const validBatchId = dto.batchId !== undefined ? await this.resolveBatchUuid(slug, dto.batchId) : undefined;
+    const validDeptId = dto.departmentId !== undefined ? await this.resolveDeptUuid(slug, dto.departmentId) : undefined;
+
+    let validCourseId = dto.courseId !== undefined ? (this.isUUID(dto.courseId) ? dto.courseId : null) : undefined;
+    if (dto.courseId && !validCourseId) {
+      const cRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM courses WHERE code = $1 OR course_cd = $1 LIMIT 1`,
+        [String(dto.courseId)],
+      ).catch(() => []);
+      if (cRows.length > 0) validCourseId = cRows[0].id;
+    }
+
+    const validPhaseId = dto.phaseId !== undefined ? (this.isUUID(dto.phaseId) ? dto.phaseId : null) : undefined;
+
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE sections
+       SET code = COALESCE($1, code),
+           name = COALESCE($2, name),
+           course_id = CASE WHEN $10::boolean THEN $3 ELSE course_id END,
+           department_id = CASE WHEN $11::boolean THEN $4 ELSE department_id END,
+           batch_id = CASE WHEN $12::boolean THEN $5 ELSE batch_id END,
+           phase_id = CASE WHEN $13::boolean THEN $6 ELSE phase_id END,
+           semester = CASE WHEN $14::boolean THEN $7 ELSE semester END,
+           capacity = COALESCE($8, capacity),
+           is_default = COALESCE($9, is_default),
+           is_active = COALESCE($15, is_active),
+           updated_at = NOW()
+       WHERE id = $16
+       RETURNING *`,
+      [
+        dto.code ? String(dto.code).trim().toUpperCase() : undefined,
+        dto.name,
+        validCourseId ?? null,
+        validDeptId ?? null,
+        validBatchId ?? null,
+        validPhaseId ?? null,
+        dto.semester ?? null,
+        dto.capacity,
+        dto.isDefault,
+        dto.courseId !== undefined,
+        dto.departmentId !== undefined,
+        dto.batchId !== undefined,
+        dto.phaseId !== undefined,
+        dto.semester !== undefined,
+        dto.isActive,
+        id,
+      ],
+    );
+    if (!rows.length) throw new NotFoundException('Section not found');
+    return rows[0];
+  }
+
+  async deleteSection(id: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE groups_master SET section_id = NULL WHERE section_id = $1`,
+      [id],
+    ).catch(() => {});
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM sections WHERE id = $1`,
+      [id],
+    );
+    return { success: true, message: 'Section deleted successfully' };
+  }
+
 }

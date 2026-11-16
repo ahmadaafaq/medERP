@@ -34,6 +34,16 @@ export class LoginDto {
   @IsOptional()
   @IsEnum(UserRole)
   role?: UserRole;
+
+  @ApiPropertyOptional({ description: 'Optional tenant slug in body' })
+  @IsOptional()
+  @IsString()
+  tenantSlug?: string;
+
+  @ApiPropertyOptional({ description: 'Optional tenant slug alias in body' })
+  @IsOptional()
+  @IsString()
+  tenant?: string;
 }
 
 export class UserQueryDto {

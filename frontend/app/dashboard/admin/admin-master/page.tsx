@@ -44,7 +44,45 @@ const TableSkeleton = ({ colCount = 6 }: { colCount?: number }) => (
   </tbody>
 );
 
-type SubCategory = 'departments' | 'subjects' | 'professional-linkers' | 'subject-offerings' | 'delivery-types' | 'units' | 'topics' | 'competencies' | 'pos' | 'peos';
+type SubCategory = 'departments' | 'subjects' | 'professional-linkers' | 'subject-offerings' | 'delivery-types' | 'units' | 'topics' | 'competencies' | 'pos' | 'peos' | 'subject-merge';
+
+interface SubjectMergeMappingItem {
+  id: string;
+  phase_id?: string;
+  phase_name?: string;
+  phase_cd?: string;
+  major_subject_id: string;
+  major_subject_code?: string;
+  major_subject_name?: string;
+  child_subject_id: string;
+  child_subject_code?: string;
+  child_subject_name?: string;
+  merge_mode: string;
+  colg_cd?: string;
+  course_cd?: string;
+  branch_cd?: string;
+  batch_cd?: string;
+  semester_cd?: string;
+  sec_cd?: string;
+  child_batch_cd?: string;
+  child_semester_cd?: string;
+  child_sec_cd?: string;
+  is_active: boolean;
+  college_id?: string;
+  college_slug?: string;
+  college_name?: string;
+}
+
+interface StagedChildSubject {
+  subject_id: string;
+  subject_code: string;
+  subject_name: string;
+  batch_cd: string;
+  semester_cd: string;
+  sec_cd: string;
+  section_name?: string;
+  type?: string;
+}
 
 interface ProgramOutcome {
   id: string;
@@ -563,6 +601,27 @@ export default function AdminMasterPage() {
   const [batches, setBatches] = useState<any[]>([]);
   const [pos, setPos] = useState<ProgramOutcome[]>([]);
   const [peos, setPeos] = useState<ProgramEducationalObjective[]>([]);
+  const [subjectMergeList, setSubjectMergeList] = useState<SubjectMergeMappingItem[]>([]);
+  const [stagedMergeChildren, setStagedMergeChildren] = useState<StagedChildSubject[]>([]);
+  const [mergeChildBatch, setMergeChildBatch] = useState<string>('2024');
+  const [mergeChildSemester, setMergeChildSemester] = useState<string>('1');
+  const [mergeChildSection, setMergeChildSection] = useState<string>('1');
+  const [mergeValidationError, setMergeValidationError] = useState<string | null>(null);
+
+  // Subject Merge Master dedicated autocomplete & cascading state
+  const [mergeParentSubjectSearch, setMergeParentSubjectSearch] = useState<string>('');
+  const [isMergeParentDropdownOpen, setIsMergeParentDropdownOpen] = useState<boolean>(false);
+  const [parentSections, setParentSections] = useState<any[]>([]);
+  const [loadingParentSections, setLoadingParentSections] = useState<boolean>(false);
+  const [parentLiveSubjects, setParentLiveSubjects] = useState<any[]>([]);
+  const [loadingParentSubjects, setLoadingParentSubjects] = useState<boolean>(false);
+
+  const [mergeChildSubjectSearch, setMergeChildSubjectSearch] = useState<string>('');
+  const [isMergeChildDropdownOpen, setIsMergeChildDropdownOpen] = useState<boolean>(false);
+  const [childSections, setChildSections] = useState<any[]>([]);
+  const [loadingChildSections, setLoadingChildSections] = useState<boolean>(false);
+  const [childLiveSubjects, setChildLiveSubjects] = useState<any[]>([]);
+  const [loadingChildSubjects, setLoadingChildSubjects] = useState<boolean>(false);
   const [isSeeding, setIsSeeding] = useState<boolean>(false);
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
@@ -860,12 +919,13 @@ export default function AdminMasterPage() {
         if (fid) facultyParam = `&facultyId=${encodeURIComponent(fid)}`;
       }
 
-      let res = await fetch(`${API_BASE}/${targetCat}?tenant=${encodeURIComponent(targetTenant)}${facultyParam}`, {
+      const apiCat = targetCat === 'subject-merge' ? 'subject-merge-mappings' : targetCat;
+      let res = await fetch(`${API_BASE}/${apiCat}?tenant=${encodeURIComponent(targetTenant)}${facultyParam}`, {
         headers: getAuthHeaders(),
       });
       // Resilient fallback: If remote backend returns 404 or fails, call local Next.js route handler
       if (!res.ok) {
-        res = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${encodeURIComponent(targetTenant)}${facultyParam}`, {
+        res = await fetch(`/api/v1/admin-master/${apiCat}?tenant=${encodeURIComponent(targetTenant)}${facultyParam}`, {
           headers: getAuthHeaders(),
         });
       }
@@ -882,11 +942,13 @@ export default function AdminMasterPage() {
         if (targetCat === 'units') setUnits(data);
         if (targetCat === 'pos') setPos(data);
         if (targetCat === 'peos') setPeos(data);
+        if (targetCat === 'subject-merge') setSubjectMergeList(data);
       }
     } catch (err) {
       console.error(`[AdminMaster] Error loading ${targetCat}:`, err);
       try {
-        const fallbackRes = await fetch(`/api/v1/admin-master/${targetCat}?tenant=${encodeURIComponent(targetTenant)}`, {
+        const apiCat = targetCat === 'subject-merge' ? 'subject-merge-mappings' : targetCat;
+        const fallbackRes = await fetch(`/api/v1/admin-master/${apiCat}?tenant=${encodeURIComponent(targetTenant)}`, {
           headers: getAuthHeaders(),
         });
         if (fallbackRes.ok) {
@@ -894,6 +956,7 @@ export default function AdminMasterPage() {
           const data = json.data || json || [];
           if (targetCat === 'pos') setPos(data);
           if (targetCat === 'peos') setPeos(data);
+          if (targetCat === 'subject-merge') setSubjectMergeList(data);
         }
       } catch (e) {}
     } finally {
@@ -2021,6 +2084,261 @@ export default function AdminMasterPage() {
     return toSet;
   };
 
+  const getSemestersForCourse = (courseObj?: any) => {
+    if (!courseObj) {
+      return [1, 2, 3, 4, 5, 6, 7, 8].map(s => ({ value: String(s), label: `Semester ${s} (Year ${Math.ceil(s / 2)})` }));
+    }
+    const courseName = String(courseObj.name || '').toLowerCase();
+    if (courseName.includes('mbbs') || courseName.includes('medicine')) {
+      return [
+        { value: 'Phase 1', label: 'Phase 1 (1st Professional)' },
+        { value: 'Phase 2', label: 'Phase 2 (2nd Professional)' },
+        { value: 'Phase 3', label: 'Phase 3 Part I (3rd Professional)' },
+        { value: 'Phase 4', label: 'Phase 3 Part II (Final Professional)' },
+      ];
+    }
+    let totalSemesters = 8;
+    const dur = Number(courseObj.duration_years || courseObj.duration || 0);
+    if (dur > 0) {
+      totalSemesters = dur * 2;
+    } else if (courseName.includes('m.tech') || courseName.includes('mba') || courseName.includes('m.sc') || courseName.includes('master') || courseName.includes('diploma') || courseName.includes('m.pharm')) {
+      totalSemesters = 4;
+    } else if (courseName.includes('bba') || courseName.includes('bca') || courseName.includes('b.sc') || courseName.includes('b.com') || courseName.includes('polytechnic')) {
+      totalSemesters = 6;
+    } else if (courseName.includes('b.tech') || courseName.includes('b.pharm')) {
+      totalSemesters = 8;
+    }
+    const list = [];
+    for (let s = 1; s <= totalSemesters; s++) {
+      list.push({
+        value: String(s),
+        label: `Semester ${s} (Year ${Math.ceil(s / 2)})`,
+      });
+    }
+    return list;
+  };
+
+  const fetchMasterSections = async (
+    colCd?: string,
+    crsCd?: string,
+    brCd?: string,
+    bchCd?: string,
+    semCd?: string,
+    targetSlug?: string
+  ) => {
+    try {
+      const slug = getFormCollegeSlug(targetSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+      const params = new URLSearchParams({
+        tenant: slug,
+        _t: String(Date.now()),
+      });
+      if (colCd) params.set('collegeId', String(colCd));
+      if (crsCd) params.set('courseId', String(crsCd));
+      if (brCd) params.set('departmentId', String(brCd));
+      if (bchCd) params.set('batchId', String(bchCd));
+      if (semCd) params.set('semester', String(semCd));
+
+      const res = await fetch(`/api/v1/college-master/sections?${params.toString()}`, {
+        headers: getAuthHeaders(),
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rawList = json?.data || json || [];
+        if (Array.isArray(rawList)) {
+          return rawList;
+        }
+      }
+    } catch (err) {
+      console.warn('[AdminMaster] fetchMasterSections error:', err);
+    }
+    return [];
+  };
+
+  const fetchMergeCascadeSubjects = async (
+    colgcd?: string,
+    coursecd?: string,
+    branchcd?: string,
+    batchcd?: string,
+    semcd?: string,
+    seccd?: string,
+    tenantSlug?: string
+  ) => {
+    const targetSlug = getFormCollegeSlug(tenantSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+    const isSrms = targetSlug.toLowerCase().includes('srms');
+    let cd = '1';
+    const rawCd = String(colgcd || formData.college_id || '').trim();
+    if (rawCd && /^\d+$/.test(rawCd)) {
+      cd = rawCd;
+    } else if (targetSlug.includes('cetr')) cd = '2';
+    else if (targetSlug.includes('ims')) cd = '11';
+    else if (targetSlug.includes('unnao')) cd = '3';
+    else if (targetSlug.includes('law')) cd = '4';
+    else if (targetSlug.includes('ibs')) cd = '5';
+    else if (targetSlug.includes('iahs')) cd = '6';
+    else if (targetSlug.includes('nursing-school')) cd = '8';
+    else if (targetSlug.includes('nursing')) cd = '9';
+    else cd = '1';
+
+    const crs = String(coursecd || formData.course_cd || '1').match(/\d+/)?.[0] || '1';
+    const br = String(branchcd || formData.branch_cd || '1').match(/\d+/)?.[0] || '1';
+    let bat = '17';
+    const rawBat = String(batchcd || formData.batch_cd || formData.batch_id || '17').trim();
+    if (rawBat === '2024') bat = '17';
+    else bat = rawBat.match(/\d+/)?.[0] || '17';
+    const sem = String(semcd || formData.sem_cd || '1').match(/\d+/)?.[0] || '1';
+    const sec = String(seccd || formData.sec_cd || '1').match(/\d+/)?.[0] || '1';
+
+    // 1. If SRMS tenant: query live API
+    if (isSrms) {
+      try {
+        const payload = {
+          colgcd: cd,
+          coursecd: crs,
+          branchcd: br,
+          batchcd: bat,
+          semcd: sem,
+          seccd: sec,
+          tenant: targetSlug,
+        };
+        const res = await fetch('/api/srms/all-subjects', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (Array.isArray(data) && data.length > 0) {
+            const semFiltered = data.filter((s: any) =>
+              !sem || String(s.sem_cd) === String(sem) || String(s.semester_name || '').includes(String(sem))
+            );
+            const list = semFiltered.length > 0 ? semFiltered : data;
+            return filterSubjectsForFaculty(list);
+          }
+        }
+      } catch (err) {
+        console.warn('[AdminMaster] Live subjects fetch error:', err);
+      }
+    }
+
+    // 2. Non-SRMS: fetch faculty-subjects
+    try {
+      const linkRes = await fetch(`${API_BASE}/faculty-subjects?tenant=${encodeURIComponent(targetSlug)}`, {
+        headers: getAuthHeaders(),
+      }).catch(() => null);
+      if (linkRes && linkRes.ok) {
+        const linkJson = await linkRes.json();
+        const linkList = linkJson.data || linkJson;
+        if (Array.isArray(linkList) && linkList.length > 0) {
+          const filteredLinks = linkList.filter((l: any) =>
+            (!br || String(l.subject_department_code) === String(br) || String(l.department_id) === String(br)) &&
+            (!sem || String(l.semester || l.sem_cd || '').includes(String(sem)))
+          );
+          if (filteredLinks.length > 0) {
+            const mapped = filteredLinks.map((l: any) => ({
+              colg_cd: Number(cd) || 1,
+              sub_cd: String(l.subject_code || l.subject_id),
+              sub_name: l.subject_name,
+              mst_sub_name: `${l.subject_name} (Linked: ${l.faculty_name || 'Staff'})`,
+              sub_addinfo: l.subject_code || l.subject_id,
+              course_cd: Number(crs) || 1,
+              branch_cd: Number(br) || 1,
+              batch_cd: Number(bat) || 1,
+              sem_cd: Number(sem) || 1,
+              id: l.subject_id,
+              SubTyp: 'THEORY',
+            }));
+            return filterSubjectsForFaculty(mapped);
+          }
+        }
+      }
+    } catch (e) {}
+
+    // 3. Fallback: filter ERP database subjects
+    const filteredMaster = subjects.filter(s =>
+      (!colgcd || s.college_id === colgcd || String(s.colg_cd) === String(cd) || s.college_slug === targetSlug) &&
+      (!coursecd || String(s.course_cd) === String(crs)) &&
+      (!branchcd || String(s.branch_cd) === String(br) || String(s.department_id) === String(br)) &&
+      (!semcd || String(s.sem_cd) === String(sem) || String(s.semester || '').includes(String(sem)))
+    );
+    const mapped = filteredMaster.map(s => ({
+      colg_cd: Number(cd) || 1,
+      sub_cd: String(s.code || s.id),
+      sub_name: s.name,
+      mst_sub_name: `${s.name} ${s.type || 'THEORY'}`,
+      sub_addinfo: s.code || '',
+      course_cd: Number(crs) || 1,
+      branch_cd: Number(br) || 1,
+      batch_cd: Number(bat) || 1,
+      sem_cd: Number(sem) || 1,
+      id: s.id,
+      SubTyp: s.type || 'THEORY',
+    }));
+    return filterSubjectsForFaculty(mapped);
+  };
+
+  const reloadParentMergeCascade = async (
+    colCd?: string,
+    crsCd?: string,
+    brCd?: string,
+    bchCd?: string,
+    semCd?: string,
+    secCd?: string,
+    tenantSlug?: string
+  ) => {
+    setLoadingParentSections(true);
+    setLoadingParentSubjects(true);
+    const targetSlug = getFormCollegeSlug(tenantSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+    try {
+      const secs = await fetchMasterSections(colCd, crsCd, brCd, bchCd, semCd, targetSlug);
+      setParentSections(secs || []);
+    } catch (err) {
+      console.warn('[AdminMaster] Parent sections load failed:', err);
+    } finally {
+      setLoadingParentSections(false);
+    }
+
+    try {
+      const subs = await fetchMergeCascadeSubjects(colCd, crsCd, brCd, bchCd, semCd, secCd, targetSlug);
+      setParentLiveSubjects(subs || []);
+    } catch (err) {
+      console.warn('[AdminMaster] Parent subjects load failed:', err);
+    } finally {
+      setLoadingParentSubjects(false);
+    }
+  };
+
+  const reloadChildMergeCascade = async (
+    colCd?: string,
+    crsCd?: string,
+    brCd?: string,
+    bchCd?: string,
+    semCd?: string,
+    secCd?: string,
+    tenantSlug?: string
+  ) => {
+    setLoadingChildSections(true);
+    setLoadingChildSubjects(true);
+    const targetSlug = getFormCollegeSlug(tenantSlug || formData.college_id || formData.college_slug || selectedCollegeFilter);
+    try {
+      const secs = await fetchMasterSections(colCd, crsCd, brCd, bchCd, semCd, targetSlug);
+      setChildSections(secs || []);
+    } catch (err) {
+      console.warn('[AdminMaster] Child sections load failed:', err);
+    } finally {
+      setLoadingChildSections(false);
+    }
+
+    try {
+      const subs = await fetchMergeCascadeSubjects(colCd, crsCd, brCd, bchCd, semCd, secCd, targetSlug);
+      setChildLiveSubjects(subs || []);
+    } catch (err) {
+      console.warn('[AdminMaster] Child subjects load failed:', err);
+    } finally {
+      setLoadingChildSubjects(false);
+    }
+  };
+
   const handleBulkSyncSrmsSubjects = async (subList?: any[]) => {
     const listToSync = subList && subList.length > 0 ? subList : srmsLiveSubjects;
     if (!listToSync || listToSync.length === 0) {
@@ -2253,7 +2571,7 @@ export default function AdminMasterPage() {
   }, [activeTab, editingItem, formData.subject_id, formData.subject_code, unitLiveSubjects, units]);
 
   const isMatchCollege = (item: any) => {
-    if (activeTab === 'delivery-types' || activeTab === 'pos' || activeTab === 'peos') return true;
+    if (activeTab === 'delivery-types' || activeTab === 'pos' || activeTab === 'peos' || activeTab === 'subject-merge') return true;
     if (selectedCollegeFilter === 'all') return true;
     const targetCol = colleges.find(c => c.id === selectedCollegeFilter || c.code === selectedCollegeFilter || c.slug === selectedCollegeFilter);
     const targetId = targetCol?.id;
@@ -2659,6 +2977,51 @@ export default function AdminMasterPage() {
         peo_order: nextPeoOrder,
         is_active: true,
       });
+    } else if (activeTab === 'subject-merge') {
+      const targetCol = colleges.find(c => c.code === selectedCollegeFilter || c.id === selectedCollegeFilter || c.slug === selectedCollegeFilter) || colleges[0];
+      const targetColCd = targetCol?.code || targetCol?.id || defaultCollegeId || '1';
+      const targetColSlug = targetCol?.slug || defaultCollegeSlug || '';
+      const colCourses = getCoursesForCollege(targetCol?.id || targetCol?.slug);
+      const chosenCourseCd = selectedCourseFilter !== 'all' ? selectedCourseFilter : (colCourses[0]?.course_cd || colCourses[0]?.code || '1');
+      const availableDepts = departments.filter(d =>
+        (d.college_id === targetCol?.id || d.college_slug === targetCol?.slug || String(d.colg_cd) === String(targetColCd)) &&
+        (!chosenCourseCd || d.course_cd === chosenCourseCd || d.course_code === chosenCourseCd)
+      );
+      const chosenBranchCd = selectedBranchFilter !== 'all' ? selectedBranchFilter : (availableDepts[0]?.branch_cd || availableDepts[0]?.code || '1');
+      const availableBatches = batches.filter(b =>
+        (!targetCol || b.college_id === targetCol.id || b.college_slug === targetCol.slug || String(b.colg_cd) === String(targetColCd)) &&
+        (!chosenCourseCd || String(b.course_cd) === String(chosenCourseCd))
+      );
+      const chosenBatchCd = selectedBatchFilter !== 'all' ? selectedBatchFilter : (availableBatches[0]?.batch_cd || availableBatches[0]?.year || '2024');
+      const chosenSemCd = selectedSemesterFilter !== 'all' ? selectedSemesterFilter : '5';
+
+      setStagedMergeChildren([]);
+      setMergeValidationError(null);
+      setMergeParentSubjectSearch('');
+      setIsMergeParentDropdownOpen(false);
+      setMergeChildSubjectSearch('');
+      setIsMergeChildDropdownOpen(false);
+
+      setMergeChildBatch(chosenBatchCd);
+      setMergeChildSemester('1');
+      setMergeChildSection('1');
+
+      setFormData({
+        college_id: targetColCd,
+        college_slug: targetColSlug,
+        course_cd: chosenCourseCd,
+        branch_cd: chosenBranchCd,
+        batch_cd: chosenBatchCd,
+        semester_cd: chosenSemCd,
+        phase_cd: `Semester ${chosenSemCd}`,
+        sec_cd: '1',
+        major_subject_id: '',
+        merge_mode: 'COMBINE',
+        is_active: true,
+      });
+
+      reloadParentMergeCascade(targetColCd, chosenCourseCd, chosenBranchCd, chosenBatchCd, chosenSemCd, '1', targetColSlug);
+      reloadChildMergeCascade(targetColCd, chosenCourseCd, chosenBranchCd, chosenBatchCd, '1', '1', targetColSlug);
     }
     setIsModalOpen(true);
   };
@@ -2959,6 +3322,73 @@ export default function AdminMasterPage() {
       setIsModalOpen(true);
       return;
     }
+
+    if (activeTab === 'subject-merge') {
+      const childBatch = item.child_batch_cd || item.batch_cd || '2024';
+      const childSem = item.child_semester_cd || item.semester_cd || '1';
+      const childSec = item.child_sec_cd || item.sec_cd || '1';
+
+      const childMatch = subjects.find(s => s.id === item.child_subject_id || s.code === item.child_subject_id) || {
+        id: item.child_subject_id,
+        code: item.child_subject_code || item.child_code || item.child_subject_id,
+        name: item.child_subject_name || item.child_name || 'Child Component Subject',
+      };
+
+      const majorMatch = subjects.find(s => s.id === item.major_subject_id || s.code === item.major_subject_id) || {
+        id: item.major_subject_id,
+        code: item.major_subject_code || item.major_code || item.major_subject_id,
+        name: item.major_subject_name || item.major_name || 'Major Evaluated Subject',
+      };
+
+      const childCode = item.child_subject_code || item.child_code || (childMatch as any)?.code || '';
+      const childName = item.child_subject_name || item.child_name || (childMatch as any)?.name || '';
+
+      setStagedMergeChildren([
+        {
+          subject_id: item.child_subject_id,
+          subject_code: childCode || item.child_subject_id,
+          subject_name: childName || 'Child Component',
+          batch_cd: childBatch,
+          semester_cd: childSem,
+          sec_cd: childSec,
+          section_name: childSec === '0' ? 'All Sections' : `Section ${childSec}`,
+        },
+      ]);
+
+      const majorCode = item.major_subject_code || item.major_code || (majorMatch as any)?.code || '';
+      const majorName = item.major_subject_name || item.major_name || (majorMatch as any)?.name || '';
+      setMergeParentSubjectSearch(majorName ? `[${majorCode || item.major_subject_id}] ${majorName}` : (item.major_subject_id || ''));
+      setIsMergeParentDropdownOpen(false);
+      setMergeChildSubjectSearch('');
+      setIsMergeChildDropdownOpen(false);
+
+      setMergeChildBatch(childBatch);
+      setMergeChildSemester(childSem);
+      setMergeChildSection(childSec);
+      setMergeValidationError(null);
+
+      setFormData({
+        ...item,
+        college_id: collegeCodeOrId,
+        college_slug: collegeSlug,
+        course_cd: item.course_cd || '1',
+        branch_cd: item.branch_cd || '1',
+        batch_cd: item.batch_cd || '2024',
+        semester_cd: item.semester_cd || '5',
+        phase_cd: item.phase_cd || `Semester ${item.semester_cd || '5'}`,
+        sec_cd: item.sec_cd || '1',
+        major_subject_id: item.major_subject_id || '',
+        child_subject_id: item.child_subject_id || '',
+        merge_mode: item.merge_mode || 'COMBINE',
+        is_active: item.is_active !== false,
+      });
+
+      reloadParentMergeCascade(item.colg_cd || collegeCodeOrId, item.course_cd || '1', item.branch_cd || '1', item.batch_cd || '2024', item.semester_cd || '5', item.sec_cd || '1', collegeSlug);
+      reloadChildMergeCascade(item.colg_cd || collegeCodeOrId, item.course_cd || '1', item.branch_cd || '1', childBatch, childSem, childSec, collegeSlug);
+
+      setIsModalOpen(true);
+      return;
+    }
   };
 
   const handleDelete = async (id: string, itemCollegeSlug?: string) => {
@@ -2970,7 +3400,8 @@ export default function AdminMasterPage() {
       headers['Authorization'] = `Bearer ${token}`;
     }
     try {
-      let res = await fetch(`${API_BASE}/${activeTab}/${id}?tenant=${targetSlug}`, {
+      const delEndpoint = activeTab === 'subject-merge' ? 'subject-merge-mappings' : activeTab;
+      let res = await fetch(`${API_BASE}/${delEndpoint}/${id}?tenant=${targetSlug}`, {
         method: 'DELETE',
         headers,
       });
@@ -2990,6 +3421,7 @@ export default function AdminMasterPage() {
           fetchCategoryData('competencies', selectedCollegeFilter),
           fetchCategoryData('pos', selectedCollegeFilter),
           fetchCategoryData('peos', selectedCollegeFilter),
+          fetchCategoryData('subject-merge', selectedCollegeFilter),
         ]);
       } else {
         const err = await res.text();
@@ -3008,6 +3440,91 @@ export default function AdminMasterPage() {
       ? `${API_BASE}/${activeTab}/${editingItem.id}?tenant=${targetSlug}`
       : `${API_BASE}/${activeTab}?tenant=${targetSlug}`;
     const method = isEdit ? 'PUT' : 'POST';
+
+    if (activeTab === 'subject-merge') {
+      if (!formData.major_subject_id) {
+        setMergeValidationError('Please select a Major / Parent Subject (Evaluated Subject e.g. DMAIN).');
+        setIsSaving(false);
+        return;
+      }
+      if (stagedMergeChildren.length === 0) {
+        setMergeValidationError('Please stage at least one Child Component Subject in the table below before saving.');
+        setIsSaving(false);
+        return;
+      }
+      if (stagedMergeChildren.some(c => c.subject_id === formData.major_subject_id)) {
+        setMergeValidationError('A Major Subject cannot be merged into itself as a child component.');
+        setIsSaving(false);
+        return;
+      }
+
+      setMergeValidationError(null);
+      setIsSaving(true);
+      try {
+        if (isEdit) {
+          const firstChild = stagedMergeChildren[0];
+          const payload = {
+            colg_cd: String(formData.college_id || formData.colg_cd || '1'),
+            course_cd: String(formData.course_cd || '1'),
+            branch_cd: String(formData.branch_cd || '1'),
+            batch_cd: String(formData.batch_cd || '2024'),
+            semester_cd: String(formData.semester_cd || '5'),
+            phase_cd: formData.phase_cd || `Semester ${formData.semester_cd || '5'}`,
+            sec_cd: String(formData.sec_cd || '1'),
+            majorSubjectId: formData.major_subject_id,
+            childSubjectId: firstChild.subject_id,
+            child_batch_cd: String(firstChild.batch_cd || formData.batch_cd || '2024'),
+            child_semester_cd: String(firstChild.semester_cd || '1'),
+            child_sec_cd: String(firstChild.sec_cd || '1'),
+            mergeMode: formData.merge_mode || 'COMBINE',
+            isActive: formData.is_active !== false,
+          };
+          const res = await fetch(`${API_BASE}/subject-merge-mappings/${editingItem.id}?tenant=${targetSlug}`, {
+            method: 'PUT',
+            headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload),
+          });
+          if (!res.ok) throw new Error(await res.text());
+        } else {
+          for (const child of stagedMergeChildren) {
+            const payload = {
+              colg_cd: String(formData.college_id || formData.colg_cd || '1'),
+              course_cd: String(formData.course_cd || '1'),
+              branch_cd: String(formData.branch_cd || '1'),
+              batch_cd: String(formData.batch_cd || '2024'),
+              semester_cd: String(formData.semester_cd || '5'),
+              phase_cd: formData.phase_cd || `Semester ${formData.semester_cd || '5'}`,
+              sec_cd: String(formData.sec_cd || '1'),
+              majorSubjectId: formData.major_subject_id,
+              childSubjectId: child.subject_id,
+              child_batch_cd: String(child.batch_cd || formData.batch_cd || '2024'),
+              child_semester_cd: String(child.semester_cd || '1'),
+              child_sec_cd: String(child.sec_cd || '1'),
+              mergeMode: formData.merge_mode || 'COMBINE',
+              isActive: formData.is_active !== false,
+            };
+            const res = await fetch(`${API_BASE}/subject-merge-mappings?tenant=${targetSlug}`, {
+              method: 'POST',
+              headers: { ...getAuthHeaders(), 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload),
+            });
+            if (!res.ok) throw new Error(await res.text());
+          }
+        }
+        setIsModalOpen(false);
+        setEditingItem(null);
+        setStagedMergeChildren([]);
+        setMergeValidationError(null);
+        setSyncMessage('🔀 Subject Merge Mapping saved successfully to PostgreSQL!');
+        await fetchCategoryData('subject-merge');
+        setTimeout(() => setSyncMessage(''), 5000);
+      } catch (err: any) {
+        setMergeValidationError(`Failed to save subject merge mapping: ${err.message || err}`);
+      } finally {
+        setIsSaving(false);
+      }
+      return;
+    }
 
     let payload: any = {};
     if (activeTab === 'departments') {
@@ -3330,6 +3847,7 @@ export default function AdminMasterPage() {
     { key: 'competencies', label: '8. Sub Topics', icon: '🎯', count: competencies.length, permissionKey: 'admin_admin_master_competencies', facultyPermissionKey: 'faculty_curriculum_subjects_competencies' },
     { key: 'pos', label: '9. POs', icon: '🎯', count: pos.length, permissionKey: 'admin_admin_master_pos', facultyPermissionKey: 'faculty_curriculum_subjects_pos' },
     { key: 'peos', label: '10. PEOs', icon: '🏆', count: peos.length, permissionKey: 'admin_admin_master_peos', facultyPermissionKey: 'faculty_curriculum_subjects_peos' },
+    { key: 'subject-merge', label: '11. Subject Merge Master', icon: '🔀', count: subjectMergeList.length, permissionKey: 'admin_admin_master_subject_merge', facultyPermissionKey: 'faculty_curriculum_subjects_subject_merge' },
   ];
 
   const categories = allCategories.filter((cat) => {
@@ -3363,6 +3881,7 @@ export default function AdminMasterPage() {
       case 'competencies': return competencies;
       case 'pos': return pos;
       case 'peos': return peos;
+      case 'subject-merge': return subjectMergeList;
       default: return [];
     }
   };
@@ -3625,6 +4144,24 @@ export default function AdminMasterPage() {
       if (!searchTerm) return true;
       const term = searchTerm.toLowerCase();
       return (item.name && item.name.toLowerCase().includes(term)) || (item.code && item.code.toLowerCase().includes(term));
+    }
+
+    if (activeTab === 'subject-merge') {
+      if (!isMatchCollege(item)) return false;
+      if (selectedCourseFilter !== 'all' && item.course_cd && String(item.course_cd) !== String(selectedCourseFilter)) return false;
+      if (selectedBranchFilter !== 'all' && item.branch_cd && String(item.branch_cd) !== String(selectedBranchFilter)) return false;
+      if (selectedBatchFilter !== 'all' && item.batch_cd && String(item.batch_cd) !== String(selectedBatchFilter)) return false;
+      if (selectedSemesterFilter !== 'all' && item.semester_cd && String(item.semester_cd) !== String(selectedSemesterFilter)) return false;
+      if (!searchTerm) return true;
+      const term = searchTerm.toLowerCase();
+      return (
+        (item.major_subject_code && item.major_subject_code.toLowerCase().includes(term)) ||
+        (item.major_subject_name && item.major_subject_name.toLowerCase().includes(term)) ||
+        (item.child_subject_code && item.child_subject_code.toLowerCase().includes(term)) ||
+        (item.child_subject_name && item.child_subject_name.toLowerCase().includes(term)) ||
+        (item.merge_mode && item.merge_mode.toLowerCase().includes(term)) ||
+        (item.phase_name && item.phase_name.toLowerCase().includes(term))
+      );
     }
 
     if (activeTab === 'pos' || activeTab === 'peos') {
@@ -4954,6 +5491,122 @@ export default function AdminMasterPage() {
                   </table>
                 )}
 
+                {/* ─── 11. SUBJECT MERGE MASTER TABLE ─── */}
+                {activeTab === 'subject-merge' && (
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
+                      <tr>
+                        <th className="p-4 pl-5">Major / Parent Subject</th>
+                        <th className="p-4">Child Component Subject</th>
+                        <th className="p-4">Parent Scope (Sem / Sec)</th>
+                        <th className="p-4">Child Scope (Batch / Sem / Sec)</th>
+                        <th className="p-4 text-center">Merge Mode</th>
+                        <th className="p-4 text-center">Status</th>
+                        <th className="p-4 pr-5 text-right min-w-[100px]">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60 font-medium">
+                      {paginatedList.length === 0 ? (
+                        <tr>
+                          <td colSpan={7} className="p-10 text-center text-slate-500 font-semibold">
+                            <div className="flex flex-col items-center justify-center gap-2">
+                              <span className="text-2xl">🔀</span>
+                              <p>No Subject Merge Mappings found. Click &apos;Add New&apos; to configure longitudinal / multi-component subject mergers.</p>
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        paginatedList.map((m: any) => {
+                          return (
+                            <tr key={m.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                              {/* Major / Parent */}
+                              <td className="p-4 pl-5">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-extrabold font-mono text-[#5B4BFF] px-2 py-0.5 rounded bg-indigo-50 dark:bg-indigo-950/40 border border-indigo-200 dark:border-indigo-800">
+                                      {m.major_subject_code || m.major_code || m.major_subject_id}
+                                    </span>
+                                    <span className="font-bold text-slate-900 dark:text-white">
+                                      {m.major_subject_name || m.major_name || 'Major Evaluated Subject'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-bold block">
+                                    👑 Target Cumulative Evaluator
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Child Component */}
+                              <td className="p-4">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="font-extrabold font-mono text-emerald-600 dark:text-emerald-400 px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
+                                      {m.child_subject_code || m.child_code || m.child_subject_id}
+                                    </span>
+                                    <span className="font-bold text-slate-800 dark:text-slate-200">
+                                      {m.child_subject_name || m.child_name || 'Child Component'}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] text-slate-500 block">
+                                    🧩 Contributing Unit
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Parent Scope */}
+                              <td className="p-4 whitespace-nowrap">
+                                <div className="space-y-0.5">
+                                  <span className="text-purple-600 dark:text-purple-400 font-bold block text-[11px]">
+                                    Sem {m.semester_cd || m.phase_cd || '—'} {m.sec_cd ? `(Sec ${m.sec_cd === '0' ? 'All' : m.sec_cd})` : ''}
+                                  </span>
+                                  <span className="text-slate-500 text-[10px] block">
+                                    Batch {m.batch_cd || '—'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Child Scope */}
+                              <td className="p-4 whitespace-nowrap">
+                                <div className="space-y-0.5">
+                                  <span className="text-emerald-600 dark:text-emerald-400 font-bold block text-[11px]">
+                                    Sem {m.child_semester_cd || m.semester_cd || '—'} {m.child_sec_cd ? `(Sec ${m.child_sec_cd === '0' ? 'All' : m.child_sec_cd})` : ''}
+                                  </span>
+                                  <span className="text-slate-500 text-[10px] block">
+                                    Batch {m.child_batch_cd || m.batch_cd || '—'}
+                                  </span>
+                                </div>
+                              </td>
+
+                              {/* Merge Mode */}
+                              <td className="p-4 text-center whitespace-nowrap">
+                                <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase ${
+                                  (m.merge_mode || 'COMBINE') === 'COMBINE'
+                                    ? 'bg-[#5B4BFF]/15 text-[#5B4BFF] border border-[#5B4BFF]/30'
+                                    : 'bg-amber-500/15 text-amber-600 border border-amber-500/30'
+                                }`}>
+                                  {m.merge_mode || 'COMBINE'}
+                                </span>
+                              </td>
+
+                              {/* Status */}
+                              <td className="p-4 text-center whitespace-nowrap">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${m.is_active !== false ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20' : 'bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20'}`}>
+                                  {m.is_active !== false ? 'ACTIVE' : 'INACTIVE'}
+                                </span>
+                              </td>
+
+                              {/* Actions */}
+                              <td className="p-4 pr-5 text-right whitespace-nowrap">
+                                <ActionButtons onEdit={() => handleEdit(m)} onDelete={() => handleDelete(m.id, m.college_slug)} />
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                )}
+
                 {totalItems > 0 && (
                   <div className="p-4 border-t border-slate-200 dark:border-slate-800 bg-[#F6F8FC] dark:bg-slate-800/40 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs font-semibold text-slate-600 dark:text-slate-400">
                     <div>
@@ -5001,7 +5654,7 @@ export default function AdminMasterPage() {
           {/* Dynamic Popup Form Modal */}
           {isModalOpen && (
             <div className="fixed inset-0 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-              <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full ${activeTab === 'competencies' || activeTab === 'topics' || activeTab === 'units' || activeTab === 'subject-offerings' ? 'max-w-3xl' : 'max-w-lg'} max-h-[90vh] flex flex-col overflow-hidden shadow-2xl`}>
+              <div className={`bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full ${activeTab === 'subject-merge' ? 'max-w-5xl' : (activeTab === 'competencies' || activeTab === 'topics' || activeTab === 'units' || activeTab === 'subject-offerings' ? 'max-w-3xl' : 'max-w-lg')} max-h-[92vh] flex flex-col overflow-hidden shadow-2xl`}>
                 <div className="p-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between bg-[#F6F8FC] dark:bg-slate-800/60 shrink-0">
                   <h3 className="font-extrabold text-slate-900 dark:text-white text-base flex items-center gap-2">
                     <span>{categories.find(c => c.key === activeTab)?.icon}</span>
@@ -8985,6 +9638,785 @@ export default function AdminMasterPage() {
                     );
                   })()}
 
+                  {/* Form fields for Subject Merge Master */}
+                  {activeTab === 'subject-merge' && (() => {
+                    const currentCol = colleges.find(c => c.code === formData.college_id || c.id === formData.college_id || c.slug === formData.college_slug) || colleges[0];
+                    const currentColCd = currentCol?.code || currentCol?.id || '1';
+                    const currentColSlug = currentCol?.slug || '';
+                    const colCourses = getCoursesForCollege(currentCol?.id || currentCol?.slug);
+                    const matchedCourse = colCourses.find(c => String(c.course_cd || c.code || c.id) === String(formData.course_cd)) || colCourses[0];
+                    const chosenCourseCd = matchedCourse?.course_cd || matchedCourse?.code || matchedCourse?.id || '1';
+
+                    const colDepts = departments.filter(d =>
+                      (d.college_id === currentCol?.id || d.college_slug === currentCol?.slug || String(d.colg_cd) === String(currentColCd)) &&
+                      (!chosenCourseCd || String(d.course_cd) === String(chosenCourseCd) || String(d.course_code) === String(chosenCourseCd))
+                    );
+
+                    // Dynamic Course-scoped Batches
+                    const availableBatches = batches.filter(b =>
+                      (!currentCol || b.college_id === currentCol.id || b.college_slug === currentCol.slug || String(b.colg_cd) === String(currentColCd)) &&
+                      (!chosenCourseCd || String(b.course_cd) === String(chosenCourseCd) || String(b.course_id) === String(chosenCourseCd))
+                    );
+                    const courseBatches = availableBatches.length > 0 ? availableBatches : [
+                      { id: '1', batch_cd: '2024', name: 'Batch 2024' },
+                      { id: '2', batch_cd: '2023', name: 'Batch 2023' },
+                      { id: '3', batch_cd: '2022', name: 'Batch 2022' },
+                    ];
+
+                    // Dynamic Course-scoped Semesters
+                    const availableSemesters = getSemestersForCourse(matchedCourse);
+
+                    // Filter Parent Subjects for autocomplete
+                    const filteredParentSubjects = parentLiveSubjects.filter((s: any) => {
+                      if (!mergeParentSubjectSearch) return true;
+                      const q = mergeParentSubjectSearch.toLowerCase().trim();
+                      const code = String(s.sub_cd || s.sub_addinfo || s.code || '').toLowerCase();
+                      const name = String(s.sub_name || s.mst_sub_name || s.name || '').toLowerCase();
+                      return code.includes(q) || name.includes(q);
+                    });
+
+                    const selectedParentSubjectObj = parentLiveSubjects.find((s: any) =>
+                      String(s.sub_cd || s.code || s.id) === String(formData.major_subject_id)
+                    ) || subjects.find(s => s.id === formData.major_subject_id || s.code === formData.major_subject_id);
+
+                    // Filter Child Subjects for autocomplete
+                    const filteredChildSubjects = childLiveSubjects.filter((s: any) => {
+                      if (!mergeChildSubjectSearch) return true;
+                      const q = mergeChildSubjectSearch.toLowerCase().trim();
+                      const code = String(s.sub_cd || s.sub_addinfo || s.code || '').toLowerCase();
+                      const name = String(s.sub_name || s.mst_sub_name || s.name || '').toLowerCase();
+                      return code.includes(q) || name.includes(q);
+                    });
+
+                    return (
+                      <>
+                        {/* Validation Error Alert Banner */}
+                        {mergeValidationError && (
+                          <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-300 rounded-xl text-xs font-bold flex items-center justify-between animate-fadeIn">
+                            <span className="flex items-center gap-1.5">
+                              <span>⚠️</span>
+                              <span>{mergeValidationError}</span>
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setMergeValidationError(null)}
+                              className="text-rose-600 hover:text-rose-800 font-bold ml-2"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        )}
+
+                        {/* Step 1: College, Course & Branch Hierarchy */}
+                        <div className="space-y-2 bg-[#F6F8FC] dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <label className="text-slate-800 dark:text-slate-200 font-extrabold flex items-center justify-between text-xs">
+                            <span className="flex items-center gap-1.5">
+                              <span>🏛️</span>
+                              <span>Step 1: College, Course & Branch Hierarchy *</span>
+                            </span>
+                            <span className="text-[10px] text-slate-500 font-normal">
+                              colgcd: #{currentColCd}
+                            </span>
+                          </label>
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                            {/* College */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                College
+                              </label>
+                              <select
+                                required
+                                value={currentCol?.code || currentCol?.id}
+                                onChange={(e) => {
+                                  const newColCd = e.target.value;
+                                  const newCol = colleges.find(c => c.code === newColCd || c.id === newColCd || c.slug === newColCd);
+                                  const newCourses = getCoursesForCollege(newCol?.id || newCol?.slug);
+                                  const firstCrs = newCourses[0]?.course_cd || newCourses[0]?.code || '1';
+                                  const newDepts = departments.filter(d => (d.college_id === newCol?.id || d.college_slug === newCol?.slug || String(d.colg_cd) === String(newColCd)));
+                                  const firstBr = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                                  const newBatches = batches.filter(b => (!newCol || b.college_id === newCol.id || b.college_slug === newCol.slug || String(b.colg_cd) === String(newColCd)) && (!firstCrs || String(b.course_cd) === String(firstCrs)));
+                                  const firstBch = newBatches[0]?.batch_cd || '2024';
+                                  setFormData({
+                                    ...formData,
+                                    college_id: newColCd,
+                                    college_slug: newCol?.slug || '',
+                                    course_cd: firstCrs,
+                                    branch_cd: firstBr,
+                                    batch_cd: firstBch,
+                                    semester_cd: '1',
+                                    phase_cd: 'Semester 1',
+                                    sec_cd: '1',
+                                    major_subject_id: '',
+                                  });
+                                  setMergeChildBatch(firstBch);
+                                  setMergeChildSemester('1');
+                                  setMergeChildSection('1');
+                                  setMergeParentSubjectSearch('');
+                                  setMergeChildSubjectSearch('');
+                                  reloadParentMergeCascade(newColCd, firstCrs, firstBr, firstBch, '1', '1', newCol?.slug);
+                                  reloadChildMergeCascade(newColCd, firstCrs, firstBr, firstBch, '1', '1', newCol?.slug);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                              >
+                                {colleges.map(c => (
+                                  <option key={c.id} value={c.code || c.id}>
+                                    [#{c.code || '1'}] {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Course */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                Course
+                              </label>
+                              <select
+                                required
+                                value={formData.course_cd || chosenCourseCd}
+                                onChange={(e) => {
+                                  const newCrsCd = e.target.value;
+                                  const matched = colCourses.find(c => String(c.course_cd || c.code || c.id) === String(newCrsCd));
+                                  const newDepts = departments.filter(d => (d.college_id === currentCol?.id || d.college_slug === currentCol?.slug || String(d.colg_cd) === String(currentColCd)) && (!newCrsCd || String(d.course_cd) === String(newCrsCd) || String(d.course_code) === String(newCrsCd)));
+                                  const firstBr = newDepts[0]?.branch_cd || newDepts[0]?.code || '1';
+                                  const newBatches = batches.filter(b => (!currentCol || b.college_id === currentCol.id || b.college_slug === currentCol.slug || String(b.colg_cd) === String(currentColCd)) && (!newCrsCd || String(b.course_cd) === String(newCrsCd)));
+                                  const firstBch = newBatches[0]?.batch_cd || '2024';
+                                  const sems = getSemestersForCourse(matched);
+                                  const firstSem = sems[0]?.value || '1';
+                                  setFormData({
+                                    ...formData,
+                                    course_cd: newCrsCd,
+                                    branch_cd: firstBr,
+                                    batch_cd: firstBch,
+                                    semester_cd: firstSem,
+                                    phase_cd: `Semester ${firstSem}`,
+                                    sec_cd: '1',
+                                    major_subject_id: '',
+                                  });
+                                  setMergeChildBatch(firstBch);
+                                  setMergeChildSemester(firstSem);
+                                  setMergeChildSection('1');
+                                  setMergeParentSubjectSearch('');
+                                  setMergeChildSubjectSearch('');
+                                  reloadParentMergeCascade(currentColCd, newCrsCd, firstBr, firstBch, firstSem, '1', currentColSlug);
+                                  reloadChildMergeCascade(currentColCd, newCrsCd, firstBr, firstBch, firstSem, '1', currentColSlug);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                              >
+                                {colCourses.map((crs: any) => (
+                                  <option key={crs.id || crs.code} value={crs.course_cd || crs.code}>
+                                    🎓 {crs.name} (#{crs.course_cd || crs.code})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {/* Branch / Department */}
+                            <div>
+                              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1">
+                                Branch / Department
+                              </label>
+                              <select
+                                required
+                                value={formData.branch_cd || colDepts[0]?.branch_cd || '1'}
+                                onChange={(e) => {
+                                  const newBrCd = e.target.value;
+                                  setFormData({
+                                    ...formData,
+                                    branch_cd: newBrCd,
+                                    major_subject_id: '',
+                                  });
+                                  setMergeParentSubjectSearch('');
+                                  setMergeChildSubjectSearch('');
+                                  reloadParentMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, newBrCd, formData.batch_cd || '2024', formData.semester_cd || '5', formData.sec_cd || '1', currentColSlug);
+                                  reloadChildMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, newBrCd, mergeChildBatch, mergeChildSemester, mergeChildSection, currentColSlug);
+                                }}
+                                className="w-full px-2.5 py-1.5 text-xs bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                              >
+                                {colDepts.length === 0 ? (
+                                  <option value="1">Department (Code #1)</option>
+                                ) : (
+                                  colDepts.map((d: any) => (
+                                    <option key={d.id} value={d.branch_cd || d.code}>
+                                      🏢 {d.name} (#{d.branch_cd || d.code})
+                                    </option>
+                                  ))
+                                )}
+                              </select>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Dual Column Configuration: A. Parent Subject | B. Child Subject */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* ─── A. PARENT SUBJECT CONFIGURATION ─── */}
+                          <div className="space-y-3 bg-indigo-50/40 dark:bg-indigo-950/20 p-3.5 rounded-xl border border-indigo-200 dark:border-indigo-800/60 flex flex-col justify-between">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between border-b border-indigo-200 dark:border-indigo-800/40 pb-2">
+                                <span className="font-extrabold text-indigo-900 dark:text-indigo-300 text-xs flex items-center gap-1.5">
+                                  <span>👑</span>
+                                  <span>A. Parent / Major Subject</span>
+                                </span>
+                                <span className="text-[10px] bg-indigo-100 dark:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 px-2 py-0.5 rounded font-bold">
+                                  Evaluated Target
+                                </span>
+                              </div>
+
+                              {/* Parent Cascading Dropdowns: Batch, Semester, Section */}
+                              <div className="grid grid-cols-3 gap-2">
+                                {/* 1. Batch */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-300 mb-1">
+                                    1. Batch *
+                                  </label>
+                                  <select
+                                    required
+                                    value={formData.batch_cd || courseBatches[0]?.batch_cd || '2024'}
+                                    onChange={(e) => {
+                                      const newBch = e.target.value;
+                                      setFormData({ ...formData, batch_cd: newBch, major_subject_id: '' });
+                                      setMergeParentSubjectSearch('');
+                                      reloadParentMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, formData.branch_cd, newBch, formData.semester_cd || '1', formData.sec_cd || '1', currentColSlug);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    {courseBatches.map((b: any) => (
+                                      <option key={b.id || b.batch_cd} value={b.batch_cd || b.code || b.year}>
+                                        {b.name || `Batch ${b.batch_cd || b.year}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* 2. Semester */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-300 mb-1">
+                                    2. Semester *
+                                  </label>
+                                  <select
+                                    required
+                                    value={formData.semester_cd || availableSemesters[0]?.value || '1'}
+                                    onChange={(e) => {
+                                      const newSem = e.target.value;
+                                      setFormData({
+                                        ...formData,
+                                        semester_cd: newSem,
+                                        phase_cd: `Semester ${newSem}`,
+                                        major_subject_id: '',
+                                      });
+                                      setMergeParentSubjectSearch('');
+                                      reloadParentMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, formData.branch_cd, formData.batch_cd || '2024', newSem, formData.sec_cd || '1', currentColSlug);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    {availableSemesters.map((sem) => (
+                                      <option key={sem.value} value={sem.value}>
+                                        {sem.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* 3. Section */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-indigo-900 dark:text-indigo-300 mb-1">
+                                    3. Section
+                                  </label>
+                                  <select
+                                    value={formData.sec_cd || '1'}
+                                    onChange={(e) => {
+                                      const newSec = e.target.value;
+                                      setFormData({ ...formData, sec_cd: newSec, major_subject_id: '' });
+                                      setMergeParentSubjectSearch('');
+                                      reloadParentMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, formData.branch_cd, formData.batch_cd || '2024', formData.semester_cd || '1', newSec, currentColSlug);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF]"
+                                  >
+                                    <option value="0">0 (All Sections / Whole Batch)</option>
+                                    {parentSections.length > 0 ? (
+                                      parentSections.map((sec: any) => (
+                                        <option key={sec.id || sec.sec_cd || sec.name} value={sec.sec_cd || sec.code || sec.id}>
+                                          [{sec.code || sec.sec_cd || 'Sec'}] {sec.name || `Section ${sec.sec_cd || sec.code}`}
+                                        </option>
+                                      ))
+                                    ) : (
+                                      <>
+                                        <option value="1">Section A / 1</option>
+                                        <option value="2">Section B / 2</option>
+                                      </>
+                                    )}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* 4. Parent Subject Autocomplete Search Input */}
+                              <div className="relative">
+                                <label className="block text-[11px] font-bold text-indigo-900 dark:text-indigo-300 mb-1 flex items-center justify-between">
+                                  <span>4. Select Parent Subject (Autocomplete Search) *</span>
+                                  {loadingParentSubjects && (
+                                    <span className="text-[10px] text-indigo-600 dark:text-indigo-400 font-normal animate-pulse">
+                                      Loading subjects...
+                                    </span>
+                                  )}
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={mergeParentSubjectSearch}
+                                    onFocus={() => setIsMergeParentDropdownOpen(true)}
+                                    onChange={(e) => {
+                                      setMergeParentSubjectSearch(e.target.value);
+                                      setIsMergeParentDropdownOpen(true);
+                                    }}
+                                    placeholder="Type or search Parent Subject (e.g. DMAIN, 88625)..."
+                                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-indigo-300 dark:border-indigo-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-[#5B4BFF] pr-8"
+                                  />
+                                  {mergeParentSubjectSearch && (
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setMergeParentSubjectSearch('');
+                                        setFormData(prev => ({ ...prev, major_subject_id: '' }));
+                                      }}
+                                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Autocomplete Dropdown */}
+                                {isMergeParentDropdownOpen && (
+                                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-30 divide-y divide-slate-100 dark:divide-slate-800">
+                                    {filteredParentSubjects.length === 0 ? (
+                                      <div className="p-3 text-center text-slate-500 text-xs font-semibold">
+                                        No subjects found for this selection.
+                                      </div>
+                                    ) : (
+                                      filteredParentSubjects.map((s: any) => {
+                                        const subId = String(s.sub_cd || s.code || s.id);
+                                        const isSelected = String(formData.major_subject_id) === subId;
+                                        return (
+                                          <button
+                                            type="button"
+                                            key={subId}
+                                            onClick={() => {
+                                              setFormData(prev => ({ ...prev, major_subject_id: subId }));
+                                              setMergeParentSubjectSearch(`[${s.sub_cd || s.code || subId}] ${s.sub_name || s.name}`);
+                                              setIsMergeParentDropdownOpen(false);
+                                              setMergeValidationError(null);
+                                            }}
+                                            className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-indigo-50 dark:hover:bg-indigo-950/40 transition-colors ${
+                                              isSelected ? 'bg-indigo-100/60 dark:bg-indigo-900/40 font-bold' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2 truncate mr-2">
+                                              <span className="font-mono text-[#5B4BFF] font-extrabold text-[11px] shrink-0">
+                                                [{s.sub_cd || s.code || subId}]
+                                              </span>
+                                              <span className="truncate text-slate-900 dark:text-white font-bold">
+                                                {s.sub_name || s.name}
+                                              </span>
+                                            </div>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0 font-bold">
+                                              {s.type || s.SubTyp || 'THEORY'}
+                                            </span>
+                                          </button>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Active Selected Parent Subject Card */}
+                            {formData.major_subject_id && (
+                              <div className="p-2.5 bg-indigo-100/80 dark:bg-indigo-900/40 border border-indigo-300 dark:border-indigo-700/60 rounded-lg flex items-center justify-between">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <span className="text-base shrink-0">👑</span>
+                                  <div className="truncate">
+                                    <div className="flex items-center gap-1.5 truncate">
+                                      <span className="font-mono font-extrabold text-[#5B4BFF] text-xs">
+                                        [{formData.major_subject_id}]
+                                      </span>
+                                      <span className="font-bold text-slate-900 dark:text-white text-xs truncate">
+                                        {selectedParentSubjectObj ? (selectedParentSubjectObj.sub_name || selectedParentSubjectObj.name) : formData.major_subject_id}
+                                      </span>
+                                    </div>
+                                    <span className="text-[10px] text-indigo-700 dark:text-indigo-300 font-medium">
+                                      Selected Parent (Sem {formData.semester_cd || '1'}, Sec {formData.sec_cd === '0' ? 'All' : formData.sec_cd || '1'})
+                                    </span>
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setFormData(prev => ({ ...prev, major_subject_id: '' }));
+                                    setMergeParentSubjectSearch('');
+                                  }}
+                                  className="text-xs text-indigo-700 dark:text-indigo-300 hover:text-rose-600 font-bold px-1.5 py-0.5 rounded"
+                                >
+                                  Change
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* ─── B. CHILD SUBJECT CONFIGURATION ─── */}
+                          <div className="space-y-3 bg-emerald-50/40 dark:bg-emerald-950/20 p-3.5 rounded-xl border border-emerald-200 dark:border-emerald-800/60 flex flex-col justify-between">
+                            <div className="space-y-3">
+                              <div className="flex items-center justify-between border-b border-emerald-200 dark:border-emerald-800/40 pb-2">
+                                <span className="font-extrabold text-emerald-900 dark:text-emerald-300 text-xs flex items-center gap-1.5">
+                                  <span>🧩</span>
+                                  <span>B. Child Component Subjects</span>
+                                </span>
+                                <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-emerald-700 dark:text-emerald-300 px-2 py-0.5 rounded font-bold">
+                                  Contributing Units
+                                </span>
+                              </div>
+
+                              {/* Child Cascading Dropdowns: Batch, Semester, Section */}
+                              <div className="grid grid-cols-3 gap-2">
+                                {/* 1. Child Batch */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
+                                    1. Batch *
+                                  </label>
+                                  <select
+                                    required
+                                    value={mergeChildBatch || courseBatches[0]?.batch_cd || '2024'}
+                                    onChange={(e) => {
+                                      const newBch = e.target.value;
+                                      setMergeChildBatch(newBch);
+                                      setMergeChildSubjectSearch('');
+                                      reloadChildMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, formData.branch_cd, newBch, mergeChildSemester, mergeChildSection, currentColSlug);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500"
+                                  >
+                                    {courseBatches.map((b: any) => (
+                                      <option key={b.id || b.batch_cd} value={b.batch_cd || b.code || b.year}>
+                                        {b.name || `Batch ${b.batch_cd || b.year}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* 2. Child Semester */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
+                                    2. Semester *
+                                  </label>
+                                  <select
+                                    required
+                                    value={mergeChildSemester || availableSemesters[0]?.value || '1'}
+                                    onChange={(e) => {
+                                      const newSem = e.target.value;
+                                      setMergeChildSemester(newSem);
+                                      setMergeChildSubjectSearch('');
+                                      reloadChildMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, formData.branch_cd, mergeChildBatch, newSem, mergeChildSection, currentColSlug);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500"
+                                  >
+                                    {availableSemesters.map((sem) => (
+                                      <option key={sem.value} value={sem.value}>
+                                        {sem.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+
+                                {/* 3. Child Section */}
+                                <div>
+                                  <label className="block text-[10px] font-bold text-emerald-900 dark:text-emerald-300 mb-1">
+                                    3. Section
+                                  </label>
+                                  <select
+                                    value={mergeChildSection || '1'}
+                                    onChange={(e) => {
+                                      const newSec = e.target.value;
+                                      setMergeChildSection(newSec);
+                                      setMergeChildSubjectSearch('');
+                                      reloadChildMergeCascade(currentColCd, formData.course_cd || chosenCourseCd, formData.branch_cd, mergeChildBatch, mergeChildSemester, newSec, currentColSlug);
+                                    }}
+                                    className="w-full px-2 py-1.5 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500"
+                                  >
+                                    <option value="0">0 (All Sections / Whole Batch)</option>
+                                    {childSections.length > 0 ? (
+                                      childSections.map((sec: any) => (
+                                        <option key={sec.id || sec.sec_cd || sec.name} value={sec.sec_cd || sec.code || sec.id}>
+                                          [{sec.code || sec.sec_cd || 'Sec'}] {sec.name || `Section ${sec.sec_cd || sec.code}`}
+                                        </option>
+                                      ))
+                                    ) : (
+                                      <>
+                                        <option value="1">Section A / 1</option>
+                                        <option value="2">Section B / 2</option>
+                                      </>
+                                    )}
+                                  </select>
+                                </div>
+                              </div>
+
+                              {/* 4. Child Subject Autocomplete Search Input */}
+                              <div className="relative">
+                                <label className="block text-[11px] font-bold text-emerald-900 dark:text-emerald-300 mb-1 flex items-center justify-between">
+                                  <span>4. Search & Add Child Subject (Autocomplete) *</span>
+                                  {loadingChildSubjects && (
+                                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-normal animate-pulse">
+                                      Loading subjects...
+                                    </span>
+                                  )}
+                                </label>
+                                <div className="relative">
+                                  <input
+                                    type="text"
+                                    value={mergeChildSubjectSearch}
+                                    onFocus={() => setIsMergeChildDropdownOpen(true)}
+                                    onChange={(e) => {
+                                      setMergeChildSubjectSearch(e.target.value);
+                                      setIsMergeChildDropdownOpen(true);
+                                    }}
+                                    placeholder="Type or search Child Subject to add (e.g. DA, DAA, 88622)..."
+                                    className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 rounded-lg text-slate-900 dark:text-white font-bold focus:outline-none focus:border-emerald-500 pr-8"
+                                  />
+                                  {mergeChildSubjectSearch && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setMergeChildSubjectSearch('')}
+                                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 text-xs font-bold"
+                                    >
+                                      ✕
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Autocomplete Dropdown */}
+                                {isMergeChildDropdownOpen && (
+                                  <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800 rounded-xl shadow-xl max-h-48 overflow-y-auto z-30 divide-y divide-slate-100 dark:divide-slate-800">
+                                    {filteredChildSubjects.length === 0 ? (
+                                      <div className="p-3 text-center text-slate-500 text-xs font-semibold">
+                                        No subjects found for this selection.
+                                      </div>
+                                    ) : (
+                                      filteredChildSubjects.map((s: any) => {
+                                        const subId = String(s.sub_cd || s.code || s.id);
+                                        const isAlreadyStaged = stagedMergeChildren.some(c => c.subject_id === subId);
+                                        return (
+                                          <div
+                                            key={subId}
+                                            className={`px-3 py-2 text-xs flex items-center justify-between hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-colors ${
+                                              isAlreadyStaged ? 'bg-emerald-100/40 dark:bg-emerald-900/20' : ''
+                                            }`}
+                                          >
+                                            <div className="flex items-center gap-2 truncate mr-2">
+                                              <span className="font-mono text-emerald-600 dark:text-emerald-400 font-extrabold text-[11px] shrink-0">
+                                                [{s.sub_cd || s.code || subId}]
+                                              </span>
+                                              <span className="truncate text-slate-900 dark:text-white font-bold">
+                                                {s.sub_name || s.name}
+                                              </span>
+                                              <span className="text-[10px] px-1 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0 font-medium">
+                                                {s.type || s.SubTyp || 'THEORY'}
+                                              </span>
+                                            </div>
+                                            {isAlreadyStaged ? (
+                                              <span className="text-[10px] text-emerald-600 font-extrabold px-2 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/60 shrink-0">
+                                                ✓ Added
+                                              </span>
+                                            ) : (
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  const newChild: StagedChildSubject = {
+                                                    subject_id: subId,
+                                                    subject_code: String(s.sub_cd || s.code || subId),
+                                                    subject_name: String(s.sub_name || s.name),
+                                                    batch_cd: mergeChildBatch,
+                                                    semester_cd: mergeChildSemester,
+                                                    sec_cd: mergeChildSection,
+                                                    section_name: mergeChildSection === '0' ? 'All Sections' : `Sec ${mergeChildSection}`,
+                                                    type: s.type || s.SubTyp || 'THEORY',
+                                                  };
+                                                  setStagedMergeChildren(prev => [...prev, newChild]);
+                                                  setMergeValidationError(null);
+                                                  setMergeChildSubjectSearch('');
+                                                  setIsMergeChildDropdownOpen(false);
+                                                }}
+                                                className="px-2.5 py-1 text-[11px] font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow-sm transition-all shrink-0 active:scale-95"
+                                              >
+                                                + Add
+                                              </button>
+                                            )}
+                                          </div>
+                                        );
+                                      })
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Summary count */}
+                            <div className="p-2 bg-emerald-100/60 dark:bg-emerald-900/30 rounded-lg flex items-center justify-between text-[11px] text-emerald-800 dark:text-emerald-300 font-bold">
+                              <span>Staged Component Subjects:</span>
+                              <span className="px-2 py-0.5 rounded-full bg-emerald-600 text-white font-extrabold text-[10px]">
+                                {stagedMergeChildren.length} Staged
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* ─── STAGED COMPONENTS TABLE (BELOW TABLE) ─── */}
+                        <div className="space-y-2 bg-white dark:bg-slate-900 p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-sm">
+                          <div className="flex items-center justify-between">
+                            <label className="text-slate-800 dark:text-slate-200 font-extrabold text-xs flex items-center gap-1.5">
+                              <span>📋</span>
+                              <span>Staged Component Subjects for Merge ({stagedMergeChildren.length})</span>
+                            </label>
+                            {stagedMergeChildren.length > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setStagedMergeChildren([])}
+                                className="text-[11px] font-bold text-rose-500 hover:underline"
+                              >
+                                Clear All
+                              </button>
+                            )}
+                          </div>
+
+                          <div className="border border-slate-200 dark:border-slate-700 rounded-xl overflow-hidden max-h-48 overflow-y-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead className="bg-[#F6F8FC] dark:bg-slate-800/80 text-slate-600 dark:text-slate-400 font-bold border-b border-slate-200 dark:border-slate-700 uppercase tracking-wider text-[10px]">
+                                <tr>
+                                  <th className="p-2.5 pl-3">#</th>
+                                  <th className="p-2.5">Component Code</th>
+                                  <th className="p-2.5">Subject Name</th>
+                                  <th className="p-2.5">Child Batch</th>
+                                  <th className="p-2.5">Child Semester</th>
+                                  <th className="p-2.5">Section</th>
+                                  <th className="p-2.5">Target Parent</th>
+                                  <th className="p-2.5 pr-3 text-right">Remove</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 font-medium">
+                                {stagedMergeChildren.length === 0 ? (
+                                  <tr>
+                                    <td colSpan={8} className="p-6 text-center text-slate-400 italic text-xs">
+                                      No child component subjects staged yet. Select Batch, Semester & Section above and use the autocomplete search to add components into this table.
+                                    </td>
+                                  </tr>
+                                ) : (
+                                  stagedMergeChildren.map((item, idx) => (
+                                    <tr key={`${item.subject_id}-${idx}`} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                                      <td className="p-2.5 pl-3 font-bold text-slate-400 text-[11px]">
+                                        {idx + 1}
+                                      </td>
+                                      <td className="p-2.5 font-mono font-extrabold text-emerald-600 dark:text-emerald-400">
+                                        {item.subject_code}
+                                      </td>
+                                      <td className="p-2.5 font-bold text-slate-800 dark:text-slate-200">
+                                        {item.subject_name}
+                                      </td>
+                                      <td className="p-2.5 text-slate-600 dark:text-slate-400">
+                                        Batch {item.batch_cd}
+                                      </td>
+                                      <td className="p-2.5 text-purple-600 dark:text-purple-400 font-bold">
+                                        Sem {item.semester_cd}
+                                      </td>
+                                      <td className="p-2.5 text-slate-600 dark:text-slate-400">
+                                        {item.section_name || `Sec ${item.sec_cd}`}
+                                      </td>
+                                      <td className="p-2.5 font-mono font-bold text-[#5B4BFF]">
+                                        {formData.major_subject_id || <span className="text-slate-400 italic">Not set</span>}
+                                      </td>
+                                      <td className="p-2.5 pr-3 text-right">
+                                        <button
+                                          type="button"
+                                          onClick={() => setStagedMergeChildren(prev => prev.filter((_, i) => i !== idx))}
+                                          className="p-1 rounded text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors text-xs font-bold"
+                                        >
+                                          ✕ Remove
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))
+                                )}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+
+                        {/* Step 4: Merge Mode & Status */}
+                        <div className="space-y-2 bg-[#F6F8FC] dark:bg-slate-800/60 p-3.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                          <label className="text-slate-800 dark:text-slate-200 font-extrabold text-xs block">
+                            Step 4: Merge Mode & Status *
+                          </label>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <label className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                              (formData.merge_mode || 'COMBINE') === 'COMBINE'
+                                ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-[#5B4BFF] text-indigo-900 dark:text-indigo-200 shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                            }`}>
+                              <input
+                                type="radio"
+                                name="merge_mode"
+                                value="COMBINE"
+                                checked={(formData.merge_mode || 'COMBINE') === 'COMBINE'}
+                                onChange={() => setFormData({ ...formData, merge_mode: 'COMBINE' })}
+                                className="mt-0.5 text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                              />
+                              <div>
+                                <span className="font-extrabold text-xs block text-slate-900 dark:text-white">
+                                  COMBINE (Recommended)
+                                </span>
+                                <span className="text-[11px] text-slate-500 leading-snug block mt-0.5">
+                                  Sum attended & held sessions across Theory & Practical or Multi-phase into Major Subject.
+                                </span>
+                              </div>
+                            </label>
+
+                            <label className={`p-3 rounded-xl border cursor-pointer transition-all flex items-start gap-2.5 ${
+                              formData.merge_mode === 'SEPARATE'
+                                ? 'bg-indigo-50/60 dark:bg-indigo-950/40 border-[#5B4BFF] text-indigo-900 dark:text-indigo-200 shadow-sm'
+                                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                            }`}>
+                              <input
+                                type="radio"
+                                name="merge_mode"
+                                value="SEPARATE"
+                                checked={formData.merge_mode === 'SEPARATE'}
+                                onChange={() => setFormData({ ...formData, merge_mode: 'SEPARATE' })}
+                                className="mt-0.5 text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                              />
+                              <div>
+                                <span className="font-extrabold text-xs block text-slate-900 dark:text-white">
+                                  SEPARATE
+                                </span>
+                                <span className="text-[11px] text-slate-500 leading-snug block mt-0.5">
+                                  Track component subjects side-by-side without summing numerators/denominators.
+                                </span>
+                              </div>
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-2 pt-2">
+                            <input
+                              type="checkbox"
+                              id="merge_is_active"
+                              checked={formData.is_active !== false}
+                              onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                              className="rounded text-[#5B4BFF] focus:ring-[#5B4BFF]"
+                            />
+                            <label htmlFor="merge_is_active" className="text-xs font-bold text-slate-700 dark:text-slate-300 cursor-pointer">
+                              Active in Attendance Rollup & Eligibility Calculations
+                            </label>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  })()}
+
                   <div className="pt-4 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-3 shrink-0">
                     <button type="button" onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 transition-colors">
                       Cancel
@@ -9006,6 +10438,8 @@ export default function AdminMasterPage() {
                         <span>
                           {activeTab === 'competencies' && tempCompetencies.length > 0
                             ? `Save (${tempCompetencies.length}) Sub-Topics to PostgreSQL`
+                            : activeTab === 'subject-merge'
+                            ? `Save Subject Merge Mapping (${stagedMergeChildren.length} Components)`
                             : 'Save Record to PostgreSQL'}
                         </span>
                       )}

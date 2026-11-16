@@ -120,6 +120,13 @@ function OwnerDashboardContent() {
       });
       if (res.ok) {
         await fetchMenuRegistry();
+        if (selectedFirmId) {
+          await fetchFirmPermissions(selectedFirmId, selectedRole);
+        }
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('permissions_updated_at', Date.now().toString());
+          window.dispatchEvent(new CustomEvent('permissionsUpdated'));
+        }
         setRightsSaveSuccess('✓ All menus and modules dynamically synchronized from codebase!');
         setTimeout(() => setRightsSaveSuccess(''), 3000);
       } else {
@@ -172,6 +179,9 @@ function OwnerDashboardContent() {
   }, [searchParams]);
 
   useEffect(() => {
+    if (activeTab === 'rights') {
+      fetchMenuRegistry();
+    }
     if (selectedFirmId) {
       fetchFirmAdmins(selectedFirmId);
       fetchFirmTransactions(selectedFirmId);
@@ -217,7 +227,7 @@ function OwnerDashboardContent() {
 
   const fetchMenuRegistry = async () => {
     try {
-      const res = await fetch('/api/menu-registry');
+      const res = await fetch(`/api/menu-registry?_t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const json = await res.json();
         const items = Array.isArray(json) ? json : json.data || [];
@@ -261,7 +271,9 @@ function OwnerDashboardContent() {
   const fetchFirmPermissions = async (firmId: string, role: string) => {
     setRightsLoading(true);
     try {
-      const res = await fetch(`/api/firms/${firmId}/role-permissions?role=${role}`);
+      const res = await fetch(`/api/firms/${firmId}/role-permissions?role=${role}&_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (res.ok) {
         const json = await res.json();
         const perms = Array.isArray(json) ? json : json.data || [];
@@ -1012,11 +1024,40 @@ function OwnerDashboardContent() {
     return m.applicable_firm_mode === 'MED' || k.includes('medical') || r.includes('medical') || (k.includes('logbook') && k.includes('med'));
   };
 
+  const getModuleSubTabs = (menuKey: string): { key: string; label: string }[] => {
+    const baseTabs = MODULE_SUB_TABS[menuKey] || [];
+    const dynamicTabs = menuRegistry
+      .filter(
+        (m) =>
+          m.role === selectedRole &&
+          m.parent_menu_key === menuKey &&
+          (m.route_path || '').includes('#')
+      )
+      .map((m) => ({ key: m.menu_key, label: m.menu_label }));
+
+    const merged = [...baseTabs];
+    const seenKeys = new Set(baseTabs.map((t) => t.key));
+    for (const dt of dynamicTabs) {
+      if (!seenKeys.has(dt.key)) {
+        seenKeys.add(dt.key);
+        merged.push(dt);
+      }
+    }
+    return merged;
+  };
+
+  const dynamicSubTabKeys = new Set<string>([
+    ...Array.from(ALL_SUB_TAB_KEYS),
+    ...menuRegistry
+      .filter((m) => Boolean(m.parent_menu_key) && (m.route_path || '').includes('#'))
+      .map((m) => m.menu_key),
+  ]);
+
   const currentRoleMenus = (() => {
     const matches = menuRegistry.filter((m) => {
       // Internal horizontal tabs should not appear as separate top-level module cards
       if (m.parent_menu_key) return false;
-      if (ALL_SUB_TAB_KEYS.has(m.menu_key)) return false;
+      if (dynamicSubTabKeys.has(m.menu_key)) return false;
 
       const roleMatches = m.role === selectedRole;
       const isMed = isMedicalMenu(m);
@@ -1029,7 +1070,7 @@ function OwnerDashboardContent() {
         m.applicable_firm_mode === 'BOTH' ||
         m.applicable_firm_mode === selectedFirm.firm_mode;
 
-      const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+      const subTabs = getModuleSubTabs(m.menu_key);
       const subTabMatches = subTabs.some(
         (t) =>
           t.label.toLowerCase().includes(rightsSearchQuery.toLowerCase()) ||
@@ -2116,7 +2157,7 @@ function OwnerDashboardContent() {
                         admin_notices_sent: ['admin_notices'],
                       };
                       const allKeys = currentRoleMenus.flatMap((m) => {
-                        const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                        const subTabs = getModuleSubTabs(m.menu_key);
                         const rClean = (m.route_path || '').toLowerCase().trim();
                         const sameRoute = menuRegistry
                           .filter((rm) => rm.role === selectedRole && rm.route_path && rm.route_path.toLowerCase().trim() === rClean)
@@ -2156,7 +2197,7 @@ function OwnerDashboardContent() {
                       };
                       const visibleKeys = new Set(
                         currentRoleMenus.flatMap((m) => {
-                          const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                          const subTabs = getModuleSubTabs(m.menu_key);
                           const rClean = (m.route_path || '').toLowerCase().trim();
                           const sameRoute = menuRegistry
                             .filter((rm) => rm.role === selectedRole && rm.route_path && rm.route_path.toLowerCase().trim() === rClean)
@@ -2203,7 +2244,7 @@ function OwnerDashboardContent() {
                   {(() => {
                     const renderCard = (item: any, isMed: boolean) => {
                       const norm = item.menu_key.replace(/[\/\-\.]+/g, '_');
-                      const subTabs = MODULE_SUB_TABS[item.menu_key] || [];
+                      const subTabs = getModuleSubTabs(item.menu_key);
                       const hasSubTabs = subTabs.length > 0;
                       const subTabKeys = subTabs.map((t) => t.key);
 
@@ -2412,7 +2453,7 @@ function OwnerDashboardContent() {
                                 type="button"
                                 onClick={() => {
                                   const allKeys = academicRoleMenus.flatMap((m) => {
-                                    const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                    const subTabs = getModuleSubTabs(m.menu_key);
                                     return [m.menu_key, ...subTabs.map((t) => t.key)];
                                   });
                                   const combined = Array.from(new Set([...enabledKeys, ...allKeys]));
@@ -2429,7 +2470,7 @@ function OwnerDashboardContent() {
                                 onClick={() => {
                                   const academicKeys = new Set(
                                     academicRoleMenus.flatMap((m) => {
-                                      const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                      const subTabs = getModuleSubTabs(m.menu_key);
                                       return [m.menu_key, ...subTabs.map((t) => t.key)];
                                     })
                                   );
@@ -2480,7 +2521,7 @@ function OwnerDashboardContent() {
                                 type="button"
                                 onClick={() => {
                                   const allMedKeys = medicalRoleMenus.flatMap((m) => {
-                                    const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                    const subTabs = getModuleSubTabs(m.menu_key);
                                     return [m.menu_key, ...subTabs.map((t) => t.key)];
                                   });
                                   const combined = Array.from(new Set([...enabledKeys, ...allMedKeys]));
@@ -2497,7 +2538,7 @@ function OwnerDashboardContent() {
                                 onClick={() => {
                                   const medKeys = new Set(
                                     medicalRoleMenus.flatMap((m) => {
-                                      const subTabs = MODULE_SUB_TABS[m.menu_key] || [];
+                                      const subTabs = getModuleSubTabs(m.menu_key);
                                       return [m.menu_key, ...subTabs.map((t) => t.key)];
                                     })
                                   );

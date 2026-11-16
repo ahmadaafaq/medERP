@@ -9,9 +9,10 @@ export const MODULE_SUB_TABS: Record<string, { key: string; label: string }[]> =
     { key: 'admin_college_master_professionals', label: '3. Academic Year' },
     { key: 'admin_college_master_batches', label: '4. Batch' },
     { key: 'admin_college_master_branches', label: '5. Departments & Specialties' },
-    { key: 'admin_college_master_groups', label: '6. Section Groups' },
-    { key: 'admin_college_master_sessions', label: '7. Session' },
-    { key: 'admin_college_master_residencies', label: '8. Residency Category' },
+    { key: 'admin_college_master_sections', label: '6. Section Master' },
+    { key: 'admin_college_master_groups', label: '7. Student Group Master' },
+    { key: 'admin_college_master_sessions', label: '8. Session' },
+    { key: 'admin_college_master_residencies', label: '9. Residency Category' },
   ],
   admin_admin_master: [
     { key: 'admin_admin_master_departments', label: '1. Department Master' },
@@ -24,6 +25,7 @@ export const MODULE_SUB_TABS: Record<string, { key: string; label: string }[]> =
     { key: 'admin_admin_master_competencies', label: '8. Sub Topics' },
     { key: 'admin_admin_master_pos', label: '9. POs' },
     { key: 'admin_admin_master_peos', label: '10. PEOs' },
+    { key: 'admin_admin_master_subject_merge', label: '11. Subject Merge Master' },
   ],
   faculty_curriculum_subjects: [
     { key: 'faculty_curriculum_subjects_departments', label: '1. Department Master' },
@@ -36,6 +38,7 @@ export const MODULE_SUB_TABS: Record<string, { key: string; label: string }[]> =
     { key: 'faculty_curriculum_subjects_competencies', label: '8. Sub Topics' },
     { key: 'faculty_curriculum_subjects_pos', label: '9. POs' },
     { key: 'faculty_curriculum_subjects_peos', label: '10. PEOs' },
+    { key: 'faculty_curriculum_subjects_subject_merge', label: '11. Subject Merge Master' },
   ],
   admin_matrix_mapping: [
     { key: 'admin_matrix_mapping_co_po', label: '1. CO - PO Mapping(Matrix)' },

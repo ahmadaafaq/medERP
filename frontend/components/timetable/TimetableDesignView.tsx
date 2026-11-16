@@ -156,7 +156,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const isUUID = (str?: string) => str ? /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(str) : false;
 
-// Standard Teaching Modes & Session Types
+// Standard Teaching Modes & Group Purpose Mapping
 const TEACHING_MODES = [
   { value: 'Lecture', label: 'Lecture (L)', color: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40' },
   { value: 'DOAP', label: 'DOAP (Demonstration/Observation/Assistance/Performance)', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
@@ -168,6 +168,28 @@ const TEACHING_MODES = [
   { value: 'Seminar', label: 'Seminar / Journal Club (S)', color: 'bg-pink-500/20 text-pink-300 border-pink-500/40' },
   { value: 'Lunch Break', label: 'Lunch Break / Recess', color: 'bg-slate-800/90 text-slate-300 border-slate-700/80' },
 ];
+
+const normalizeGroupPurposeKey = (val?: string | null): string => {
+  const clean = String(val || '').trim().toUpperCase();
+  if (clean === 'PRACTICAL' || clean === 'PR') return 'PRACTICAL';
+  if (clean === 'CLINICAL POSTING' || clean === 'CLINICAL') return 'CLINICAL';
+  if (clean === 'COMMUNITY POSTING' || clean === 'COMMUNITY') return 'COMMUNITY';
+  if (clean === 'TUTORIAL' || clean === 'TUT' || clean === 'SGT') return 'TUTORIAL';
+  if (clean === 'LECTURE' || clean === 'THEORY' || clean === 'TH') return 'LECTURE';
+  return clean;
+};
+
+const formatGroupPurposeOption = (rawType: string): { value: string; label: string; groupTypeKey: string } => {
+  const rawUp = String(rawType || '').trim().toUpperCase();
+  const key = normalizeGroupPurposeKey(rawType);
+  if (key === 'PRACTICAL') return { value: 'Practical', label: rawUp === 'PR' ? '[PR] Practical' : 'Practical / Lab Batch (PRACTICAL)', groupTypeKey: 'PRACTICAL' };
+  if (key === 'CLINICAL') return { value: 'Clinical Posting', label: 'Clinical Posting (CLINICAL)', groupTypeKey: 'CLINICAL' };
+  if (key === 'COMMUNITY') return { value: 'Community Posting', label: 'Community / Field Posting (COMMUNITY)', groupTypeKey: 'COMMUNITY' };
+  if (key === 'TUTORIAL') return { value: 'Tutorial', label: rawUp === 'TUT' ? '[TUT] Tutorial' : 'Tutorial / SGT Group (TUTORIAL)', groupTypeKey: 'TUTORIAL' };
+  if (key === 'LECTURE') return { value: 'Lecture', label: rawUp === 'TH' ? '[TH] Theory / Lecture' : 'Lecture (L)', groupTypeKey: 'LECTURE' };
+  if (rawUp === 'VA') return { value: 'VA', label: '[VA] VALUE ADDITION', groupTypeKey: 'VA' };
+  return { value: String(rawType).trim(), label: `[${rawUp}] ${String(rawType).trim()}`, groupTypeKey: key };
+};
 
 const DEFAULT_TIME_SLOTS: TimeSlotConfig[] = [
   { id: 'ts_1', start: '08:30:00', end: '09:30:00', label: '08.30-09.30', name: 'Period 1', type: 'Lecture' },
@@ -821,7 +843,10 @@ export default function TimetableDesignView({
             const semesters = await fetchSemestersForCourse(colgVal, courseVal, branchVal, batchVal);
             setSemestersList(semesters);
             if (semVal && semVal !== '0') {
-              await fetchSectionsForCourse(colgVal, courseVal, branchVal, batchVal, semVal);
+              const loadedSecs = await fetchSectionsForCourse(colgVal, courseVal, branchVal, batchVal, semVal);
+              if (secVal && secVal !== '0') {
+                await fetchGroupsForSection(colgVal, courseVal, branchVal, batchVal, semVal, secVal, loadedSecs);
+              }
             }
           }
         }
@@ -1016,6 +1041,11 @@ export default function TimetableDesignView({
   const [userRole, setUserRole] = useState<string>('ADMIN');
   const [userColgCd, setUserColgCd] = useState<string>('1');
   const [userTenantSlug, setUserTenantSlug] = useState<string>('srms-cet-bareilly');
+  const [userFirmMode, setUserFirmMode] = useState<string>('');
+  const [deliveryTypesList, setDeliveryTypesList] = useState<{ id?: string; code: string; name: string; is_active?: boolean }[]>([]);
+  const [loadingDeliveryTypes, setLoadingDeliveryTypes] = useState(false);
+  const [subjectOfferingsList, setSubjectOfferingsList] = useState<any[]>([]);
+  const [loadingSubjectOfferings, setLoadingSubjectOfferings] = useState(false);
 
   // Filter Lists loaded from /api/srms/
   const [collegesList, setCollegesList] = useState<DropdownItem[]>([]);
@@ -1023,12 +1053,10 @@ export default function TimetableDesignView({
   const [branchesList, setBranchesList] = useState<DropdownItem[]>([]);
   const [batchesList, setBatchesList] = useState<Batch[]>([]);
   const [semestersList, setSemestersList] = useState<DropdownItem[]>([]);
-  const [sectionsList, setSectionsList] = useState<DropdownItem[]>([
-    { id: '1', code: '1', name: 'Section A' },
-    { id: '2', code: '2', name: 'Section B' },
-    { id: '3', code: '3', name: 'Section C' },
-    { id: '4', code: '4', name: 'Section D' },
-  ]);
+  const [sectionsList, setSectionsList] = useState<DropdownItem[]>([]);
+  const [loadingLinkedSections, setLoadingLinkedSections] = useState(false);
+  const [linkedGroupsList, setLinkedGroupsList] = useState<any[]>([]);
+  const [loadingLinkedGroups, setLoadingLinkedGroups] = useState(false);
   const [departmentsList, setDepartmentsList] = useState<DropdownItem[]>([]);
   const [sessionsList, setSessionsList] = useState<DropdownItem[]>([]);
 
@@ -1612,18 +1640,51 @@ export default function TimetableDesignView({
     return null;
   }, [isModalOpen, formData.facultyId, formData.facultyEmpId, formData.facultyName, formData.dayOfWeek, formData.startTime, formData.endTime, slots, facultyCrossSlots, clerkDrafts, activeDraft, editingSlot, selectedCourseObj, selectedBatchObj, selectedSemester, selectedSection, coursesList, batchesList, currentDate]);
 
-  // Dynamically Filter Form Subjects based on Active College, Course, and Live SRMS Loadsubject / Subject Linker
+  // Dynamically Filter Form Subjects strictly by College -> Course -> Branch -> Batch -> Semester -> Section
   const availableFormSubjects = useMemo(() => {
+    const allFiltersReady = Boolean(
+      selectedCollege &&
+      selectedCourse && selectedCourse !== '0' &&
+      selectedBranch && selectedBranch !== '0' &&
+      selectedBatch && selectedBatch !== '0' &&
+      selectedSemester && selectedSemester !== '0' &&
+      selectedSection && selectedSection !== '0'
+    );
+    if (!allFiltersReady) return [];
+
     const list: any[] = [];
     const seen = new Set<string>();
+    const crsCd = selectedCourseObj?.code || selectedCourse;
+    const brCd = selectedBranchObj?.code || selectedBranch;
+    const batCd = selectedBatchObj?.code || selectedBatchObj?.batch_cd || selectedBatch;
+    const semCd = selectedSemester;
+    const semNum = String(semCd || '').replace(/\D/g, '');
+    const activeSecObj = sectionsList.find(
+      (s) => String(s.code) === String(selectedSection) || String(s.id) === String(selectedSection) || String((s as any).rawCode) === String(selectedSection)
+    );
+    const secNum = String(activeSecObj?.code || selectedSection || '').replace(/\D/g, '') || String(selectedSection);
 
-    // 1. Prioritize live SRMS timetable subjects from EmployeeInfo.asmx/Loadsubject (or timetable-subjects API)
+    // 1. Prioritize exact College->Course->Branch->Batch->Semester->Section subjects from LoadSubject / /api/srms/timetable-subjects
     if (Array.isArray(srmsTimetableSubjects) && srmsTimetableSubjects.length > 0) {
       for (const s of srmsTimetableSubjects) {
         const code = String(s.sub_cd || s.code || s.id || '');
         const rawName = String(s.sub_name || s.name || '');
         const cleanName = rawName.replace(/\([^)]*\)/g, '').trim();
-        const teacherName = s.faculty_name || s.EmpName || (rawName.match(/\(([^)]+)\)/)?.[1] || '');
+        let teacherName = s.faculty_name || s.EmpName || (rawName.match(/\(([^)]+)\)/)?.[1] || '');
+        let empId = s.empid || s.faculty_code || '';
+        let facId = s.faculty_id || '';
+
+        if (!teacherName && Array.isArray(linkedFacultySubjects)) {
+          const enrich = linkedFacultySubjects.find((fs: any) =>
+            String(fs.subject_code || fs.code || '') === code &&
+            (!fs.sem_cd || String(fs.sem_cd).replace(/\D/g, '') === semNum)
+          );
+          if (enrich) {
+            teacherName = enrich.faculty_name || teacherName;
+            empId = enrich.faculty_code || enrich.empid || empId;
+            facId = enrich.faculty_id || facId;
+          }
+        }
 
         if (code && !seen.has(code)) {
           seen.add(code);
@@ -1633,38 +1694,39 @@ export default function TimetableDesignView({
             name: cleanName || rawName,
             raw_name: rawName,
             faculty_name: teacherName,
-            empid: s.empid || s.faculty_code || '',
-            faculty_id: s.faculty_id || '',
+            empid: empId,
+            faculty_id: facId,
             linkcd: s.linkcd || code,
             is_srms: true,
           });
         }
       }
+      return list;
     }
 
-    // 2. Include linked subjects from Subject Linker (faculty_subjects) for non-SRMS & unified fallbacks
+    // 2. Include linked subjects from Subject Linker (faculty_subjects) strictly matching Course + Branch + Batch + Semester + Section
     if (Array.isArray(linkedFacultySubjects) && linkedFacultySubjects.length > 0) {
-      const crsCd = selectedCourseObj?.code || selectedCourse;
-      const brCd = selectedBranchObj?.code || selectedBranch;
-      const semCd = selectedSemester;
-
       for (const fs of linkedFacultySubjects) {
         if (!fs) continue;
-        const matchCourse = !crsCd || crsCd === '0' || crsCd === 'all' ||
+        const matchCourse =
           String(fs.course_cd) === String(crsCd) ||
           String(fs.resolved_course_cd) === String(crsCd) ||
-          fs.course_name === selectedCourseObj?.name;
+          (selectedCourseObj?.name && fs.course_name === selectedCourseObj.name);
 
-        const matchBranch = !brCd || brCd === '0' || brCd === 'all' ||
-          !fs.branch_cd || String(fs.branch_cd) === String(brCd) ||
-          String(fs.resolved_branch_cd) === String(brCd) ||
-          fs.branch_name === selectedBranchObj?.name;
+        const matchBranch =
+          String(fs.branch_cd || fs.resolved_branch_cd || '') === String(brCd) ||
+          (selectedBranchObj?.name && fs.branch_name === selectedBranchObj.name);
 
-        const matchSem = !semCd || semCd === '0' || semCd === 'all' ||
-          !fs.sem_cd || String(fs.sem_cd) === String(semCd) ||
-          String(fs.resolved_sem_cd) === String(semCd);
+        const fsBatch = String(fs.batch_cd || fs.batch_id || '');
+        const matchBatch = !fsBatch || fsBatch === String(batCd) || fsBatch === String(selectedBatchObj?.id || '');
 
-        if (matchCourse && matchBranch && matchSem) {
+        const fsSemNum = String(fs.sem_cd || fs.resolved_sem_cd || '').replace(/\D/g, '');
+        const matchSem = Boolean(semNum) && fsSemNum === semNum;
+
+        const fsSec = String(fs.section || fs.sec_cd || '');
+        const matchSec = !fsSec || fsSec === String(selectedSection) || fsSec.replace(/\D/g, '') === secNum;
+
+        if (matchCourse && matchBranch && matchBatch && matchSem && matchSec) {
           const code = String(fs.subject_code || fs.subject_id || fs.code || fs.id || '');
           const subName = fs.subject_name || fs.name || 'Subject';
           const teacherName = fs.faculty_name || '';
@@ -1694,16 +1756,26 @@ export default function TimetableDesignView({
           }
         }
       }
+      if (list.length > 0) return list;
     }
 
-    // 3. Include database subjects for fallback
+    // 3. Strictly scoped non-SRMS database subjects fallback matching Course + Branch + Semester (never unfiltered whole-course dump)
+    const tenantSlug = getActiveTenantSlug(selectedCollege);
+    const isSrms = Boolean(tenantSlug && tenantSlug.toLowerCase().includes('srms'));
+    if (isSrms) return list;
+
     const safeSubs = Array.isArray(subjects) ? subjects : [];
-    const crsCd = selectedCourseObj?.code || selectedCourse || '13';
     for (const s of safeSubs) {
       if (!s) continue;
-      const matchCourse = !crsCd || crsCd === '0' || crsCd === 'all' ||
-        String(s.course_cd) === String(crsCd) || String(s.course_code) === String(crsCd) || s.course_name === selectedCourseObj?.name;
-      if (matchCourse) {
+      const matchCourse =
+        String(s.course_cd) === String(crsCd) ||
+        String(s.course_code) === String(crsCd) ||
+        (selectedCourseObj?.name && s.course_name === selectedCourseObj.name);
+      const sBr = String((s as any).branch_cd || (s as any).department_code || '');
+      const matchBranch = sBr ? sBr === String(brCd) : true;
+      const sSemNum = String((s as any).sem_cd || (s as any).semester || '').replace(/\D/g, '');
+      const matchSem = sSemNum ? Boolean(semNum) && sSemNum === semNum : false;
+      if (matchCourse && matchBranch && matchSem) {
         const code = String(s.code || s.id || '');
         if (code && !seen.has(code)) {
           seen.add(code);
@@ -1713,7 +1785,7 @@ export default function TimetableDesignView({
     }
 
     return list;
-  }, [srmsTimetableSubjects, linkedFacultySubjects, subjects, selectedCourseObj, selectedCourse, selectedBranchObj, selectedBranch, selectedSemester]);
+  }, [srmsTimetableSubjects, linkedFacultySubjects, subjects, selectedCollege, selectedCourseObj, selectedCourse, selectedBranchObj, selectedBranch, selectedBatchObj, selectedBatch, selectedSemester, selectedSection, sectionsList]);
 
   // Dynamically compute Available Units based on Selected Subject
   // Dynamically compute Available Units based strictly on Selected Subject from Admin Master
@@ -2237,15 +2309,195 @@ export default function TimetableDesignView({
     return fallbackList;
   };
 
+  const toNumericSectionCode = (rawCode?: string | null, fallback = '1'): string => {
+    const clean = String(rawCode || '').trim().toUpperCase();
+    if (/^\d+$/.test(clean)) return clean;
+    const alphaIdx = 'ABCDEFGHIJ'.indexOf(clean);
+    if (alphaIdx >= 0) return String(alphaIdx + 1);
+    return fallback;
+  };
+
   const fetchSectionsForCourse = async (colgcd?: string, coursecd?: string, branchcd?: string, batchcd?: string, semcd?: string) => {
-    const sections: DropdownItem[] = [
-      { id: '1', code: '1', name: 'Section A' },
-      { id: '2', code: '2', name: 'Section B' },
-      { id: '3', code: '3', name: 'Section C' },
-      { id: '4', code: '4', name: 'Section D' },
-    ];
-    setSectionsList(sections);
-    return sections;
+    const colg = colgcd ?? selectedCollege;
+    const crs = coursecd ?? selectedCourse;
+    const br = branchcd ?? selectedBranch;
+    const bat = batchcd ?? selectedBatch;
+    const sem = semcd ?? selectedSemester;
+
+    if (!crs || crs === '0' || !br || br === '0' || !bat || bat === '0' || !sem || sem === '0') {
+      setSectionsList([]);
+      return [];
+    }
+
+    setLoadingLinkedSections(true);
+    try {
+      const tenantSlug = getActiveTenantSlug(colg);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      // Prefer exact department UUID matching course_cd + branch_cd to avoid cross-course code collisions
+      const matchedDept = departmentsList.find((d: any) =>
+        String(d.course_cd || '') === String(crs) &&
+        (String(d.branch_cd || d.code || '') === String(br) || String(d.id || '') === String(br))
+      ) || departmentsList.find((d: any) =>
+        String(d.id || '') === String(br) || String(d.branch_cd || d.code || '') === String(br)
+      );
+      const deptParam = matchedDept?.id || matchedDept?.name || br;
+
+      const matchedBatch = batchesList.find((b: any) =>
+        String(b.code || b.batch_cd || '') === String(bat) || String(b.id || '') === String(bat)
+      );
+      const batchParam = (matchedBatch?.id && isUUID(String(matchedBatch.id))) ? String(matchedBatch.id) : bat;
+
+      const params = new URLSearchParams({
+        tenant: tenantSlug,
+        onlyLinked: 'true',
+        courseId: String(crs),
+        departmentId: String(deptParam),
+        batchId: String(batchParam),
+        semester: String(sem),
+        _t: String(Date.now()),
+      });
+
+      const res = await fetch(`/api/v1/college-master/sections?${params.toString()}`, {
+        headers,
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rawList: any[] = json?.success && Array.isArray(json.data) ? json.data : (Array.isArray(json) ? json : []);
+        const usedNums = new Set(
+          rawList.map((s) => String(s.code || '').trim()).filter((c) => /^\d+$/.test(c)),
+        );
+        const mapped: DropdownItem[] = rawList
+          .filter((s) => s && s.is_active !== false && s.department_id && s.semester)
+          .map((s, idx) => {
+            const rawCode = String(s.code || '').trim().toUpperCase();
+            let numCode = /^\d+$/.test(rawCode) ? rawCode : '';
+            if (!numCode) {
+              const preferred = toNumericSectionCode(rawCode, String(idx + 1));
+              if (!usedNums.has(preferred)) {
+                numCode = preferred;
+              } else {
+                for (let n = 1; n <= 99; n++) {
+                  if (!usedNums.has(String(n))) {
+                    numCode = String(n);
+                    break;
+                  }
+                }
+              }
+              if (numCode) usedNums.add(numCode);
+            }
+            const codeStr = numCode || String(idx + 1);
+            return {
+              id: codeStr,
+              code: codeStr,
+              uuid: s.id,
+              rawCode: s.code,
+              name: s.name || `Section ${codeStr}`,
+              batch_id: s.batch_id,
+              department_id: s.department_id,
+              semester: s.semester,
+              course_cd: s.course_cd || s.course_code || crs,
+            };
+          })
+          .sort((a, b) => Number(a.code) - Number(b.code));
+
+        setSectionsList(mapped);
+        return mapped;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch linked sections from Section Master:', err);
+    } finally {
+      setLoadingLinkedSections(false);
+    }
+    setSectionsList([]);
+    return [];
+  };
+
+  const fetchGroupsForSection = async (
+    colgcd?: string,
+    coursecd?: string,
+    branchcd?: string,
+    batchcd?: string,
+    semcd?: string,
+    seccd?: string,
+    sectionsOverride?: DropdownItem[],
+  ) => {
+    const colg = colgcd ?? selectedCollege;
+    const crs = coursecd ?? selectedCourse;
+    const br = branchcd ?? selectedBranch;
+    const bat = batchcd ?? selectedBatch;
+    const sem = semcd ?? selectedSemester;
+    const sec = seccd ?? selectedSection;
+
+    if (!crs || crs === '0' || !br || br === '0' || !bat || bat === '0' || !sem || sem === '0' || !sec || sec === '0') {
+      setLinkedGroupsList([]);
+      return [];
+    }
+
+    setLoadingLinkedGroups(true);
+    try {
+      const tenantSlug = getActiveTenantSlug(colg);
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+
+      const secPool = sectionsOverride || sectionsList;
+      const matchedSec = secPool.find(
+        (s) => String(s.code) === String(sec) || String(s.id) === String(sec) || String((s as any).rawCode) === String(sec) || String((s as any).uuid) === String(sec),
+      );
+      const secRef = (matchedSec as any)?.uuid || (matchedSec as any)?.rawCode || sec;
+
+      const matchedDept = departmentsList.find((d: any) =>
+        String(d.course_cd || '') === String(crs) &&
+        (String(d.branch_cd || d.code || '') === String(br) || String(d.id || '') === String(br))
+      ) || departmentsList.find((d: any) =>
+        String(d.id || '') === String(br) || String(d.branch_cd || d.code || '') === String(br)
+      );
+
+      const params = new URLSearchParams({
+        tenant: tenantSlug,
+        courseId: String(crs),
+        batchId: String(bat),
+        semester: String(sem),
+        sectionId: String(secRef),
+        _t: String(Date.now()),
+      });
+      if (matchedDept?.id || br) {
+        params.set('departmentId', String(matchedDept?.id || br));
+      }
+
+      const res = await fetch(`/api/v1/college-master/groups?${params.toString()}`, {
+        headers,
+        cache: 'no-store',
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const rawGroups: any[] = json?.success && Array.isArray(json.data) ? json.data : [];
+        const semNum = String(sem || '').replace(/\D/g, '');
+        const linked = rawGroups.filter((g) => {
+          if (!g || g.is_active === false) return false;
+          if (!g.section_id) return false;
+          if ((matchedSec as any)?.uuid) {
+            return String(g.section_id) === String((matchedSec as any).uuid);
+          }
+          const gSemNum = String(g.semester || '').replace(/\D/g, '');
+          const matchSem = !semNum || !gSemNum || gSemNum === semNum;
+          const matchSecCode =
+            String(g.section_code || '') === String(sec) ||
+            toNumericSectionCode(g.section_code, '') === toNumericSectionCode(sec, '');
+          return matchSem && matchSecCode;
+        });
+        setLinkedGroupsList(linked);
+        return linked;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch linked groups for section:', err);
+    } finally {
+      setLoadingLinkedGroups(false);
+    }
+    setLinkedGroupsList([]);
+    return [];
   };
 
   const fetchCameras = async (colgcd: string = selectedCollege) => {
@@ -2269,6 +2521,84 @@ export default function TimetableDesignView({
     return DEFAULT_CAMERAS;
   };
 
+  const isNonMedTenantMode = (colSlug?: string, colObj?: any): boolean => {
+    const explicitMode = String((colObj as any)?.firm_mode || (colObj as any)?.firmMode || userFirmMode || '').trim().toUpperCase();
+    if (explicitMode === 'NONMED') return true;
+    if (explicitMode === 'MED') return false;
+    const rawSlug = String(colSlug || colObj?.slug || userTenantSlug || '').toLowerCase();
+    const isMedSlug =
+      rawSlug.includes('ims') ||
+      rawSlug.includes('med') ||
+      rawSlug.includes('iahs') ||
+      rawSlug.includes('nursing') ||
+      rawSlug.includes('ayush') ||
+      rawSlug === 'rmribar' ||
+      rawSlug === 'rmch-bareilly';
+    return !isMedSlug;
+  };
+
+  const fetchDeliveryTypesForCollege = async (colgcd?: string) => {
+    const slug = getActiveTenantSlug(colgcd ?? selectedCollege) || userTenantSlug;
+    if (!slug) return [];
+    setLoadingDeliveryTypes(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      let res = await fetch(`${API_BASE}/admin-master/delivery-types?tenant=${encodeURIComponent(slug)}&_t=${Date.now()}`, {
+        headers,
+        cache: 'no-store',
+      }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`/api/v1/admin-master/delivery-types?tenant=${encodeURIComponent(slug)}&_t=${Date.now()}`, {
+          headers,
+          cache: 'no-store',
+        }).catch(() => null);
+      }
+      if (res && res.ok) {
+        const json = await res.json();
+        const rows = extractArray(json).filter((dt: any) => dt && dt.is_active !== false);
+        setDeliveryTypesList(rows);
+        return rows;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch delivery types:', err);
+    } finally {
+      setLoadingDeliveryTypes(false);
+    }
+    return [];
+  };
+
+  const fetchSubjectOfferingsForCollege = async (collegeIdentifier?: string) => {
+    const slug = getActiveTenantSlug(collegeIdentifier);
+    if (!slug) return [];
+    setLoadingSubjectOfferings(true);
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+      const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+      let res = await fetch(`${API_BASE}/admin-master/subject-offerings?tenant=${encodeURIComponent(slug)}&_t=${Date.now()}`, {
+        headers,
+        cache: 'no-store',
+      }).catch(() => null);
+      if (!res || !res.ok) {
+        res = await fetch(`/api/v1/admin-master/subject-offerings?tenant=${encodeURIComponent(slug)}&_t=${Date.now()}`, {
+          headers,
+          cache: 'no-store',
+        }).catch(() => null);
+      }
+      if (res && res.ok) {
+        const json = await res.json();
+        const rows = extractArray(json).filter((so: any) => so && so.is_active !== false);
+        setSubjectOfferingsList(rows);
+        return rows;
+      }
+    } catch (err) {
+      console.warn('Failed to fetch subject offerings:', err);
+    } finally {
+      setLoadingSubjectOfferings(false);
+    }
+    return [];
+  };
+
   const fetchMasterData = async () => {
     setMetadataLoading(true);
     try {
@@ -2281,9 +2611,18 @@ export default function TimetableDesignView({
         userColg = localStorage.getItem('colg_cd') || localStorage.getItem('colgCd') || '1';
         userSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'srms-cet-bareilly';
         savedCollegeName = localStorage.getItem('collegeName') || localStorage.getItem('college_name') || '';
+        let detectedFirmMode = localStorage.getItem('firm_mode') || '';
+        try {
+          const rawUser = localStorage.getItem('user');
+          if (rawUser) {
+            const parsed = JSON.parse(rawUser);
+            detectedFirmMode = parsed.firm_mode || parsed.firmMode || detectedFirmMode;
+          }
+        } catch {}
         setUserRole(role);
         setUserColgCd(userColg);
         setUserTenantSlug(userSlug);
+        setUserFirmMode(detectedFirmMode);
       }
 
       // 1. Fetch Colleges
@@ -2314,11 +2653,11 @@ export default function TimetableDesignView({
       if (curSess) setSelectedSession(curSess.code);
 
       // 3. Fetch Departments, Subjects, Faculty for Timetable modal strictly scoped by tenant
-      const activeTenantSlug = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.slug || 'srms-cet-bareilly') : userSlug;
+      const activeTenantSlug = role === 'SUPER_ADMIN' ? (filteredColleges[0]?.slug || 'srms-cet-bareilly') : (getActiveTenantSlug(userColg) || userSlug || 'srms-cet-bareilly');
       const token = localStorage.getItem('token') || '';
       const headers: Record<string, string> = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const [deptRes, subRes, unitRes, topicRes, compRes, facRes, linkedFacRes] = await Promise.all([
+      const [deptRes, subRes, unitRes, topicRes, compRes, facRes, linkedFacRes, deliveryRes, offeringRes] = await Promise.all([
         fetch(`${API_BASE}/admin-master/departments?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/subjects?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/units?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
@@ -2326,6 +2665,8 @@ export default function TimetableDesignView({
         fetch(`${API_BASE}/admin-master/competencies?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
         fetch(`${API_BASE}/users/faculty?tenant=${encodeURIComponent(activeTenantSlug)}&limit=500`, { headers }).catch(() => null),
         fetch(`${API_BASE}/admin-master/faculty-subjects?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/delivery-types?tenant=${encodeURIComponent(activeTenantSlug)}`, { headers }).catch(() => null),
+        fetch(`${API_BASE}/admin-master/subject-offerings?tenant=${encodeURIComponent(activeTenantSlug)}&_t=${Date.now()}`, { headers }).catch(() => null),
       ]);
 
       let loadedDepts: DropdownItem[] = [];
@@ -2361,6 +2702,18 @@ export default function TimetableDesignView({
         const lfJson = await linkedFacRes.json();
         setLinkedFacultySubjects(extractArray(lfJson));
       }
+      if (deliveryRes && deliveryRes.ok) {
+        const dtJson = await deliveryRes.json();
+        setDeliveryTypesList(extractArray(dtJson).filter((dt: any) => dt && dt.is_active !== false));
+      } else {
+        fetchDeliveryTypesForCollege(activeColCode);
+      }
+      if (offeringRes && offeringRes.ok) {
+        const offJson = await offeringRes.json();
+        setSubjectOfferingsList(extractArray(offJson).filter((so: any) => so && so.is_active !== false));
+      } else {
+        fetchSubjectOfferingsForCollege(activeColCode);
+      }
 
       // 4. Cascade Level 2: Fetch Courses for active college
       const courses = await fetchCoursesForCollege(activeColCode);
@@ -2373,6 +2726,9 @@ export default function TimetableDesignView({
       setBranchesList([]);
       setBatchesList([]);
       setSemestersList([]);
+      setSectionsList([]);
+      setLinkedGroupsList([]);
+      setSrmsTimetableSubjects([]);
       if (mode !== 'clerk') {
         setSlots([]);
         setActiveDraft(null);
@@ -2672,7 +3028,7 @@ export default function TimetableDesignView({
   };
 
 
-  const fetchSrmsSubjects = async (courseCd?: string, branchCd?: string, batchCd?: string, semCd?: string, secCd?: string, colgCd?: string) => {
+  const fetchSrmsSubjects = async (courseCd?: string, branchCd?: string, batchCd?: string, semCd?: string, secCd?: string, colgCd?: string, sectionsOverride?: DropdownItem[]) => {
     try {
       const crs = courseCd !== undefined ? courseCd : selectedCourse;
       const br = branchCd !== undefined ? branchCd : selectedBranch;
@@ -2685,19 +3041,26 @@ export default function TimetableDesignView({
         setSrmsTimetableSubjects([]);
         return [];
       }
+      const secPool = sectionsOverride || sectionsList;
+      const secObj = secPool.find(
+        (s) => String(s.code) === String(sec) || String(s.id) === String(sec) || String((s as any).rawCode) === String(sec)
+      );
+      const secNum = toNumericSectionCode(secObj?.code || sec, '1');
       const tenantSlug = getActiveTenantSlug(String(colg));
 
-      const res = await fetch(`/api/srms/timetable-subjects?course=${crs}&branch=${br}&batch=${bat}&semester=${sem}&section=${sec}&colgcd=${colg}&tenant=${tenantSlug}`);
+      const res = await fetch(`/api/srms/timetable-subjects?course=${encodeURIComponent(crs)}&branch=${encodeURIComponent(br)}&batch=${encodeURIComponent(bat)}&semester=${encodeURIComponent(sem)}&section=${encodeURIComponent(secNum)}&colgcd=${encodeURIComponent(colg)}&tenant=${encodeURIComponent(tenantSlug)}&_t=${Date.now()}`, {
+        cache: 'no-store',
+      });
       if (res.ok) {
         const json = await res.json();
-        if (json.success && Array.isArray(json.data) && json.data.length > 0) {
-          setSrmsTimetableSubjects(json.data);
-          return json.data;
-        }
+        const rows = json.success && Array.isArray(json.data) ? json.data : [];
+        setSrmsTimetableSubjects(rows);
+        return rows;
       }
     } catch (err) {
       console.warn('Failed to fetch SRMS subjects:', err);
     }
+    setSrmsTimetableSubjects([]);
     return [];
   };
 
@@ -2781,9 +3144,11 @@ export default function TimetableDesignView({
       localStorage.setItem('selectedTenant', newSlug);
     }
 
-    // 1. Refresh peripheral camera and sessions
+    // 1. Refresh peripheral camera, sessions, and delivery types
     fetchCameras(colgCd);
     fetchSessionsForCollege(colgCd);
+    fetchDeliveryTypesForCollege(colgCd);
+    fetchSubjectOfferingsForCollege(colgCd);
 
     // 2. Cascade Level 2: Fetch Courses for this college
     await fetchCoursesForCollege(colgCd);
@@ -2795,6 +3160,9 @@ export default function TimetableDesignView({
     setBranchesList([]);
     setBatchesList([]);
     setSemestersList([]);
+    setSectionsList([]);
+    setLinkedGroupsList([]);
+    setSrmsTimetableSubjects([]);
     // Always clear stale grid state when college changes
     setSlots([]);
     setActiveDraft(null);
@@ -2810,6 +3178,9 @@ export default function TimetableDesignView({
     setSelectedSection('0');
     setBatchesList([]);
     setSemestersList([]);
+    setSectionsList([]);
+    setLinkedGroupsList([]);
+    setSrmsTimetableSubjects([]);
     // Always clear stale grid state when course changes
     setSlots([]);
     setActiveDraft(null);
@@ -2837,6 +3208,9 @@ export default function TimetableDesignView({
     setSelectedSemester('0');
     setSelectedSection('0');
     setSemestersList([]);
+    setSectionsList([]);
+    setLinkedGroupsList([]);
+    setSrmsTimetableSubjects([]);
     // Always clear stale grid state when branch changes
     setSlots([]);
     setActiveDraft(null);
@@ -2857,6 +3231,9 @@ export default function TimetableDesignView({
     setSelectedBatch(batchCd);
     setSelectedSemester('0');
     setSelectedSection('0');
+    setSectionsList([]);
+    setLinkedGroupsList([]);
+    setSrmsTimetableSubjects([]);
     // Always clear stale grid state when batch changes
     setSlots([]);
     setActiveDraft(null);
@@ -2876,6 +3253,9 @@ export default function TimetableDesignView({
   const handleFilterSemesterChange = async (semCd: string) => {
     setSelectedSemester(semCd);
     setSelectedSection('0');
+    setSectionsList([]);
+    setLinkedGroupsList([]);
+    setSrmsTimetableSubjects([]);
     // Always clear stale grid state when semester changes
     setSlots([]);
     setActiveDraft(null);
@@ -2891,6 +3271,8 @@ export default function TimetableDesignView({
 
   const handleFilterSectionChange = (secCd: string) => {
     setSelectedSection(secCd);
+    setLinkedGroupsList([]);
+    setSrmsTimetableSubjects([]);
     // Always clear stale grid state when section changes
     setSlots([]);
     setActiveDraft(null);
@@ -2901,6 +3283,7 @@ export default function TimetableDesignView({
 
     if (selectedCourse !== '0' && selectedBranch !== '0' && selectedBatch !== '0' && selectedSemester !== '0' && secCd !== '0') {
       fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, secCd, selectedCollege);
+      fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, secCd);
       if (mode !== 'clerk') {
         fetchSrmsSchedule(selectedCourse, selectedBranch, selectedBatch, selectedSemester, secCd, selectedCollege, currentDate);
       }
@@ -2948,6 +3331,7 @@ export default function TimetableDesignView({
         fetchTimetableSlots(currentDate, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
       }
       fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+      fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection);
     } else {
       setSlots([]);
       if (mode === 'clerk') {
@@ -2956,6 +3340,13 @@ export default function TimetableDesignView({
       }
     }
   }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection]);
+
+  // Synchronize Subject Offerings whenever selected college or modal state changes
+  useEffect(() => {
+    if (selectedCollege && selectedCollege !== '0') {
+      fetchSubjectOfferingsForCollege(selectedCollege);
+    }
+  }, [selectedCollege, isModalOpen]);
 
 
   const formatSrmsDateTime = (dayOfWeek: number, timeStr: string): string => {
@@ -2980,6 +3371,197 @@ export default function TimetableDesignView({
 
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${dd}-${mm}-${yyyy} ${pad(hours12)}:${pad(minutes)}:${pad(seconds)} ${ampm}`;
+  };
+
+  /**
+   * Strictly verify if a Subject Offering is linked under the current academic hierarchy:
+   * College + Course + Branch + Batch + Semester + Section (+ Subject)
+   */
+  const isOfferingLinkedUnderHierarchy = (
+    so: any,
+    targetSubjectIdOrCode?: string,
+    targetSubjectName?: string,
+    targetSectionValue?: string
+  ): boolean => {
+    if (!so || so.is_active === false) return false;
+
+    // 1. College Match
+    if (selectedCollege && selectedCollege !== '0') {
+      const colTarget = String(selectedCollege).trim().toLowerCase();
+      const colSlugTarget = getActiveTenantSlug(selectedCollege).toLowerCase();
+      const soColCode = String(so.college_code || '').trim().toLowerCase();
+      const soColSlug = String(so.college_slug || '').trim().toLowerCase();
+      const soColId = String(so.college_id || '').trim().toLowerCase();
+      const colMatch = (
+        soColCode === colTarget ||
+        soColSlug === colSlugTarget ||
+        soColId === colTarget ||
+        (colTarget === '1' && (soColSlug.includes('srms') || soColCode === '1'))
+      );
+      if (!colMatch) return false;
+    }
+
+    // 2. Course Match
+    if (selectedCourse && selectedCourse !== '0') {
+      const crsTarget = String(selectedCourse).trim().toLowerCase();
+      const crsObjCode = String(selectedCourseObj?.code || '').trim().toLowerCase();
+      const soCourseCd = String(so.course_cd || '').trim().toLowerCase();
+      const soCourseId = String(so.course_id || '').trim().toLowerCase();
+      const crsMatch = (
+        soCourseCd === crsTarget ||
+        (crsObjCode && soCourseCd === crsObjCode) ||
+        soCourseId === crsTarget
+      );
+      if (!crsMatch) return false;
+    }
+
+    // 3. Branch / Department Match
+    if (selectedBranch && selectedBranch !== '0') {
+      const brTarget = String(selectedBranch).trim().toLowerCase();
+      const brObjCode = String(selectedBranchObj?.code || '').trim().toLowerCase();
+      const soBranchCd = String(so.branch_cd || '').trim().toLowerCase();
+      const soBranchId = String(so.branch_id || '').trim().toLowerCase();
+      const brMatch = (
+        soBranchCd === brTarget ||
+        (brObjCode && soBranchCd === brObjCode) ||
+        soBranchId === brTarget
+      );
+      if (!brMatch) return false;
+    }
+
+    // 4. Batch Match (Supports Batch Code / Year / Name Year)
+    if (selectedBatch && selectedBatch !== '0') {
+      const batTarget = String(selectedBatch).trim();
+      const batYear = String(
+        selectedBatchObj?.year ||
+        selectedBatchObj?.name?.match(/\d{4}/)?.[0] ||
+        selectedBatchObj?.code ||
+        ''
+      ).trim();
+      const soBatchYear = String(so.batch_year || '').trim();
+      const soBatchId = String(so.batch_id || '').trim();
+      const soAcadYear = String(so.academic_year || '').trim();
+
+      const batMatch = (
+        (batTarget && (soBatchId === batTarget || soBatchYear === batTarget)) ||
+        (batYear && (soBatchYear === batYear || soAcadYear.includes(batYear)))
+      );
+      if (!batMatch) return false;
+    }
+
+    // 5. Semester / Phase Match
+    if (selectedSemester && selectedSemester !== '0') {
+      const semNum = String(selectedSemester).replace(/\D/g, '');
+      const soSemNum = String(so.semester || '').replace(/\D/g, '');
+      const soPhaseOrder = String(so.phase_order || '');
+      const semMatch = (
+        (semNum && (soSemNum === semNum || soPhaseOrder === semNum)) ||
+        String(so.prof_id || '') === String(selectedSemester)
+      );
+      if (!semMatch) return false;
+    }
+
+    // 6. Section Match (Numeric Code / Letter / Full Name)
+    const secVal = String(targetSectionValue || formData.sectionValue || selectedSection || '1').trim().toUpperCase();
+    if (secVal && secVal !== '0' && secVal !== 'ALL') {
+      const numMatch = secVal.match(/\d+/)?.[0];
+      const letterMatch = secVal.match(/\b([A-Z])\b/)?.[1] ||
+        (secVal.includes('SECTION A') ? 'A' : secVal.includes('SECTION B') ? 'B' : secVal.includes('SECTION C') ? 'C' : null);
+
+      const soSecCd = String(so.sec_cd || '').trim().toUpperCase();
+      const soSecCode = String(so.section_code || '').trim().toUpperCase();
+      const soSection = String(so.section || '').trim().toUpperCase();
+
+      const secMatch = (
+        (soSecCd && (soSecCd === secVal || (numMatch && soSecCd === numMatch))) ||
+        (soSecCode && (soSecCode === secVal || (letterMatch && soSecCode === letterMatch))) ||
+        (soSection && (soSection === secVal || soSection.includes(secVal) || (letterMatch && soSection.includes(letterMatch)))) ||
+        ((secVal === '1' || numMatch === '1') && (soSecCode === 'A' || soSection.includes('A') || soSecCd === '1')) ||
+        ((secVal === 'A' || letterMatch === 'A') && (soSecCd === '1' || soSecCode === 'A' || soSection.includes('1') || soSection.includes('A'))) ||
+        ((secVal === '2' || numMatch === '2') && (soSecCode === 'B' || soSection.includes('B') || soSecCd === '2')) ||
+        ((secVal === 'B' || letterMatch === 'B') && (soSecCd === '2' || soSecCode === 'B' || soSection.includes('2') || soSection.includes('B'))) ||
+        ((secVal === '3' || numMatch === '3') && (soSecCode === 'C' || soSection.includes('C') || soSecCd === '3')) ||
+        ((secVal === 'C' || letterMatch === 'C') && (soSecCd === '3' || soSecCode === 'C' || soSection.includes('3') || soSection.includes('C')))
+      );
+      if (!secMatch) return false;
+    }
+
+    // 7. Subject Match (Code / ID / Cleaned Title)
+    const subTarget = String(targetSubjectIdOrCode || formData.subjectCode || formData.subjectId || '').trim();
+    if (subTarget) {
+      const subNum = subTarget.match(/\d+/)?.[0];
+      const rawTitle = String(targetSubjectName || formData.subjectTitle || '').trim().toLowerCase().replace(/\(.*?\)/g, '');
+      const soCode = String(so.subject_code || '').trim();
+      const soSubId = String(so.subject_id || '').trim();
+      const soName = String(so.subject_name || '').trim().toLowerCase().replace(/\(.*?\)/g, '');
+
+      const codeMatch = (
+        soCode === subTarget ||
+        soSubId === subTarget ||
+        (subNum && soCode === subNum)
+      );
+      const nameMatch = Boolean(
+        rawTitle && soName && (
+          rawTitle === soName ||
+          rawTitle.includes(soName) ||
+          soName.includes(rawTitle)
+        )
+      );
+      if (!codeMatch && !nameMatch) return false;
+    }
+
+    return true;
+  };
+
+  /**
+   * Extracts distinct delivery types strictly from linked Subject Offerings for this subject & hierarchy
+   */
+  const getLinkedDeliveryTypesForSubject = (
+    subjectVal?: string,
+    subjectTitle?: string,
+    sectionVal?: string
+  ): { value: string; label: string; groupTypeKey: string }[] => {
+    const activeSub = String(subjectVal || formData.subjectId || formData.subjectCode || '').trim();
+    if (!activeSub) return [];
+
+    const matchedOfferings = subjectOfferingsList.filter(so =>
+      isOfferingLinkedUnderHierarchy(so, activeSub, subjectTitle || formData.subjectTitle, sectionVal || formData.sectionValue)
+    );
+
+    if (matchedOfferings.length === 0) return [];
+
+    const activeDeliveryList = deliveryTypesList.filter((dt) => dt && dt.is_active !== false);
+    const result: { value: string; label: string; groupTypeKey: string }[] = [];
+    const seenCodes = new Set<string>();
+
+    for (const off of matchedOfferings) {
+      const rawCode = String(off.dtype_code || off.dtype_name || 'TH').trim().toUpperCase();
+      const normCode = (rawCode === 'THEORY' || rawCode === 'TH') ? 'TH'
+                     : (rawCode === 'PRACTICAL' || rawCode === 'PR' || rawCode === 'LAB') ? 'PR'
+                     : (rawCode === 'TUTORIAL' || rawCode === 'TU') ? 'TU'
+                     : rawCode;
+      if (!seenCodes.has(normCode)) {
+        seenCodes.add(normCode);
+        const dtMaster = activeDeliveryList.find((dt) =>
+          String(dt.code).trim().toUpperCase() === normCode ||
+          String(dt.name).trim().toUpperCase() === normCode
+        );
+        const displayName = dtMaster?.name || off.dtype_name || (normCode === 'TH' ? 'Theory' : normCode === 'PR' ? 'Practical' : normCode === 'TU' ? 'Tutorial' : normCode);
+        const optVal = dtMaster?.code || normCode;
+        result.push({
+          value: optVal,
+          label: `[${optVal}] ${displayName}`,
+          groupTypeKey: normalizeGroupPurposeKey(optVal),
+        });
+      }
+    }
+
+    // Sort: TH first, then alphabetical
+    return result.sort((a, b) => {
+      if (a.value === 'TH') return -1;
+      if (b.value === 'TH') return 1;
+      return a.label.localeCompare(b.label);
+    });
   };
 
   const handleSubjectChange = (subVal: string) => {
@@ -3035,11 +3617,39 @@ export default function TimetableDesignView({
 
     const defaultDesc = autoFacName ? `${subTitle} (${autoFacName})` : subTitle;
 
+    // Strictly resolve delivery type from Subject Offerings matching College + Course + Branch + Batch + Semester + Section
+    const linkedTypes = getLinkedDeliveryTypesForSubject(subVal, subTitle, formData.sectionValue);
+    let autoSlotType = '';
+    if (linkedTypes.length > 0) {
+      const thOpt = linkedTypes.find(t => t.value === 'TH' || t.groupTypeKey === 'theory');
+      autoSlotType = thOpt ? thOpt.value : linkedTypes[0].value;
+    } else if (subjectOfferingsList.length === 0 && selectedCollege && selectedCollege !== '0') {
+      fetchSubjectOfferingsForCollege(selectedCollege).then((freshOfferings) => {
+        if (Array.isArray(freshOfferings) && freshOfferings.length > 0) {
+          const freshMatched = freshOfferings.filter(so =>
+            isOfferingLinkedUnderHierarchy(so, subVal, subTitle, formData.sectionValue)
+          );
+          if (freshMatched.length > 0) {
+            const hasTh = freshMatched.some(o => {
+              const c = String(o.dtype_code || o.dtype_name).toUpperCase();
+              return c === 'TH' || c === 'THEORY' || String(o.dtype_name).toLowerCase().includes('theory');
+            });
+            const preferred = hasTh ? 'TH' : (freshMatched[0].dtype_code || freshMatched[0].dtype_name || 'TH');
+            const normPref = (String(preferred).toUpperCase() === 'THEORY' || String(preferred).toUpperCase() === 'TH') ? 'TH'
+                           : (String(preferred).toUpperCase() === 'PRACTICAL' || String(preferred).toUpperCase() === 'PR') ? 'PR'
+                           : String(preferred).toUpperCase() === 'TUTORIAL' ? 'TU' : preferred;
+            setFormData(prev => ({ ...prev, slotType: normPref }));
+          }
+        }
+      });
+    }
+
     setFormData(prev => ({
       ...prev,
       subjectId: subVal,
       subjectCode: subCode,
       subjectTitle: subTitle,
+      slotType: autoSlotType,
       facultyId: autoFacId || autoFacEmpId || prev.facultyId,
       facultyEmpId: autoFacEmpId || prev.facultyEmpId,
       facultyName: autoFacName || prev.facultyName,
@@ -3070,6 +3680,47 @@ export default function TimetableDesignView({
       const clashErr = liveClash.message;
       setModalError(clashErr);
       showAlert('error', clashErr);
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    // Strictly validate that Subject is linked under College + Course + Branch + Batch + Semester + Section in Subject Offerings
+    const linkedOfferingTypes = getLinkedDeliveryTypesForSubject(
+      formData.subjectId || formData.subjectCode,
+      formData.subjectTitle,
+      formData.sectionValue
+    );
+    if (linkedOfferingTypes.length === 0) {
+      const hierarchyErr = `Subject "${formData.subjectTitle || formData.subjectCode || formData.subjectId}" is not linked in Subject Offerings under this College, Course, Branch, Batch, Semester & Section. Please link it in Admin Master > Subject Offerings before scheduling.`;
+      setModalError(hierarchyErr);
+      showAlert('error', hierarchyErr);
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    if (!formData.slotType) {
+      const slotTypeErr = 'Please select a valid Group Purpose / Type for this subject.';
+      setModalError(slotTypeErr);
+      showAlert('error', slotTypeErr);
+      if (modalScrollRef.current) {
+        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+      return;
+    }
+
+    // Validate that a Group (txtG) is selected (value '0' is rejected when groups are available)
+    const curPurposeKey = normalizeGroupPurposeKey(formData.slotType);
+    const groupsForCurrentPurpose = linkedGroupsList.filter(
+      (g) => normalizeGroupPurposeKey(g.group_type) === curPurposeKey
+    );
+    if (groupsForCurrentPurpose.length > 0 && (!formData.groupValue || formData.groupValue === '0')) {
+      const grpErr = 'Please select a Group (txtG) before saving.';
+      setModalError(grpErr);
+      showAlert('error', grpErr);
       if (modalScrollRef.current) {
         modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
       }
@@ -3112,6 +3763,41 @@ export default function TimetableDesignView({
     const effFromStr = `${mondayDate.getFullYear()}-${pad(mondayDate.getMonth() + 1)}-${pad(mondayDate.getDate())}`;
     const effUntilStr = `${sundayDate.getFullYear()}-${pad(sundayDate.getMonth() + 1)}-${pad(sundayDate.getDate())}`;
 
+    const activeDts = deliveryTypesList.filter((dt) => dt && dt.is_active !== false);
+    const saveCurSub = availableFormSubjects.find(s => 
+      String(s.id) === String(formData.subjectId) || 
+      String(s.code) === String(formData.subjectId) || 
+      String(s.linkcd) === String(formData.subjectId) || 
+      String(s.sub_cd) === String(formData.subjectId)
+    );
+    const saveCurSubCode = String(saveCurSub?.code || saveCurSub?.sub_cd || formData.subjectCode || formData.subjectId || '').trim();
+    const saveCurSubName = String(saveCurSub?.name || saveCurSub?.raw_name || formData.subjectTitle || '').trim();
+    const matchedSaveOffs = subjectOfferingsList.filter(so => {
+      if (!so) return false;
+      if (saveCurSubCode && (String(so.subject_code) === saveCurSubCode || String(so.subject_id) === saveCurSubCode)) return true;
+      const numCode = saveCurSubCode.match(/\d+/)?.[0];
+      if (numCode && String(so.subject_code) === numCode) return true;
+      if (saveCurSubName && so.subject_name) {
+        const cleanA = saveCurSubName.replace(/\(.*?\)/g, '').trim().toUpperCase();
+        const cleanB = String(so.subject_name).replace(/\(.*?\)/g, '').trim().toUpperCase();
+        if (cleanA && cleanB && (cleanA === cleanB || cleanA.includes(cleanB) || cleanB.includes(cleanA))) return true;
+      }
+      return false;
+    });
+    const allowedSaveCodes = matchedSaveOffs.map(so => {
+      const c = String(so.dtype_code || so.dtype_name || 'TH').trim().toUpperCase();
+      return (c === 'THEORY' || c === 'TH') ? 'TH' : (c === 'PRACTICAL' || c === 'PR' || c === 'LAB') ? 'PR' : c === 'TUTORIAL' ? 'TU' : c;
+    });
+
+    let effectiveSaveSlotType = formData.slotType;
+    if (allowedSaveCodes.length > 0) {
+      if (!allowedSaveCodes.includes(effectiveSaveSlotType)) {
+        effectiveSaveSlotType = allowedSaveCodes.includes('TH') ? 'TH' : allowedSaveCodes[0];
+      }
+    } else if (!effectiveSaveSlotType || effectiveSaveSlotType === 'Lecture') {
+      effectiveSaveSlotType = activeDts.find(d => String(d.code).toUpperCase() === 'TH')?.code || activeDts[0]?.code || 'TH';
+    }
+
     // 1. PostgreSQL Save Payload with all academic hierarchy, effective duration & unit/topic/subtopic parameters
     const pgPayload = {
       dayOfWeek: formData.dayOfWeek,
@@ -3122,7 +3808,7 @@ export default function TimetableDesignView({
       facultyId: formData.facultyId || undefined,
       batchId: selectedBatch || undefined,
       room: roomName || undefined,
-      slotType: formData.slotType,
+      slotType: effectiveSaveSlotType,
       groupName: formData.groupName || 'All Group',
       topic: formData.topic || subTitle,
       unitName: formData.unitName || undefined,
@@ -3248,8 +3934,8 @@ export default function TimetableDesignView({
           mapping_status: slotMappingStatus,
           room: roomName,
           cameraId: formData.cameraId,
-          slotType: formData.slotType,
-          slot_type: formData.slotType,
+          slotType: effectiveSaveSlotType,
+          slot_type: effectiveSaveSlotType,
           groupValue: formData.groupValue || '0',
           group_value: formData.groupValue || '0',
           groupName: formData.groupName || 'All Group',
@@ -3900,6 +4586,11 @@ export default function TimetableDesignView({
     const activeList = camerasList && camerasList.length > 0 ? camerasList : DEFAULT_CAMERAS;
     const defaultCam = activeList.length > 0 ? String(activeList[0].camera_id) : '1';
     const defaultCamObj = activeList.find(c => String(c.camera_id) === defaultCam) || activeList[0] || DEFAULT_CAMERAS[0];
+    const useNonMed = isNonMedTenantMode(getActiveTenantSlug(selectedCollege), selectedCollegeObj);
+    const activeDts = deliveryTypesList.filter((dt) => dt && dt.is_active !== false);
+    const defaultSlotType = (useNonMed && activeDts.length > 0)
+      ? (activeDts.find((d) => String(d.code).toUpperCase() === 'TH')?.code || activeDts[0].code)
+      : 'Lecture';
 
     setFormData({
       dayOfWeek: dayVal,
@@ -3914,7 +4605,7 @@ export default function TimetableDesignView({
       facultyName: '',
       room: defaultCamObj?.classroom || 'Web Cam',
       cameraId: defaultCam,
-      slotType: 'Lecture',
+      slotType: '',
       groupName: 'All Group',
       groupValue: '0',
       sectionValue: selectedSection || '1',
@@ -3928,6 +4619,21 @@ export default function TimetableDesignView({
     });
     setModalError(null);
     setIsModalOpen(true);
+    if (subjectOfferingsList.length === 0) {
+      fetchSubjectOfferingsForCollege(selectedCollege);
+    }
+    if (deliveryTypesList.length === 0) {
+      fetchDeliveryTypesForCollege(selectedCollege);
+    }
+    if (subjectOfferingsList.length === 0) {
+      fetchSubjectOfferingsForCollege(selectedCollege);
+    }
+    if (selectedCourse !== '0' && selectedBranch !== '0' && selectedBatch !== '0' && selectedSemester !== '0' && selectedSection !== '0') {
+      fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection);
+      if (srmsTimetableSubjects.length === 0) {
+        fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+      }
+    }
   };
 
   const handleSlotClick = (slot: TimetableSlot, e: React.MouseEvent) => {
@@ -3957,6 +4663,22 @@ export default function TimetableDesignView({
     const defaultCam = (rawCamId && String(rawCamId) !== '0') ? String(rawCamId) : (activeList[0] ? String(activeList[0].camera_id) : '1');
     const defaultCamObj = activeList.find(c => String(c.camera_id) === String(defaultCam)) || activeList[0] || DEFAULT_CAMERAS[0];
 
+    const matchedOfferingTypes = getLinkedDeliveryTypesForSubject(
+      resolvedSubjectId,
+      slot.subject_name,
+      slot.section || selectedSection || '1'
+    );
+    let resolvedSlotType = slot.slot_type || slot.slotType || '';
+    if (matchedOfferingTypes.length > 0) {
+      const match = matchedOfferingTypes.find(t => t.value === resolvedSlotType || t.groupTypeKey === normalizeGroupPurposeKey(resolvedSlotType));
+      if (match) {
+        resolvedSlotType = match.value;
+      } else {
+        const thOpt = matchedOfferingTypes.find(t => t.value === 'TH' || t.groupTypeKey === 'theory');
+        resolvedSlotType = thOpt ? thOpt.value : matchedOfferingTypes[0].value;
+      }
+    }
+
     setFormData({
       dayOfWeek: slot.day_of_week,
       startTime: slot.start_time,
@@ -3970,9 +4692,9 @@ export default function TimetableDesignView({
       facultyName: (slot.faculty_name && slot.faculty_name !== 'Faculty Member') ? slot.faculty_name : (matchedSub?.faculty_name || matchedSub?.EmpName || ''),
       room: slot.room || defaultCamObj?.classroom || 'Web Cam',
       cameraId: defaultCam,
-      slotType: slot.slot_type || slot.slotType || 'Lecture',
+      slotType: resolvedSlotType,
       groupName: slot.group_name || 'All Group',
-      groupValue: '0',
+      groupValue: String((slot as any).groupValue || (slot as any).group_value || '0'),
       sectionValue: slot.section || selectedSection || '1',
       subjectDescription: slot.description || slot.topic || '',
       unitId: slot.unit_id || 'unit_1',
@@ -3984,6 +4706,15 @@ export default function TimetableDesignView({
     });
     setModalError(null);
     setIsModalOpen(true);
+    if (subjectOfferingsList.length === 0) {
+      fetchSubjectOfferingsForCollege(selectedCollege);
+    }
+    if (selectedCourse !== '0' && selectedBranch !== '0' && selectedBatch !== '0' && selectedSemester !== '0' && selectedSection !== '0') {
+      fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection);
+      if (srmsTimetableSubjects.length === 0) {
+        fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, selectedCollege);
+      }
+    }
   };
 
   const isDraftForCurrentWeek = useMemo(() => {
@@ -4555,22 +5286,26 @@ export default function TimetableDesignView({
                 </select>
               </div>
 
-              {/* 6. Section Selector (1 = A, 2 = B, 3 = C, 4 = D) */}
+              {/* 6. Section Selector (Loaded from Section Master if linked) */}
               <div className="flex items-center gap-1.5 bg-[#F6F8FC] dark:bg-slate-800/80 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs shadow-sm hover:border-[#5B4BFF]/40 transition-all">
                 <span className="text-slate-500 dark:text-slate-400 font-bold flex items-center gap-1">
                   <span>🔠</span> Section <span className="font-extrabold text-[#5B4BFF] dark:text-indigo-400">({sectionsList.length})</span>:
                 </span>
                 <select
                   value={selectedSection}
-                  disabled={selectedSemester === '0'}
+                  disabled={selectedSemester === '0' || loadingLinkedSections}
                   onChange={(e) => handleFilterSectionChange(e.target.value)}
                   className="bg-transparent text-slate-900 dark:text-white font-extrabold focus:outline-none cursor-pointer disabled:cursor-not-allowed disabled:opacity-50 text-xs max-w-[140px] truncate"
                 >
                   <option value="0" className="bg-white dark:bg-slate-900 text-slate-500">
-                    -- Select Section --
+                    {loadingLinkedSections
+                      ? '-- Loading Sections... --'
+                      : selectedSemester !== '0' && sectionsList.length === 0
+                        ? '-- No Linked Sections --'
+                        : '-- Select Section --'}
                   </option>
                   {sectionsList.map((sec, idx) => (
-                    <option key={sec.code || idx} value={sec.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
+                    <option key={(sec as any).uuid || sec.code || idx} value={sec.code} className="bg-white dark:bg-slate-900 text-slate-900 dark:text-white">
                       [#{sec.code}] {sec.name}
                     </option>
                   ))}
@@ -6408,69 +7143,264 @@ export default function TimetableDesignView({
                       />
                     </div>
 
-                    {/* 4. Group & Section Row */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Group (txtG)
-                        </label>
-                        <select
-                          value={formData.groupValue}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setFormData(prev => ({
-                              ...prev,
-                              groupValue: val,
-                              groupName: val === '0' ? 'All Group' : `Group ${val}`,
-                            }));
-                          }}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                        >
-                          <option value="0">0 (All Group / Whole Batch)</option>
-                          <option value="1">1 (Group 1 / Batch G1)</option>
-                          <option value="2">2 (Group 2 / Batch G2)</option>
-                          <option value="3">3 (Group 3 / Batch G3)</option>
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                          Section (txtSec)
-                        </label>
-                        <input
-                          type="text"
-                          value={formData.sectionValue}
-                          onChange={(e) => setFormData({ ...formData, sectionValue: e.target.value })}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                          placeholder="1"
-                        />
-                      </div>
-                    </div>
+                    {/* 4. Section (txtSec) & Dynamic Group Purpose / Type (Strictly Filtered by Subject Offerings Hierarchy) */}
+                    {(() => {
+                      const activeSecSelected = Boolean(formData.sectionValue && formData.sectionValue !== '0');
+                      const useNonMedDelivery = isNonMedTenantMode(getActiveTenantSlug(selectedCollege), selectedCollegeObj);
+                      const activeDeliveryList = deliveryTypesList.filter((dt) => dt && dt.is_active !== false);
 
-                    {/* 5. Teaching Mode & Room */}
-                    <div className="grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Teaching Mode</label>
-                        <select
-                          value={formData.slotType}
-                          onChange={(e) => setFormData({ ...formData, slotType: e.target.value })}
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                        >
-                          {TEACHING_MODES.map(m => (
-                            <option key={m.value} value={m.value}>{m.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Room / Lab</label>
-                        <input
-                          type="text"
-                          value={formData.room}
-                          onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                          placeholder="e.g. Room 204, Computer Lab 1"
-                          className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
-                        />
-                      </div>
-                    </div>
+                      const formatDeliveryAwareOption = (rawType: string): { value: string; label: string; groupTypeKey: string } => {
+                        const rawUp = String(rawType || '').trim().toUpperCase();
+                        const dtMatch = activeDeliveryList.find((dt) => String(dt.code || '').trim().toUpperCase() === rawUp);
+                        if (dtMatch) {
+                          return {
+                            value: useNonMedDelivery ? dtMatch.code : formatGroupPurposeOption(rawType).value,
+                            label: `[${dtMatch.code}] ${dtMatch.name}`,
+                            groupTypeKey: normalizeGroupPurposeKey(dtMatch.code),
+                          };
+                        }
+                        return formatGroupPurposeOption(rawType);
+                      };
+
+                      // 1. Resolve currently chosen subject & section in form
+                      const chosenSubjectObj = availableFormSubjects.find(s => 
+                        String(s.id) === String(formData.subjectId) || 
+                        String(s.code) === String(formData.subjectId) || 
+                        String(s.linkcd) === String(formData.subjectId) ||
+                        String(s.sub_cd) === String(formData.subjectId)
+                      );
+                      const curSubCode = String(chosenSubjectObj?.code || chosenSubjectObj?.sub_cd || formData.subjectCode || formData.subjectId || '').trim();
+                      const curSubName = String(chosenSubjectObj?.name || chosenSubjectObj?.raw_name || formData.subjectTitle || '').trim();
+                      const curSecVal = String(formData.sectionValue || selectedSection || '1').trim();
+
+                      // 2. Query delivery types strictly linked under College + Course + Branch + Batch + Semester + Section
+                      const offeringDeliveryTypes = getLinkedDeliveryTypesForSubject(
+                        formData.subjectId || curSubCode,
+                        curSubName,
+                        curSecVal
+                      );
+
+                      // CRITICAL CONSTRAINT: If subject is NOT linked under the hierarchy, dynamicPurposeOptions MUST BE EMPTY!
+                      // Strictly eliminate fallbacks to Delivery Master, Group Master, or Teaching Modes per user constraint.
+                      const dynamicPurposeOptions: { value: string; label: string; groupTypeKey: string }[] = offeringDeliveryTypes;
+
+                      const activeSlotTypeValue = dynamicPurposeOptions.some((o) => o.value === formData.slotType)
+                        ? formData.slotType
+                        : (dynamicPurposeOptions.find((o) => o.value === 'TH' || o.groupTypeKey === 'theory')?.value || dynamicPurposeOptions[0]?.value || '');
+                      const selectedPurposeKey = normalizeGroupPurposeKey(activeSlotTypeValue);
+                      const filteredGroupsForPurpose = linkedGroupsList.filter(
+                        (g) => normalizeGroupPurposeKey(g.group_type) === selectedPurposeKey,
+                      );
+
+                      return (
+                        <>
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
+                                Section (txtSec)
+                              </label>
+                              {sectionsList.length > 0 ? (
+                                <select
+                                  value={formData.sectionValue}
+                                  onChange={(e) => {
+                                    const secVal = e.target.value;
+                                    const nextLinkedTypes = getLinkedDeliveryTypesForSubject(
+                                      formData.subjectId || curSubCode,
+                                      curSubName,
+                                      secVal
+                                    );
+                                    let nextSlotType = '';
+                                    if (nextLinkedTypes.length > 0) {
+                                      const keep = nextLinkedTypes.find(t => t.value === formData.slotType);
+                                      const thOpt = nextLinkedTypes.find(t => t.value === 'TH' || t.groupTypeKey === 'theory');
+                                      nextSlotType = keep ? keep.value : (thOpt ? thOpt.value : nextLinkedTypes[0].value);
+                                    }
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      sectionValue: secVal,
+                                      slotType: nextSlotType,
+                                      groupValue: '0',
+                                      groupName: 'All Group',
+                                    }));
+                                    fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, secVal);
+                                    fetchSrmsSubjects(selectedCourse, selectedBranch, selectedBatch, selectedSemester, secVal, selectedCollege);
+                                  }}
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                                >
+                                  {sectionsList.map((sec, idx) => (
+                                    <option key={(sec as any).uuid || sec.code || idx} value={sec.code}>
+                                      [#{sec.code}] {sec.name}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                <input
+                                  type="text"
+                                  value={formData.sectionValue}
+                                  onChange={(e) => {
+                                    const secVal = e.target.value;
+                                    const nextLinkedTypes = getLinkedDeliveryTypesForSubject(
+                                      formData.subjectId || curSubCode,
+                                      curSubName,
+                                      secVal
+                                    );
+                                    let nextSlotType = '';
+                                    if (nextLinkedTypes.length > 0) {
+                                      const keep = nextLinkedTypes.find(t => t.value === formData.slotType);
+                                      const thOpt = nextLinkedTypes.find(t => t.value === 'TH' || t.groupTypeKey === 'theory');
+                                      nextSlotType = keep ? keep.value : (thOpt ? thOpt.value : nextLinkedTypes[0].value);
+                                    }
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      sectionValue: secVal,
+                                      slotType: nextSlotType,
+                                      groupValue: '0',
+                                      groupName: 'All Group',
+                                    }));
+                                    if (secVal && secVal !== '0') {
+                                      fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, secVal);
+                                    }
+                                  }}
+                                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                                  placeholder="1"
+                                />
+                              )}
+                            </div>
+                            <div>
+                              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                                <span>Group Purpose / Type</span>
+                                {loadingSubjectOfferings ? (
+                                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">
+                                    Fetching offerings...
+                                  </span>
+                                ) : offeringDeliveryTypes.length > 0 ? (
+                                  <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                    {offeringDeliveryTypes.length === 1
+                                      ? `1 linked from Subject Offerings (${offeringDeliveryTypes[0].value === 'TH' ? 'Theory only' : offeringDeliveryTypes[0].label})`
+                                      : `${offeringDeliveryTypes.length} linked from Subject Offerings`}
+                                  </span>
+                                ) : (
+                                  <span className="text-[10px] font-bold text-rose-500 dark:text-rose-400">
+                                    ⚠️ Not linked in Subject Offerings
+                                  </span>
+                                )}
+                              </label>
+                              <select
+                                value={activeSlotTypeValue}
+                                disabled={dynamicPurposeOptions.length === 0}
+                                onChange={(e) => {
+                                  const nextType = e.target.value;
+                                  const nextKey = normalizeGroupPurposeKey(nextType);
+                                  const curGrp = linkedGroupsList.find((g) => String(g.code || g.id) === String(formData.groupValue));
+                                  const keepCurrentGrp = curGrp && normalizeGroupPurposeKey(curGrp.group_type) === nextKey;
+                                  setFormData((prev) => ({
+                                    ...prev,
+                                    slotType: nextType,
+                                    groupValue: keepCurrentGrp ? prev.groupValue : '0',
+                                    groupName: keepCurrentGrp ? prev.groupName : 'All Group',
+                                  }));
+                                  const activeSec = formData.sectionValue || selectedSection;
+                                  if (activeSec && activeSec !== '0') {
+                                    fetchGroupsForSection(selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, activeSec);
+                                  }
+                                }}
+                                className={`w-full bg-slate-50 dark:bg-slate-800 border ${dynamicPurposeOptions.length === 0 ? 'border-rose-400 dark:border-rose-600 bg-rose-50/40 dark:bg-rose-950/20' : 'border-slate-300 dark:border-slate-700'} rounded-xl p-2.5 font-bold`}
+                              >
+                                {dynamicPurposeOptions.length === 0 ? (
+                                  <option value="">
+                                    {loadingSubjectOfferings
+                                      ? '-- Fetching Subject Offerings... --'
+                                      : !formData.subjectId
+                                        ? '-- Please Select a Subject First --'
+                                        : '-- No Linked Delivery Type (Subject Not Linked in Offerings) --'}
+                                  </option>
+                                ) : (
+                                  dynamicPurposeOptions.map((m) => (
+                                    <option key={m.value} value={m.value}>{m.label}</option>
+                                  ))
+                                )}
+                              </select>
+                              {dynamicPurposeOptions.length === 0 && !loadingSubjectOfferings && formData.subjectId && (
+                                <p className="mt-1 text-[11px] text-rose-600 dark:text-rose-400 font-semibold leading-tight">
+                                  ⛔ Subject must be linked under this College, Course, Branch, Batch, Semester &amp; Section in Admin Master &gt; Subject Offerings.
+                                </p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* 5. Group (Filtered by Section & Group Purpose/Type) & Room */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div>
+                              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+                                <span>Group (txtG) *</span>
+                                {loadingLinkedGroups ? (
+                                  <span className="text-[10px] font-semibold text-indigo-600 dark:text-indigo-400">Fetching...</span>
+                                ) : filteredGroupsForPurpose.length > 0 ? (
+                                  formData.groupValue && formData.groupValue !== '0' ? (
+                                    <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400">
+                                      Selected: [{formData.groupValue}]
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] font-bold text-amber-500 dark:text-amber-400">
+                                      Selection required ({filteredGroupsForPurpose.length} available)
+                                    </span>
+                                  )
+                                ) : (
+                                  <span className="text-[10px] font-semibold text-slate-400">Whole Batch default</span>
+                                )}
+                              </label>
+                              <select
+                                value={formData.groupValue}
+                                disabled={loadingLinkedGroups}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const matchedGrp = linkedGroupsList.find((g) => String(g.code || g.id) === String(val));
+                                  const syncedPurpose = matchedGrp?.group_type ? formatDeliveryAwareOption(matchedGrp.group_type).value : undefined;
+                                  setFormData(prev => ({
+                                    ...prev,
+                                    groupValue: val,
+                                    groupName: val === '0' ? '' : (matchedGrp?.name || `Group ${val}`),
+                                    ...(syncedPurpose ? { slotType: syncedPurpose } : {}),
+                                  }));
+                                  if (modalError) setModalError(null);
+                                }}
+                                className={`w-full bg-slate-50 dark:bg-slate-800 border ${
+                                  filteredGroupsForPurpose.length > 0 && (!formData.groupValue || formData.groupValue === '0')
+                                    ? 'border-amber-400 dark:border-amber-600'
+                                    : 'border-slate-300 dark:border-slate-700'
+                                } rounded-xl p-2.5 font-bold`}
+                              >
+                                {filteredGroupsForPurpose.length > 0 ? (
+                                  <option value="0">-- Select Group --</option>
+                                ) : (
+                                  <option value="0">{loadingLinkedGroups ? '-- Fetching Groups... --' : '0 (All Group / Whole Batch)'}</option>
+                                )}
+                                {filteredGroupsForPurpose.map((grp, idx) => (
+                                  <option key={grp.id || grp.code || idx} value={String(grp.code || idx + 1)}>
+                                    [{grp.code}] {grp.name}{grp.subject_name ? ` — ${grp.subject_name}` : ''}
+                                  </option>
+                                ))}
+                              </select>
+                              {filteredGroupsForPurpose.length > 0 && (!formData.groupValue || formData.groupValue === '0') && (
+                                <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400 font-semibold leading-tight">
+                                  ⚠️ Please select a group from the list.
+                                </p>
+                              )}
+                            </div>
+                            <div>
+                              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">Room / Lab</label>
+                              <input
+                                type="text"
+                                value={formData.room}
+                                onChange={(e) => setFormData({ ...formData, room: e.target.value })}
+                                placeholder="e.g. Room 204, Computer Lab 1"
+                                className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 font-bold"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
 
                   {/* RIGHT COLUMN: Description & Cascading Curriculum (Unit -> Topic -> Sub Topic) */}

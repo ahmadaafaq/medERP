@@ -75,6 +75,20 @@ export default function FacultyDailyPunchWidget() {
   const [pageSize, setPageSize] = useState<number>(20);
   const [showAllModal, setShowAllModal] = useState<boolean>(false);
 
+  // Strictly isolate SRMS portal punch report to tenants containing 'srms' keyword
+  const isSrms = useMemo(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      const s = String(u?.tenantSlug || u?.tenant || u?.slug || '').toLowerCase();
+      const n = String(u?.collegeName || u?.tenantName || '').toLowerCase();
+      if (s || n) return s.includes('srms') || n.includes('srms');
+    } catch (e) {}
+    const s = String(localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').toLowerCase();
+    const n = String(localStorage.getItem('collegeName') || '').toLowerCase();
+    return s.includes('srms') || n.includes('srms');
+  }, []);
+
   // Close modal on Escape
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -88,6 +102,7 @@ export default function FacultyDailyPunchWidget() {
 
   // Fetch Live Daily Punch Report (Triggers on punchType, selectedLocId, selectedDate change)
   const fetchPunchReport = async (loc = selectedLocId, dt = selectedDate, pType = punchType) => {
+    if (!isSrms) return;
     try {
       setLoading(true);
       setError(null);
@@ -322,6 +337,8 @@ export default function FacultyDailyPunchWidget() {
     link.click();
     document.body.removeChild(link);
   };
+
+  if (!isSrms) return null;
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-6 shadow-soft hover:shadow-md transition-all space-y-6">

@@ -861,6 +861,7 @@ export class AttendanceService {
       }
     }
 
+    const oldStatus = rec.status || 'ABSENT';
     await this.ds.query(
       `UPDATE "${schema}".attendance_records
        SET status=$1, remarks=$2, updated_at=NOW()
@@ -868,7 +869,19 @@ export class AttendanceService {
       [dto.status, dto.remarks ?? null, recordId],
     );
 
-    return { id: recordId, status: dto.status };
+    // Record audit entry
+    try {
+      await this.ds.query(
+        `INSERT INTO "${schema}".attendance_record_audits
+           (record_id, session_id, student_id, old_status, new_status, changed_by, reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        [recordId, rec.session_id, rec.student_id, oldStatus, dto.status, updaterId, dto.remarks || 'Updated via portal'],
+      );
+    } catch (auditErr) {
+      // non-fatal
+    }
+
+    return { id: recordId, status: dto.status, old_status: oldStatus };
   }
 
   // ─── Get student attendance summary ───────────────────────────────────────
@@ -1386,6 +1399,119 @@ export class AttendanceService {
       };
     });
 
+    // 4. Apply Subject Merge Mappings for this Batch
+    const mergeMappings = await this.ds.query(
+      `SELECT sm.*, 
+              m.code AS major_code, m.name AS major_name, m.id AS major_id,
+              c.code AS child_code, c.name AS child_name, c.id AS child_id
+       FROM "${schema}".subject_merge_mappings sm
+       JOIN "${schema}".subjects m ON m.id = sm.major_subject_id
+       JOIN "${schema}".subjects c ON c.id = sm.child_subject_id
+       WHERE sm.is_active = true
+         AND (
+           sm.batch_cd = $1
+           OR sm.batch_cd IN (SELECT code FROM "${schema}".batches WHERE id::text = $2 OR code ILIKE $1)
+         )`,
+      [batchCode, batchUuid],
+    ).catch(() => []);
+
+    if (mergeMappings.length > 0) {
+      const absorbedChildIds = new Set<string>();
+      const majorGroups = new Map<string, any>();
+
+      for (const m of mergeMappings) {
+        if (m.merge_mode === 'COMBINE') {
+          absorbedChildIds.add(String(m.child_id));
+          if (!majorGroups.has(String(m.major_id))) {
+            majorGroups.set(String(m.major_id), {
+              id: String(m.major_id),
+              code: m.major_code,
+              name: m.major_name,
+              children: [],
+            });
+          }
+          majorGroups.get(String(m.major_id)).children.push({
+            id: String(m.child_id),
+            code: m.child_code,
+            name: m.child_name,
+          });
+        }
+      }
+
+      // Mark major subjects as merged
+      for (const [majorId, info] of majorGroups.entries()) {
+        let existingMajor = subjects.find((s: any) => String(s.id) === majorId);
+        if (!existingMajor) {
+          existingMajor = { id: majorId, name: info.name, code: info.code };
+          subjects.push(existingMajor);
+        }
+        (existingMajor as any).is_merged = true;
+        (existingMajor as any).merged_children = info.children;
+      }
+
+      // Roll up attendance for each student
+      for (const st of studentList) {
+        for (const [majorId, info] of majorGroups.entries()) {
+          const curMajor = st.subjects[majorId] || { total: 0, present: 0, absent: 0, late: 0, excused: 0, pct: 0 };
+          let sumTotal = curMajor.total || 0;
+          let sumPresent = curMajor.present || 0;
+          let sumAbsent = curMajor.absent || 0;
+          let sumLate = curMajor.late || 0;
+          let sumExcused = curMajor.excused || 0;
+          const breakdown: any[] = [];
+
+          if (curMajor.total > 0) {
+            breakdown.push({
+              id: majorId,
+              code: info.code,
+              name: info.name,
+              total: curMajor.total,
+              present: curMajor.present,
+              pct: curMajor.pct,
+            });
+          }
+
+          for (const ch of info.children) {
+            const chStats = st.subjects[ch.id];
+            if (chStats && chStats.total > 0) {
+              sumTotal += chStats.total;
+              sumPresent += chStats.present;
+              sumAbsent += chStats.absent;
+              sumLate += chStats.late;
+              sumExcused += chStats.excused;
+              breakdown.push({
+                id: ch.id,
+                code: ch.code,
+                name: ch.name,
+                total: chStats.total,
+                present: chStats.present,
+                pct: chStats.pct,
+              });
+            }
+            delete st.subjects[ch.id];
+          }
+
+          const combinedPct = sumTotal > 0 ? parseFloat(((sumPresent * 100.0) / sumTotal).toFixed(2)) : 0;
+          st.subjects[majorId] = {
+            total: sumTotal,
+            present: sumPresent,
+            absent: sumAbsent,
+            late: sumLate,
+            excused: sumExcused,
+            pct: combinedPct,
+            is_merged: true,
+            breakdown,
+          };
+        }
+      }
+
+      const filteredSubjects = subjects.filter((s: any) => !absorbedChildIds.has(String(s.id)));
+      return {
+        subjects: filteredSubjects,
+        students: studentList,
+      };
+    }
+
     return {
       subjects,
       students: studentList,
@@ -1413,6 +1539,7 @@ export class AttendanceService {
     branchCd?: string,
     semester?: string,
     section?: string,
+    groupId?: string,
   ) {
     const schema = this.getSchema(tenantSlug);
     const isUUID = (s?: string | null) =>
@@ -1424,7 +1551,7 @@ export class AttendanceService {
     if (isUUID(timetableSlotId)) {
       try {
         const slotRows = await this.ds.query(
-          `SELECT batch_id, batch_cd, course_cd, branch_cd, semester, section FROM "${schema}".timetable_slots WHERE id = $1`,
+          `SELECT batch_id, batch_cd, course_cd, branch_cd, semester, section, group_id FROM "${schema}".timetable_slots WHERE id = $1`,
           [timetableSlotId],
         );
         if (slotRows.length) {
@@ -1434,6 +1561,7 @@ export class AttendanceService {
           if (!branchCd) branchCd = slotRows[0].branch_cd;
           if (!semester) semester = slotRows[0].semester;
           if (!section) section = slotRows[0].section;
+          if (!groupId && slotRows[0].group_id) groupId = slotRows[0].group_id;
         }
       } catch (e: any) {
         this.logger.warn(`Failed to resolve batch from slot ${timetableSlotId}: ${e.message}`);
@@ -1509,6 +1637,20 @@ export class AttendanceService {
       )`);
       params.push(section, altSec);
       i += 2;
+    }
+
+    // Group membership filter for practicals, clinical postings, and community postings
+    if (groupId) {
+      const groupMembers = await this.ds.query(
+        `SELECT student_id FROM "${schema}".student_group_members WHERE group_id::text = $1 AND is_active = true`,
+        [groupId],
+      ).catch(() => []);
+      if (groupMembers.length > 0) {
+        const memberIds = groupMembers.map((m: any) => m.student_id);
+        conditions.push(`s.id::text = ANY(${i}::text[])`);
+        params.push(memberIds);
+        i++;
+      }
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -2400,10 +2542,408 @@ export class AttendanceService {
       };
     });
 
+    // 9. Subject Merge Mapping rollup for Engineering & Multi-Semester Courses
+    const mergeMappings = await this.ds.query(
+      `SELECT sm.*, 
+              m.code AS major_code, m.name AS major_name, m.id AS major_id,
+              c.code AS child_code, c.name AS child_name, c.id AS child_id
+       FROM "${slug}".subject_merge_mappings sm
+       JOIN "${slug}".subjects m ON m.id = sm.major_subject_id
+       JOIN "${slug}".subjects c ON c.id = sm.child_subject_id
+       WHERE sm.is_active = true
+         AND (sm.semester_cd = $1 OR sm.phase_cd ILIKE '%' || $1 || '%')
+         AND (sm.course_cd = $2 OR sm.course_cd IS NULL OR $2 IS NULL)
+         AND (sm.branch_cd = $3 OR sm.branch_cd IS NULL OR $3 IS NULL)`,
+      [String(sem_cd || '1'), coursecd ? String(coursecd) : null, ddl_branch ? String(ddl_branch) : null],
+    ).catch(() => []);
+
+    if (mergeMappings.length > 0 && String(query.includeMerged) !== 'false') {
+      const absorbedChildCodes = new Set<string>();
+      const majorGroups = new Map<string, any>();
+
+      for (const m of mergeMappings) {
+        if (m.merge_mode === 'COMBINE') {
+          absorbedChildCodes.add(m.child_code);
+          if (!majorGroups.has(m.major_code)) {
+            majorGroups.set(m.major_code, {
+              major_code: m.major_code,
+              major_name: m.major_name,
+              children: [],
+            });
+          }
+          majorGroups.get(m.major_code).children.push({
+            code: m.child_code,
+            name: m.child_name,
+          });
+        }
+      }
+
+      // Ensure major subjects are present in subjects array with merge metadata
+      for (const [majorCode, info] of majorGroups.entries()) {
+        let existingMajor = subjects.find(s => s.sub_cd === majorCode);
+        if (!existingMajor) {
+          existingMajor = { sub_cd: majorCode, sub_name: info.major_name };
+          subjects.push(existingMajor);
+        }
+        (existingMajor as any).is_merged = true;
+        (existingMajor as any).merged_children = info.children;
+      }
+
+      // Roll up attendance for each student
+      for (const st of students) {
+        for (const [majorCode, info] of majorGroups.entries()) {
+          const curMajor = st.attendance[majorCode] || { present: 0, total: 0, percentage: 0 };
+          let sumPresent = curMajor.present || 0;
+          let sumTotal = curMajor.total || 0;
+          const breakdown: any[] = [];
+
+          if (curMajor.total > 0) {
+            breakdown.push({
+              code: majorCode,
+              name: info.major_name,
+              present: curMajor.present,
+              total: curMajor.total,
+              percentage: curMajor.percentage,
+            });
+          }
+
+          for (const ch of info.children) {
+            const chStats = st.attendance[ch.code];
+            if (chStats && chStats.total > 0) {
+              sumPresent += chStats.present;
+              sumTotal += chStats.total;
+              breakdown.push({
+                code: ch.code,
+                name: ch.name,
+                present: chStats.present,
+                total: chStats.total,
+                percentage: chStats.percentage,
+              });
+            }
+            delete st.attendance[ch.code];
+          }
+
+          const combinedPct = sumTotal > 0 ? parseFloat(((sumPresent / sumTotal) * 100).toFixed(2)) : 0;
+          st.attendance[majorCode] = {
+            present: sumPresent,
+            total: sumTotal,
+            percentage: combinedPct,
+            is_merged: true,
+            breakdown,
+          };
+        }
+      }
+
+      const filteredSubjects = subjects.filter(s => !absorbedChildCodes.has(s.sub_cd));
+      return {
+        success: true,
+        subjects: filteredSubjects,
+        students,
+      };
+    }
+
     return {
       success: true,
       subjects,
       students,
+    };
+  }
+
+  // ─── MEDICAL / PHASE-WISE & COMBINED ATTENDANCE CALCULATION ──────────────
+  async calculatePhaseAttendanceSummary(phaseId: string, tenantSlug?: string, studentId?: string) {
+    const slug = this.tenantSchemaService.resolveTenantSlug(tenantSlug);
+    const schema = this.getSchema(slug);
+
+    // 1. Get Phase details (supports UUID or semester name / order)
+    const phaseRows = await this.ds.query(
+      `SELECT * FROM "${schema}".professional_phases WHERE id::text = $1 OR phase_order::text = $1 OR name ILIKE '%' || $1 || '%' LIMIT 1`,
+      [phaseId],
+    ).catch(() => []);
+    const phase = phaseRows[0] || { id: phaseId, course_cd: 'MBBS', name: phaseId, phase_order: 1 };
+
+    // 2. Check for unmapped subjects (Requirement 4: Merge Prompt Check)
+    const unmappedRows = await this.ds.query(
+      `SELECT DISTINCT sub.id AS subject_id, sub.code, sub.name
+       FROM "${schema}".attendance_sessions s
+       JOIN "${schema}".subjects sub ON sub.id = s.subject_id
+       WHERE s.phase_id::text = $1
+         AND COALESCE(sub.attendance_status, 'NO_LONGITUDINAL') != 'SEPARATE'
+         AND sub.id NOT IN (
+           SELECT major_subject_id FROM "${schema}".subject_merge_mappings WHERE phase_id::text = $1 AND is_active = true
+           UNION
+           SELECT child_subject_id FROM "${schema}".subject_merge_mappings WHERE phase_id::text = $1 AND is_active = true
+         )`,
+      [phaseId],
+    ).catch(() => []);
+
+    const hasUnresolved = unmappedRows.length > 0;
+
+    // 3. Get Attendance Policy for this course & academic system
+    const policyRows = await this.ds.query(
+      `SELECT * FROM "${schema}".attendance_policies
+       WHERE (LOWER(course_cd) = LOWER($1) OR course_cd = 'DEFAULT')
+       ORDER BY CASE WHEN LOWER(course_cd) = LOWER($1) THEN 0 ELSE 1 END ASC
+       LIMIT 1`,
+      [phase.course_cd || 'MBBS'],
+    ).catch(() => []);
+
+    const policy = policyRows[0] || {
+      min_theory_pct: 75.00,
+      min_practical_pct: 80.00,
+      min_clinical_pct: 80.00,
+      min_aggregate_pct: 75.00,
+      eval_mode: 'SEPARATE',
+      condonation_floor_pct: 65.00,
+      condonation_max_pct: 75.00,
+      excuse_leaves_mode: 'EXCLUDE_DENOMINATOR',
+    };
+
+    // 4. Get Merge Mappings for this Phase / Semester
+    const mappings = await this.ds.query(
+      `SELECT sm.*, 
+              m.code AS major_code, m.name AS major_name,
+              c.code AS child_code, c.name AS child_name
+       FROM "${schema}".subject_merge_mappings sm
+       JOIN "${schema}".subjects m ON m.id = sm.major_subject_id
+       JOIN "${schema}".subjects c ON c.id = sm.child_subject_id
+       WHERE sm.is_active = true
+         AND (
+           sm.phase_id::text = $1
+           OR sm.phase_cd ILIKE '%' || $2 || '%'
+           OR sm.semester_cd::text = $3
+         )`,
+      [phaseId, phase.name || phaseId, String(phase.phase_order || phaseId)],
+    ).catch(() => []);
+
+    // 5. Fetch raw attendance aggregated by student, subject, and session_type (including past sessions of merged child subjects)
+    const childIds = mappings.map((m: any) => m.child_subject_id).filter(Boolean);
+    let studentFilter = '';
+    const queryParams: any[] = [phaseId];
+    let childCondition = '';
+    if (childIds.length > 0) {
+      queryParams.push(childIds);
+      childCondition = ` OR (s.subject_id = ANY(${queryParams.length}::uuid[])) `;
+    }
+    if (studentId) {
+      queryParams.push(studentId);
+      studentFilter = ` AND (st.id::text = ${queryParams.length} OR st.rollno = ${queryParams.length} OR st.registration_no = ${queryParams.length}) `;
+    }
+
+    const rawRows = await this.ds.query(
+      `SELECT 
+         st.id AS student_id,
+         COALESCE(st.registration_no, st.rollno, '—') AS rollno,
+         st.name AS student_name,
+         s.subject_id,
+         sub.code AS subject_code,
+         sub.name AS subject_name,
+         COALESCE(sub.attendance_status, 'NO_LONGITUDINAL') AS attendance_status,
+         CASE 
+           WHEN UPPER(s.session_type) IN ('PRACTICAL', 'LAB', 'CLINICAL', 'DOAP', 'POSTING') THEN 'PRACTICAL'
+           ELSE 'THEORY'
+         END AS session_category,
+         COUNT(DISTINCT s.id)::int AS held,
+         COUNT(DISTINCT CASE WHEN ar.status IN ('PRESENT', 'LATE') THEN s.id END)::int AS attended,
+         COUNT(DISTINCT CASE WHEN ar.status = 'ABSENT' THEN s.id END)::int AS absent,
+         COUNT(DISTINCT CASE WHEN ar.status = 'EXCUSED' THEN s.id END)::int AS excused
+       FROM "${schema}".students st
+       JOIN "${schema}".attendance_sessions s ON (s.phase_id::text = $1 ${childCondition}) AND s.is_cancelled = false
+       JOIN "${schema}".attendance_records ar ON ar.session_id = s.id AND ar.student_id = st.id
+       JOIN "${schema}".subjects sub ON sub.id = s.subject_id
+       WHERE 1=1 ${studentFilter}
+       GROUP BY st.id, st.registration_no, st.rollno, st.name, s.subject_id, sub.code, sub.name, sub.attendance_status, session_category
+       ORDER BY st.name ASC, sub.name ASC`,
+      queryParams,
+    ).catch(() => []);
+
+    // 6. Aggregate student subject attendance applying merge mappings
+    const studentSummaries: any[] = [];
+    const studentGrouped = new Map<string, any>();
+
+    for (const row of rawRows) {
+      if (!studentGrouped.has(row.student_id)) {
+        studentGrouped.set(row.student_id, {
+          student_id: row.student_id,
+          rollno: row.rollno,
+          name: row.student_name,
+          subjects: new Map<string, any>(),
+        });
+      }
+
+      const st = studentGrouped.get(row.student_id);
+      if (!st.subjects.has(row.subject_id)) {
+        st.subjects.set(row.subject_id, {
+          subject_id: row.subject_id,
+          code: row.subject_code,
+          name: row.subject_name,
+          attendance_status: row.attendance_status,
+          theory: { held: 0, attended: 0, absent: 0, excused: 0 },
+          practical: { held: 0, attended: 0, absent: 0, excused: 0 },
+        });
+      }
+
+      const subData = st.subjects.get(row.subject_id);
+      if (row.session_category === 'PRACTICAL') {
+        subData.practical.held += row.held;
+        subData.practical.attended += row.attended;
+        subData.practical.absent += row.absent;
+        subData.practical.excused += row.excused;
+      } else {
+        subData.theory.held += row.held;
+        subData.theory.attended += row.attended;
+        subData.theory.absent += row.absent;
+        subData.theory.excused += row.excused;
+      }
+    }
+
+    // Now merge child subjects into major subjects according to mappings
+    const majorMap = new Map<string, string[]>(); // major_id -> child_ids[]
+    for (const m of mappings) {
+      if (m.merge_mode === 'COMBINE') {
+        if (!majorMap.has(m.major_subject_id)) majorMap.set(m.major_subject_id, []);
+        majorMap.get(m.major_subject_id)!.push(m.child_subject_id);
+      }
+    }
+
+    const minTheory = parseFloat(policy.min_theory_pct || 75.0);
+    const minPractical = parseFloat(policy.min_practical_pct || 80.0);
+    const condonFloor = parseFloat(policy.condonation_floor_pct || 65.0);
+
+    for (const st of studentGrouped.values()) {
+      const computedSubjects: any[] = [];
+      const absorbedChildren = new Set<string>();
+
+      // First process COMBINED major subjects
+      for (const [majorId, childIds] of majorMap.entries()) {
+        const majorSub = st.subjects.get(majorId) || {
+          subject_id: majorId,
+          code: mappings.find((m: any) => m.major_subject_id === majorId)?.major_code || 'MAJOR',
+          name: mappings.find((m: any) => m.major_subject_id === majorId)?.major_name || 'Major Subject',
+          attendance_status: 'COMBINED',
+          theory: { held: 0, attended: 0, absent: 0, excused: 0 },
+          practical: { held: 0, attended: 0, absent: 0, excused: 0 },
+        };
+
+        const combinedTheory = { ...majorSub.theory };
+        const combinedPractical = { ...majorSub.practical };
+        const combinedChildren: any[] = [];
+
+        for (const cId of childIds) {
+          absorbedChildren.add(cId);
+          const childSub = st.subjects.get(cId);
+          if (childSub) {
+            combinedTheory.held += childSub.theory.held;
+            combinedTheory.attended += childSub.theory.attended;
+            combinedTheory.absent += childSub.theory.absent;
+            combinedTheory.excused += childSub.theory.excused;
+
+            combinedPractical.held += childSub.practical.held;
+            combinedPractical.attended += childSub.practical.attended;
+            combinedPractical.absent += childSub.practical.absent;
+            combinedPractical.excused += childSub.practical.excused;
+
+            combinedChildren.push({
+              subject_id: cId,
+              code: childSub.code,
+              name: childSub.name,
+              theory: childSub.theory,
+              practical: childSub.practical,
+            });
+          }
+        }
+
+        const theoryDenom = policy.excuse_leaves_mode === 'EXCLUDE_DENOMINATOR'
+          ? Math.max(0, combinedTheory.held - combinedTheory.excused)
+          : combinedTheory.held;
+        const practicalDenom = policy.excuse_leaves_mode === 'EXCLUDE_DENOMINATOR'
+          ? Math.max(0, combinedPractical.held - combinedPractical.excused)
+          : combinedPractical.held;
+
+        const theoryPct = theoryDenom > 0 ? parseFloat(((combinedTheory.attended * 100.0) / theoryDenom).toFixed(2)) : 100.0;
+        const practicalPct = practicalDenom > 0 ? parseFloat(((combinedPractical.attended * 100.0) / practicalDenom).toFixed(2)) : 100.0;
+
+        const isTheoryEligible = theoryPct >= minTheory;
+        const isPracticalEligible = practicalPct >= minPractical;
+        const isEligible = isTheoryEligible && isPracticalEligible;
+
+        const isCondonable = !isEligible && (theoryPct >= condonFloor) && (practicalPct >= condonFloor);
+
+        computedSubjects.push({
+          subject_id: majorId,
+          code: majorSub.code,
+          name: majorSub.name,
+          is_combined: true,
+          merged_children: combinedChildren,
+          theory: { ...combinedTheory, denominator: theoryDenom, pct: theoryPct, required_pct: minTheory, eligible: isTheoryEligible },
+          practical: { ...combinedPractical, denominator: practicalDenom, pct: practicalPct, required_pct: minPractical, eligible: isPracticalEligible },
+          eligibility_status: isEligible ? 'ELIGIBLE' : (isCondonable ? 'CONDONABLE' : 'DETAINED'),
+        });
+      }
+
+      // Then process standalone subjects not absorbed as child of a combined major
+      for (const [subId, subData] of st.subjects.entries()) {
+        if (majorMap.has(subId) || absorbedChildren.has(subId)) continue;
+
+        const theoryDenom = policy.excuse_leaves_mode === 'EXCLUDE_DENOMINATOR'
+          ? Math.max(0, subData.theory.held - subData.theory.excused)
+          : subData.theory.held;
+        const practicalDenom = policy.excuse_leaves_mode === 'EXCLUDE_DENOMINATOR'
+          ? Math.max(0, subData.practical.held - subData.practical.excused)
+          : subData.practical.held;
+
+        const theoryPct = theoryDenom > 0 ? parseFloat(((subData.theory.attended * 100.0) / theoryDenom).toFixed(2)) : 100.0;
+        const practicalPct = practicalDenom > 0 ? parseFloat(((subData.practical.attended * 100.0) / practicalDenom).toFixed(2)) : 100.0;
+
+        const isTheoryEligible = theoryPct >= minTheory;
+        const isPracticalEligible = practicalPct >= minPractical;
+        const isEligible = isTheoryEligible && isPracticalEligible;
+        const isCondonable = !isEligible && (theoryPct >= condonFloor) && (practicalPct >= condonFloor);
+
+        computedSubjects.push({
+          subject_id: subId,
+          code: subData.code,
+          name: subData.name,
+          is_combined: false,
+          theory: { ...subData.theory, denominator: theoryDenom, pct: theoryPct, required_pct: minTheory, eligible: isTheoryEligible },
+          practical: { ...subData.practical, denominator: practicalDenom, pct: practicalPct, required_pct: minPractical, eligible: isPracticalEligible },
+          eligibility_status: isEligible ? 'ELIGIBLE' : (isCondonable ? 'CONDONABLE' : 'DETAINED'),
+        });
+      }
+
+      const overallEligible = computedSubjects.every(s => s.eligibility_status === 'ELIGIBLE');
+      const anyDetained = computedSubjects.some(s => s.eligibility_status === 'DETAINED');
+
+      studentSummaries.push({
+        student_id: st.student_id,
+        rollno: st.rollno,
+        name: st.name,
+        overall_status: overallEligible ? 'ELIGIBLE' : (anyDetained ? 'DETAINED' : 'CONDONABLE'),
+        subjects: computedSubjects,
+      });
+    }
+
+    return {
+      phase: {
+        id: phase.id,
+        name: phase.name,
+        course_cd: phase.course_cd,
+        duration_months: phase.duration_months || 12,
+        phase_order: phase.phase_order,
+      },
+      policy: {
+        regulator: policy.regulator || 'NMC',
+        min_theory_pct: minTheory,
+        min_practical_pct: minPractical,
+        condonation_floor_pct: condonFloor,
+        eval_mode: policy.eval_mode,
+      },
+      merge_prompt: {
+        has_unresolved: hasUnresolved,
+        unresolved_subjects: unmappedRows,
+        blocks_final_eligibility: hasUnresolved,
+      },
+      total_students: studentSummaries.length,
+      students: studentSummaries,
     };
   }
 }

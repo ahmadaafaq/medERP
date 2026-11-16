@@ -63,7 +63,7 @@ export default function Step5RoleMenuAccess({
   const fetchMenusForRole = async (role: RoleType) => {
     setLoading(true);
     try {
-      const res = await fetch(`/api/menu-registry?role=${role}`);
+      const res = await fetch(`/api/menu-registry?role=${role}&_t=${Date.now()}`, { cache: 'no-store' });
       if (res.ok) {
         const rawJson = await res.json();
         const data: MenuItem[] = Array.isArray(rawJson)

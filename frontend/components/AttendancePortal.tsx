@@ -283,6 +283,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
 
   // Drilldown Modal State
   const [activeDrilldown, setActiveDrilldown] = useState<ActiveDrilldown | null>(null);
+  const [attendancePolicy, setAttendancePolicy] = useState<{ min_theory_pct: number; min_practical_pct: number; regulator: string }>({ min_theory_pct: 75, min_practical_pct: 80, regulator: 'AICTE' });
   const [lectureDetails, setLectureDetails] = useState<LectureDetail[]>([]);
   const [loadingLectures, setLoadingLectures] = useState(false);
 
@@ -942,10 +943,11 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
       );
     }
 
+    const thresholdPct = attendancePolicy.min_theory_pct || 75;
     if (statusFilter === 'DEFAULTER') {
-      list = matrixSubjects.length === 0 ? [] : list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < 75);
+      list = matrixSubjects.length === 0 ? [] : list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < thresholdPct);
     } else if (statusFilter === 'GOOD') {
-      list = matrixSubjects.length === 0 ? [] : list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') >= 75);
+      list = matrixSubjects.length === 0 ? [] : list.filter((st) => parseFloat(st.TotalPresentPercentage || '0') >= thresholdPct);
     }
 
     return list;
@@ -972,7 +974,8 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
     if (matrixSubjects.length === 0) {
       return { total, defaulters: 0, regular: 0, avgPct: '0.0' };
     }
-    const defaulters = matrixStudents.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < 75).length;
+    const thresholdPct = attendancePolicy.min_theory_pct || 75;
+    const defaulters = matrixStudents.filter((st) => parseFloat(st.TotalPresentPercentage || '0') < thresholdPct).length;
     const regular = total - defaulters;
     const avgPct =
       total > 0
@@ -1445,7 +1448,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                       : 'text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40'
                   }`}
                 >
-                  ≥ 75% ({summaryMetrics.regular})
+                  ≥ {attendancePolicy.min_theory_pct || 75}% ({summaryMetrics.regular})
                 </button>
                 <button
                   type="button"
@@ -1459,7 +1462,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                       : 'text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40'
                   }`}
                 >
-                  &lt; 75% ({summaryMetrics.defaulters})
+                  &lt; {attendancePolicy.min_theory_pct || 75}% ({summaryMetrics.defaulters})
                 </button>
               </div>
 
@@ -1835,7 +1838,8 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
                 {summaryData.map((subj) => {
                   const pct = subj.AttendancePercentage || 0;
-                  const isDefaulter = pct < 75;
+                  const thresholdPct = attendancePolicy.min_theory_pct || 75;
+                  const isDefaulter = pct < thresholdPct;
 
                   return (
                     <div
@@ -1859,7 +1863,7 @@ export default function AttendancePortal({ role = 'STUDENT' }: { role?: string }
                                 : 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-300'
                             }`}
                           >
-                            {isDefaulter ? '⚠️ < 75%' : '✅ Good'}
+                            {isDefaulter ? `⚠️ < ${attendancePolicy.min_theory_pct || 75}%` : '✅ Good'}
                           </span>
                         </div>
 

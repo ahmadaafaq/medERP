@@ -16,6 +16,7 @@ import {
   CreateProgramOutcomeDto, UpdateProgramOutcomeDto,
   CreateProgramEducationalObjectiveDto, UpdateProgramEducationalObjectiveDto,
   SaveCoPoMatrixDto, SavePoPeoMatrixDto,
+  UpsertAttendancePolicyDto, CreateSubjectMergeMappingDto, UpdateSubjectMergeMappingDto,
 } from './dto/admin-master.dto';
 import { TenantSlug } from '../common/decorators/tenant.decorator';
 import { Public } from '../common/decorators/public.decorator';
@@ -562,6 +563,79 @@ export class AdminMasterController {
   @ApiOperation({ summary: 'Save PO - PEO Matrix for Program' })
   async savePoPeoMatrix(@Body() dto: SavePoPeoMatrixDto, @TenantSlug() tenant: string) {
     return this.adminMasterService.savePoPeoMatrix(dto, tenant);
+  }
+
+  // ─── 13. ATTENDANCE POLICY (Regulator Agnostic: AICTE, NMC, PCI, NBA) ────────
+  @Get('attendance-policy')
+  @ApiOperation({ summary: 'Get Attendance Policy for Course and Academic System' })
+  async getAttendancePolicy(
+    @Query('course_cd') courseCd: string,
+    @Query('academic_system') academicSystem: string,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.getAttendancePolicy(courseCd, academicSystem, tenant);
+  }
+
+  @Post('attendance-policy')
+  @ApiOperation({ summary: 'Upsert Attendance Policy (Thresholds, Modes, Condonation)' })
+  async upsertAttendancePolicy(
+    @Body() dto: UpsertAttendancePolicyDto,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.upsertAttendancePolicy(dto, tenant);
+  }
+
+  // ─── 14. SUBJECT MERGE MAPPINGS (MBBS & Integrated Courses) ────────────────
+  @Get('subject-merge-mappings')
+  @ApiOperation({ summary: 'List subject merge mappings by phase, semester, or academic hierarchy' })
+  async listSubjectMergeMappings(
+    @Query('phase_id') phaseId: string,
+    @Query('colg_cd') colgCd: string,
+    @Query('course_cd') courseCd: string,
+    @Query('branch_cd') branchCd: string,
+    @Query('batch_cd') batchCd: string,
+    @Query('semester_cd') semesterCd: string,
+    @Query('phase_cd') phaseCd: string,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.listSubjectMergeMappings({ phaseId, colgCd, courseCd, branchCd, batchCd, semesterCd, phaseCd }, tenant);
+  }
+
+  @Post('subject-merge-mappings')
+  @ApiOperation({ summary: 'Create or update subject merge mapping' })
+  async createSubjectMergeMapping(
+    @Body() dto: CreateSubjectMergeMappingDto,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.createSubjectMergeMapping(dto, tenant);
+  }
+
+  @Put('subject-merge-mappings/:id')
+  @ApiOperation({ summary: 'Update subject merge mapping' })
+  async updateSubjectMergeMapping(
+    @Param('id') id: string,
+    @Body() dto: UpdateSubjectMergeMappingDto,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.updateSubjectMergeMapping(id, dto, tenant);
+  }
+
+  @Delete('subject-merge-mappings/:id')
+  @ApiOperation({ summary: 'Delete subject merge mapping' })
+  async deleteSubjectMergeMapping(
+    @Param('id') id: string,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.deleteSubjectMergeMapping(id, tenant);
+  }
+
+  @Get('subject-merge-mappings/unresolved')
+  @ApiOperation({ summary: 'Check for unmapped subjects in a phase requiring Combine/Separate prompt' })
+  async checkUnresolvedPhaseSubjects(
+    @Query('phase_id') phaseId: string,
+    @TenantSlug() tenant: string,
+  ) {
+    return this.adminMasterService.checkUnresolvedPhaseSubjects(phaseId, tenant);
   }
 }
 

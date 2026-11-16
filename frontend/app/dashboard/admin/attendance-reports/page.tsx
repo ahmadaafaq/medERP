@@ -117,6 +117,18 @@ export default function MISAttendanceReportsPage() {
 
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string>('all');
+  const [attendancePolicy, setAttendancePolicy] = useState<{
+    min_theory_pct: number;
+    min_practical_pct: number;
+    condonation_floor_pct: number;
+    regulator: string;
+  }>({
+    min_theory_pct: 75,
+    min_practical_pct: 80,
+    condonation_floor_pct: 65,
+    regulator: 'AICTE',
+  });
+  const [unresolvedPrompt, setUnresolvedPrompt] = useState<any>(null);
 
   // Date Range States
   const [fromDate, setFromDate] = useState<string>('2026-07-02');
@@ -128,6 +140,7 @@ export default function MISAttendanceReportsPage() {
   // Report Data
   const [rosterReport, setRosterReport] = useState<StudentReportRow[]>([]);
   const [matrixReport, setMatrixReport] = useState<MatrixReportData | null>(null);
+  const [includeMerged, setIncludeMerged] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
 
   // Initial Load & Auth Role Resolution
@@ -199,8 +212,10 @@ export default function MISAttendanceReportsPage() {
         );
         if (myCol) {
           setSelectedCollege(myCol.code || '1');
+          if (myCol.slug) setSelectedTenantSlug(myCol.slug);
         } else if (mappedList.length > 0) {
           setSelectedCollege(mappedList[0].code || '1');
+          if (mappedList[0].slug) setSelectedTenantSlug(mappedList[0].slug);
         }
         setColleges(loadedColleges);
       } else {
@@ -366,39 +381,68 @@ export default function MISAttendanceReportsPage() {
   // Change Handlers
   const handleCollegeChange = async (colgCode: string) => {
     setSelectedCollege(colgCode);
-    const foundCol = colleges.find((c) => c.code === colgCode);
-    const slug = foundCol?.slug || selectedTenantSlug;
+    const foundCol = colleges.find((c) => c.code === colgCode || c.id === colgCode);
+    const slug = foundCol?.slug || (String(colgCode).includes('team') ? 'team-university' : selectedTenantSlug);
+    setSelectedTenantSlug(slug);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('tenantSlug', slug);
+      localStorage.setItem('selectedTenant', slug);
+      localStorage.setItem('colg_cd', colgCode);
+      localStorage.setItem('colgCd', colgCode);
+    }
     await fetchCoursesForCollege(colgCode, slug);
   };
 
   const handleCourseChange = async (courseCode: string) => {
     setSelectedCourse(courseCode);
-    await fetchBranchesAndBatches(selectedCollege, courseCode);
+    const foundCol = colleges.find((c) => c.code === selectedCollege || c.id === selectedCollege);
+    const slug = foundCol?.slug || selectedTenantSlug || getTenantSlug();
+    await fetchBranchesAndBatches(selectedCollege, courseCode, undefined, slug);
   };
 
   // Fetch Report Data from Live SRMS + PostgreSQL Fallback
   const fetchReport = async () => {
     setLoading(true);
-    const slug = selectedTenantSlug || getTenantSlug();
+    const foundCol = colleges.find((c) => c.code === selectedCollege || c.id === selectedCollege);
+    const slug = foundCol?.slug || (selectedCollege && String(selectedCollege).includes('team') ? 'team-university' : '') || selectedTenantSlug || getTenantSlug();
     const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-    const headers = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug };
+    const headers: Record<string, string> = { Authorization: `Bearer ${token}`, 'x-tenant-slug': slug, 'Content-Type': 'application/json' };
+
+    // Fetch dynamic course attendance policy & merge prompt check
+    try {
+      const polRes = await fetch(`${API_BASE}/admin-master/attendance-policy?course_cd=${selectedCourse}&tenant=${slug}`, { headers }).catch(() => null);
+      if (polRes && polRes.ok) {
+        const pj = await polRes.json();
+        const pdata = pj.data !== undefined ? pj.data : pj;
+        if (pdata) {
+          setAttendancePolicy({
+            min_theory_pct: parseFloat(pdata.min_theory_pct || 75),
+            min_practical_pct: parseFloat(pdata.min_practical_pct || 80),
+            condonation_floor_pct: parseFloat(pdata.condonation_floor_pct || 65),
+            regulator: pdata.regulator || 'AICTE',
+          });
+        }
+      }
+    } catch (e) {}
 
     try {
       // 1. Attempt Live SRMS Attendance POST
       const srmsPayload = {
-        colg_cd: Number(selectedCollege || 1),
-        course_cd: Number(selectedCourse || 13),
-        branch_cd: Number(selectedBranch || 1),
-        batch_cd: Number(selectedBatch || 2),
-        sem_cd: Number(selectedSem || 3),
-        section_cd: Number(selectedSection || 1),
+        colg_cd: selectedCollege || '1',
+        tenantSlug: slug,
+        tenant: slug,
+        course_cd: selectedCourse || '13',
+        branch_cd: selectedBranch || '1',
+        batch_cd: selectedBatch || '2',
+        sem_cd: selectedSem || '1',
+        section_cd: selectedSection || '1',
         fdt: fromDate,
         tdt: toDate,
       };
 
       const srmsRes = await fetch('/api/srms/student-attendance', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(srmsPayload),
       }).catch(() => null);
 
@@ -517,7 +561,7 @@ export default function MISAttendanceReportsPage() {
 
       // 2. PostgreSQL Fallback
       if (selectedBatch) {
-        let mUrl = `${API_BASE}/attendance/batches/${selectedBatch}/matrix-report?tenant=${slug}`;
+        let mUrl = `${API_BASE}/attendance/batches/${selectedBatch}/matrix-report?tenant=${slug}&includeMerged=${includeMerged}`;
         if (fromDate) mUrl += `&fromDate=${fromDate}`;
         if (toDate) mUrl += `&toDate=${toDate}`;
 
@@ -581,12 +625,15 @@ export default function MISAttendanceReportsPage() {
   // Filtered Roster Rows based on Threshold & Search
   const filteredRoster = useMemo(() => {
     return rosterReport.filter((row) => {
-      const pct = parseFloat(String(row.attendance_pct || 0));
+      const rawPct = String(row.attendance_pct || 0).replace(/[^0-9.-]/g, '');
+      const pct = isNaN(parseFloat(rawPct)) ? 0 : parseFloat(rawPct);
+      const minTheory = attendancePolicy.min_theory_pct || 75;
+      const condonFloor = attendancePolicy.condonation_floor_pct || 65;
       const matchThreshold =
         thresholdFilter === 'all' ||
-        (thresholdFilter === 'shortage' && pct < 75) ||
-        (thresholdFilter === 'critical' && pct < 70) ||
-        (thresholdFilter === 'eligible' && pct >= 75);
+        (thresholdFilter === 'shortage' && pct < minTheory) ||
+        (thresholdFilter === 'critical' && pct < condonFloor) ||
+        (thresholdFilter === 'eligible' && pct >= minTheory);
 
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
@@ -597,18 +644,21 @@ export default function MISAttendanceReportsPage() {
 
       return matchThreshold && matchSearch;
     });
-  }, [rosterReport, thresholdFilter, searchQuery]);
+  }, [rosterReport, thresholdFilter, searchQuery, attendancePolicy]);
 
   // Filtered Matrix Students based on Threshold & Search
   const filteredMatrixStudents = useMemo(() => {
     if (!matrixReport || !Array.isArray(matrixReport.students)) return [];
     return matrixReport.students.filter((st) => {
-      const pct = st.overallPct;
+      const rawPct = String(st.overallPct || 0).replace(/[^0-9.-]/g, '');
+      const pct = isNaN(parseFloat(rawPct)) ? 0 : parseFloat(rawPct);
+      const minTheory = attendancePolicy.min_theory_pct || 75;
+      const condonFloor = attendancePolicy.condonation_floor_pct || 65;
       const matchThreshold =
         thresholdFilter === 'all' ||
-        (thresholdFilter === 'shortage' && pct < 75) ||
-        (thresholdFilter === 'critical' && pct < 70) ||
-        (thresholdFilter === 'eligible' && pct >= 75);
+        (thresholdFilter === 'shortage' && pct < minTheory) ||
+        (thresholdFilter === 'critical' && pct < condonFloor) ||
+        (thresholdFilter === 'eligible' && pct >= minTheory);
 
       const q = searchQuery.toLowerCase().trim();
       const matchSearch =
@@ -619,15 +669,31 @@ export default function MISAttendanceReportsPage() {
 
       return matchThreshold && matchSearch;
     });
-  }, [matrixReport, thresholdFilter, searchQuery]);
+  }, [matrixReport, thresholdFilter, searchQuery, attendancePolicy]);
 
   // Computed KPI Metrics
   const totalEnrolled = rosterReport.length || (matrixReport?.students?.length ?? 0);
-  const shortageCount = rosterReport.filter((r) => parseFloat(String(r.attendance_pct || 0)) < 75).length;
+  const shortageCount = rosterReport.filter((r) => {
+    const raw = String(r.attendance_pct || 0).replace(/[^0-9.-]/g, '');
+    const val = parseFloat(raw);
+    return !isNaN(val) && val < (attendancePolicy.min_theory_pct || 75);
+  }).length;
   const avgAttendance = totalEnrolled > 0
-    ? (
-        rosterReport.reduce((acc, r) => acc + parseFloat(String(r.attendance_pct || 0)), 0) / totalEnrolled
-      ).toFixed(1)
+    ? (() => {
+        let validCount = 0;
+        const sum = rosterReport.reduce((acc, r) => {
+          const raw = String(r.attendance_pct || 0).replace(/[^0-9.-]/g, '');
+          const val = parseFloat(raw);
+          if (!isNaN(val)) {
+            validCount++;
+            return acc + val;
+          }
+          return acc;
+        }, 0);
+        if (validCount === 0) return '0.0';
+        const avg = sum / totalEnrolled;
+        return isNaN(avg) ? '0.0' : avg.toFixed(1);
+      })()
     : '0.0';
 
   // Export CSV
@@ -657,7 +723,7 @@ export default function MISAttendanceReportsPage() {
         `"${r.present}"`,
         `"${r.absent}"`,
         `"${r.attendance_pct}%"`,
-        `"${Number(r.attendance_pct) >= 75 ? 'ELIGIBLE (≥ 75%)' : 'SHORTAGE (< 75%)'}"`,
+        `"${Number(r.attendance_pct) >= (attendancePolicy.min_theory_pct || 75) ? `ELIGIBLE (≥ ${attendancePolicy.min_theory_pct || 75}%)` : `SHORTAGE (< ${attendancePolicy.min_theory_pct || 75}%)`}"`,
       ]);
     }
 
@@ -739,13 +805,13 @@ export default function MISAttendanceReportsPage() {
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all">
-              <span className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Shortage List (&lt; 75%)</span>
+              <span className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Shortage List (&lt; {attendancePolicy.min_theory_pct || 75}%)</span>
               <p className="text-3xl font-black text-rose-600 dark:text-rose-400 font-mono">{shortageCount}</p>
               <span className="text-[10px] text-rose-600 dark:text-rose-400 block font-bold">Ineligible for University Exams</span>
             </div>
 
             <div className="p-5 rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 space-y-1 shadow-md hover:shadow-lg transition-all">
-              <span className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Exam Compliant (≥ 75%)</span>
+              <span className="text-[10px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Exam Compliant (≥ {attendancePolicy.min_theory_pct || 75}%)</span>
               <p className="text-3xl font-black text-emerald-600 dark:text-emerald-400 font-mono">{Math.max(0, totalEnrolled - shortageCount)}</p>
               <span className="text-[10px] text-emerald-600 dark:text-emerald-400 block font-bold">Eligible Students</span>
             </div>
@@ -1030,6 +1096,32 @@ export default function MISAttendanceReportsPage() {
               </div>
             </div>
 
+            {/* UNMAPPED SUBJECTS MERGE PROMPT BANNER (MBBS & INTERDISCIPLINARY) */}
+            {unresolvedPrompt && unresolvedPrompt.hasUnresolved && (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 text-amber-900 dark:text-amber-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2 font-black text-sm text-amber-800 dark:text-amber-300">
+                    <span>⚠️ Unmapped Phase Subjects Detected</span>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 font-bold">
+                      {unresolvedPrompt.unresolvedCount} subjects need mapping
+                    </span>
+                  </div>
+                  <p className="text-xs text-amber-700 dark:text-amber-400">
+                    Attendance exists for subjects in this phase that are neither marked as a Major Subject, mapped under a Major, nor marked SEPARATE. Configure them to finalize eligibility.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href="/dashboard/admin/academic-master"
+                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold transition-all shadow-sm cursor-pointer whitespace-nowrap inline-flex items-center gap-1.5"
+                  >
+                    <span>Resolve in Subject Master</span>
+                    <span>→</span>
+                  </a>
+                </div>
+              </div>
+            )}
+
             {/* REPORT VIEW 1: SUBJECT ROSTER REPORT */}
             {reportMode === 'roster' && (
               <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl print:border-none print:shadow-none print:rounded-none">
@@ -1071,7 +1163,7 @@ export default function MISAttendanceReportsPage() {
                       ) : (
                         filteredRoster.map((r, idx) => {
                           const pct = parseFloat(String(r.attendance_pct || 0));
-                          const isEligible = pct >= 75.0;
+                          const isEligible = pct >= (attendancePolicy.min_theory_pct || 75.0);
 
                           return (
                             <tr key={r.student_id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
@@ -1106,7 +1198,7 @@ export default function MISAttendanceReportsPage() {
                                     ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/30 print:bg-transparent print:text-slate-900'
                                     : 'bg-rose-500/10 text-rose-700 dark:text-rose-400 border-rose-500/30 print:bg-transparent print:text-slate-900'
                                 }`}>
-                                  {isEligible ? 'ELIGIBLE (≥ 75%)' : 'SHORTAGE (< 75%)'}
+                                  {isEligible ? `ELIGIBLE (≥ ${attendancePolicy.min_theory_pct || 75}%)` : `SHORTAGE (< ${attendancePolicy.min_theory_pct || 75}%)`}
                                 </span>
                               </td>
                             </tr>
@@ -1123,9 +1215,24 @@ export default function MISAttendanceReportsPage() {
             {reportMode === 'matrix' && (
               <div className="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 overflow-hidden shadow-xl print:border-none print:shadow-none print:rounded-none">
                 <div className="p-4 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between print:hidden">
-                  <h3 className="text-xs font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider flex items-center gap-2">
-                    <span>📐</span> Multi-Subject Cumulative Attendance Matrix ({filteredMatrixStudents.length} Students)
-                  </h3>
+                  <div className="flex items-center gap-3">
+                    <h3 className="text-xs font-black uppercase text-indigo-700 dark:text-indigo-400 tracking-wider flex items-center gap-2">
+                      <span>📐</span> Multi-Subject Cumulative Attendance Matrix ({filteredMatrixStudents.length} Students)
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => setIncludeMerged(prev => !prev)}
+                      className={`px-2.5 py-1 rounded-lg text-[10px] font-extrabold flex items-center gap-1.5 transition-all shadow-sm border ${
+                        includeMerged
+                          ? 'bg-purple-600 text-white border-purple-700 hover:bg-purple-500'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700 hover:bg-slate-200'
+                      }`}
+                      title="Toggle between Merged Cumulative View (DA + DAA folded into DMAIN) and Separate Raw View"
+                    >
+                      <span>🔀</span>
+                      <span>{includeMerged ? 'Merged View Active (DMAIN Combined)' : 'Separate Raw View'}</span>
+                    </button>
+                  </div>
                   <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
                     Per-subject breakdown + Cumulative %
                   </span>
@@ -1138,12 +1245,25 @@ export default function MISAttendanceReportsPage() {
                         <th className="p-3.5 text-center w-12">S.No</th>
                         <th className="p-3.5">Reg No / Roll No</th>
                         <th className="p-3.5">Student Name</th>
-                        {(matrixReport?.subjects || []).map((sub) => (
-                          <th key={sub.id || sub.code} className="p-3.5 text-center">
-                            {sub.name} <br />
-                            <span className="text-[9px] text-slate-500 font-normal">({sub.code})</span>
-                          </th>
-                        ))}
+                        {(matrixReport?.subjects || []).map((sub) => {
+                          const isMerged = Boolean((sub as any).is_merged || (sub as any).merged_children?.length);
+                          return (
+                            <th key={sub.id || sub.code} className="p-3.5 text-center">
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className="font-extrabold flex items-center gap-1">
+                                  {isMerged && <span title="Subject Merge Active (Multi-Year Cumulative Roll-Up)">🔀</span>}
+                                  {sub.name}
+                                </span>
+                                <span className="text-[9px] text-slate-500 font-mono font-bold">({sub.code})</span>
+                                {isMerged && (
+                                  <span className="mt-0.5 px-1.5 py-0.2 rounded-full text-[8px] font-black uppercase bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800">
+                                    Merged ({((sub as any).merged_children || []).length} components)
+                                  </span>
+                                )}
+                              </div>
+                            </th>
+                          );
+                        })}
                         <th className="p-3.5 text-center">Cumulative Attendance %</th>
                         <th className="p-3.5 text-center">Status</th>
                       </tr>
@@ -1163,7 +1283,7 @@ export default function MISAttendanceReportsPage() {
                         </tr>
                       ) : (
                         filteredMatrixStudents.map((st, idx) => {
-                          const isEligible = st.overallPct >= 75.0;
+                          const isEligible = st.overallPct >= (attendancePolicy.min_theory_pct || 75.0);
                           return (
                             <tr key={st.student_id || idx} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
                               <td className="p-3.5 text-center font-mono text-slate-500 dark:text-slate-400 font-bold print:text-slate-900">{idx + 1}</td>
@@ -1180,12 +1300,36 @@ export default function MISAttendanceReportsPage() {
                                     </td>
                                   );
                                 }
+                                const isCellMerged = Boolean((info as any).is_merged || (info as any).breakdown?.length);
                                 return (
-                                  <td key={sub.id || sub.code} className="p-3.5 text-center font-mono">
-                                    <span className="font-bold text-slate-900 dark:text-white">{info.present}/{info.total}</span>
-                                    <span className={`block text-[10px] font-black ${info.pct >= 75 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
+                                  <td key={sub.id || sub.code} className="p-3.5 text-center font-mono relative group">
+                                    <span className="font-bold text-slate-900 dark:text-white flex items-center justify-center gap-1">
+                                      {isCellMerged && <span className="text-[10px]" title="Combined Roll-Up">🔀</span>}
+                                      {info.present}/{info.total}
+                                    </span>
+                                    <span className={`block text-[10px] font-black ${info.pct >= (attendancePolicy.min_theory_pct || 75) ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'}`}>
                                       ({info.pct}%)
                                     </span>
+                                    {isCellMerged && (info as any).breakdown && (
+                                      <div className="hidden group-hover:block absolute z-30 bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-2.5 bg-slate-900 text-white text-[11px] rounded-xl shadow-2xl border border-slate-700 pointer-events-none animate-fadeIn">
+                                        <div className="font-bold text-indigo-300 border-b border-slate-800 pb-1 mb-1.5 flex items-center justify-between">
+                                          <span>🔀 Merged Breakdown</span>
+                                          <span className="text-[9px] text-emerald-400 font-extrabold">{info.pct}% Total</span>
+                                        </div>
+                                        <div className="space-y-1">
+                                          {(info as any).breakdown.map((b: any, bIdx: number) => (
+                                            <div key={bIdx} className="flex items-center justify-between font-mono text-[10px]">
+                                              <span className="text-slate-300 font-sans truncate max-w-[120px]">
+                                                [{b.code}] {b.name}
+                                              </span>
+                                              <span className="text-slate-400">
+                                                {b.present}/{b.total} ({b.pct || b.percentage}%)
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
                                   </td>
                                 );
                               })}

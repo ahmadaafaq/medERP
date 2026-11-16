@@ -10,8 +10,9 @@ import {
   CreateBranchDto, UpdateBranchDto,
   CreateSessionDto, UpdateSessionDto,
   CreateProfessionalDto, UpdateProfessionalDto,
-  CreateGroupDto, UpdateGroupDto,
+  CreateGroupDto, UpdateGroupDto, AssignGroupMembersDto,
   CreateResidencyDto, UpdateResidencyDto,
+  CreateSectionDto, UpdateSectionDto,
   UpdateHodScopeDto,
 } from './dto/college-master.dto';
 import { Roles } from '../common/decorators/roles.decorator';
@@ -609,10 +610,21 @@ export class CollegeMasterController {
     @Query('tenant') tenant?: string,
     @Query('batchId') batchId?: string,
     @Query('departmentId') departmentId?: string,
+    @Query('sectionId') sectionId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('semester') semester?: string,
     @CurrentUser() user?: JwtPayload,
   ) {
     const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
-    const data = await this.collegeMasterService.listGroups(effectiveTenant, batchId, departmentId, user);
+    const data = await this.collegeMasterService.listGroups(
+      effectiveTenant,
+      batchId,
+      departmentId,
+      user,
+      sectionId,
+      courseId,
+      semester,
+    );
     return { success: true, data };
   }
 
@@ -651,6 +663,65 @@ export class CollegeMasterController {
   ) {
     const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
     return this.collegeMasterService.deleteGroup(id, effectiveTenant);
+  }
+
+  @Get('groups/:id/members')
+  @ApiOperation({ summary: 'List enrolled students in a group' })
+  async getGroupMembers(
+    @Param('id') id: string,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.getGroupMembers(id, effectiveTenant);
+    return { success: true, data };
+  }
+
+  @Post('groups/:id/members')
+  @ApiOperation({ summary: 'Assign / allocate students to a group (by ID array or roll number range)' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async assignGroupMembers(
+    @Param('id') id: string,
+    @Body() dto: AssignGroupMembersDto,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    return this.collegeMasterService.assignGroupMembers(id, dto, effectiveTenant);
+  }
+
+  @Delete('groups/:id/members/:studentId')
+  @ApiOperation({ summary: 'Remove a student from a group' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async removeGroupMember(
+    @Param('id') id: string,
+    @Param('studentId') studentId: string,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    return this.collegeMasterService.removeGroupMember(id, studentId, effectiveTenant);
+  }
+
+  @Get('groups/batch-students/:batchId')
+  @ApiOperation({ summary: 'Get all students of a batch with their group memberships for allocation' })
+  async getBatchStudentsForGroupAllocation(
+    @Param('batchId') batchId: string,
+    @Query('tenant') tenant?: string,
+    @Query('subjectId') subjectId?: string,
+    @Query('groupType') groupType?: string,
+    @Query('currentGroupId') currentGroupId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('groupCode') groupCode?: string,
+    @Query('sectionId') sectionId?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.getBatchStudentsForGroupAllocation(
+      batchId, effectiveTenant, subjectId, groupType, currentGroupId, courseId, departmentId, groupCode, sectionId,
+    );
+    return { success: true, data };
   }
 
   // ─── 9. RESIDENCIES MASTER ────────────────────────────────────────────────
@@ -728,5 +799,67 @@ export class CollegeMasterController {
   ) {
     const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : (tenant || collegeId);
     return this.collegeMasterService.updateHodScope(dto, effectiveTenant, user);
+  }
+
+  // ─── 11. SECTIONS MASTER ───────────────────────────────────────────────────
+  @Get('sections')
+  @ApiOperation({ summary: 'List sections (optionally filtered by batch, course, branch, semester)' })
+  async listSections(
+    @Query('batchId') batchId?: string,
+    @Query('courseId') courseId?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('semester') semester?: string,
+    @Query('onlyLinked') onlyLinked?: string,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    const data = await this.collegeMasterService.listSections(
+      batchId,
+      effectiveTenant,
+      user,
+      courseId,
+      departmentId,
+      semester,
+      onlyLinked === 'true',
+    );
+    return { success: true, data };
+  }
+
+  @Post('sections')
+  @ApiOperation({ summary: 'Create section' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async createSection(
+    @Body() dto: CreateSectionDto,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    return this.collegeMasterService.createSection(dto, effectiveTenant);
+  }
+
+  @Put('sections/:id')
+  @ApiOperation({ summary: 'Update section' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async updateSection(
+    @Param('id') id: string,
+    @Body() dto: UpdateSectionDto,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    return this.collegeMasterService.updateSection(id, dto, effectiveTenant);
+  }
+
+  @Delete('sections/:id')
+  @ApiOperation({ summary: 'Delete section' })
+  @Roles(UserRole.SUPER_ADMIN, UserRole.ADMIN, UserRole.COLLEGE_ADMIN)
+  async deleteSection(
+    @Param('id') id: string,
+    @Query('tenant') tenant?: string,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const effectiveTenant = (user && user.role !== UserRole.SUPER_ADMIN && user.tenantSlug) ? user.tenantSlug : tenant;
+    return this.collegeMasterService.deleteSection(id, effectiveTenant);
   }
 }

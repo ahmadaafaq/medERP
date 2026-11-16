@@ -228,16 +228,16 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
 const getInitialTenantSlug = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('tenantSlug') || 'srms-cet-bareilly';
+    return localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || 'mdis';
   }
-  return 'srms-cet-bareilly';
+  return 'mdis';
 };
 
 const getInitialColgCd = (): string => {
   if (typeof window !== 'undefined') {
-    return localStorage.getItem('colg_cd') || '1';
+    return localStorage.getItem('colg_cd') || localStorage.getItem('college_code') || 'mdis';
   }
-  return '1';
+  return 'mdis';
 };
 
 // Initial Seed Questions for Instant Loading in Question Bank & Designer
@@ -641,20 +641,30 @@ export default function AssessmentMasterPage() {
     slug?: string
   ) => {
     const tenant = slug || selectedCollegeSlug || getInitialTenantSlug();
-    const effectiveColg = colgCd || selectedColgCd || '1';
-    const effectiveCrs = courseCd || selectedCourseCd || '13';
+    const effectiveColg = colgCd || selectedColgCd || 'mdis';
+    const effectiveCrs = courseCd || selectedCourseCd || 'SUN-BA-AF';
     const activeCourses = customCourses || courses;
+    const isSrms = (tenant || '').toLowerCase().includes('srms');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const h: Record<string, string> = {
+      'x-tenant-slug': tenant,
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    };
 
     try {
       const [brRes, btRes] = await Promise.all([
-        fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
-        fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null),
+        isSrms
+          ? fetch(`/api/srms/branches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null)
+          : fetch(`${API_BASE}/college-master/branches?tenant=${tenant}&course_cd=${effectiveCrs}`, { headers: h }).catch(() => null),
+        isSrms
+          ? fetch(`/api/srms/batches?colgcd=${effectiveColg}&coursecd=${effectiveCrs}&tenant=${tenant}`).catch(() => null)
+          : fetch(`${API_BASE}/college-master/batches?tenant=${tenant}&course_cd=${effectiveCrs}`, { headers: h }).catch(() => null),
       ]);
 
       const courseObj = activeCourses.find(
         (c) => String(c.course_cd || c.code || c.id) === String(effectiveCrs)
       );
-      const courseName = (courseObj?.name || (effectiveCrs === '13' ? 'BCA' : effectiveCrs === '1' ? 'B.Tech' : 'Course'))
+      const courseName = (courseObj?.name || (effectiveCrs === 'SUN-BA-AF' ? 'BA (Hons) Accounting and Finance' : effectiveCrs === '13' ? 'BCA' : 'Course'))
         .replace(/^\[#\d+\]\s*/, '')
         .trim();
 
@@ -662,7 +672,7 @@ export default function AssessmentMasterPage() {
       let mappedBranches: BranchItem[] = [];
       if (brRes && brRes.ok) {
         const j = await brRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
+        const list = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
         mappedBranches = (Array.isArray(list) && list.length > 0 ? list : []).map((b: any) => {
           const rawName = (b.branch_name || b.name || '').trim();
           const validName =
@@ -670,9 +680,9 @@ export default function AssessmentMasterPage() {
               ? rawName
               : (effectiveCrs === '13' ? 'BCA Department' : `${(b.course_name || courseName).replace(/^\[#\d+\]\s*/, '').trim()} Department`);
           return {
-            id: String(b.branch_cd || b.code || '1'),
-            code: String(b.branch_cd || b.code || '1'),
-            branch_cd: String(b.branch_cd || b.code || '1'),
+            id: String(b.branch_cd || b.code || b.id || '1'),
+            code: String(b.branch_cd || b.code || b.id || '1'),
+            branch_cd: String(b.branch_cd || b.code || b.id || '1'),
             name: validName,
             course_cd: String(b.course_cd || effectiveCrs),
             colg_cd: String(b.colg_cd || effectiveColg),
@@ -685,7 +695,7 @@ export default function AssessmentMasterPage() {
           id: '1',
           code: '1',
           branch_cd: '1',
-          name: effectiveCrs === '13' ? 'BCA Department' : `${courseName} Department`,
+          name: `${courseName} Department`,
           course_cd: effectiveCrs,
           colg_cd: effectiveColg,
         }];
@@ -702,14 +712,15 @@ export default function AssessmentMasterPage() {
       let mappedBatches: BatchItem[] = [];
       if (btRes && btRes.ok) {
         const j = await btRes.json();
-        const list = Array.isArray(j) ? j : j.data || [];
+        const list = Array.isArray(j?.data?.data) ? j.data.data : Array.isArray(j?.data) ? j.data : Array.isArray(j) ? j : [];
         mappedBatches = list.map((b: any) => ({
-          id: String(b.batch_cd || b.code || b.batch_id || '2'),
-          code: String(b.batch_cd || b.code || b.batch_id || '2'),
-          batch_cd: String(b.batch_cd || b.code || b.batch_id || '2'),
-          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2025'),
-          year: Number(b.batch_name || b.year || 2025),
+          id: String(b.batch_cd || b.code || b.batch_id || b.id || '2'),
+          code: String(b.batch_cd || b.code || b.batch_id || b.id || '2'),
+          batch_cd: String(b.batch_cd || b.code || b.batch_id || b.id || '2'),
+          name: String(b.batch_name || b.name || b.year || b.batch_cd || '2026'),
+          year: Number(b.batch_name || b.year || 2026),
           course_cd: String(b.course_cd || effectiveCrs),
+          course_name: b.course_name || courseName,
           colg_cd: String(b.colg_cd || effectiveColg),
         }));
       }
@@ -725,7 +736,8 @@ export default function AssessmentMasterPage() {
   // 2. Fetch all metadata whenever selected college changes
   const fetchMetadata = async (slug: string, customColgCd?: string) => {
     setMetaLoading(true);
-    const activeColg = customColgCd || selectedColgCd || '1';
+    const activeColg = customColgCd || selectedColgCd || 'mdis';
+    const isSrms = (slug || '').toLowerCase().includes('srms');
     try {
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const h: Record<string, string> = {
@@ -747,10 +759,12 @@ export default function AssessmentMasterPage() {
         fetch(`${API_BASE}/admin-master/professional-linkers?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/professionals?tenant=${slug}`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/exams/question-bank?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`${API_BASE}/exams/papers?tenant=${slug}`, { headers: h }).catch(() => null),
+        fetch(`${API_BASE}/exams/papers?tenant=${slug}&role=ADMIN`, { headers: h }).catch(() => null),
         fetch(`${API_BASE}/college-master/courses?tenant=${slug}`, { headers: h }).catch(() => null),
-        fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null),
-        fetch(`/api/srms/sessions?colgcd=${activeColg}&tenant=${slug}`).catch(() => fetch(`${API_BASE}/college-master/sessions?tenant=${slug}`, { headers: h })).catch(() => null),
+        isSrms ? fetch(`/api/srms/courses?colgcd=${activeColg}&tenant=${slug}`).catch(() => null) : Promise.resolve(null),
+        isSrms
+          ? fetch(`/api/srms/sessions?colgcd=${activeColg}&tenant=${slug}`).catch(() => fetch(`${API_BASE}/college-master/sessions?tenant=${slug}`, { headers: h })).catch(() => null)
+          : fetch(`${API_BASE}/college-master/sessions?tenant=${slug}`, { headers: h }).catch(() => null),
       ]);
 
       if (deptRes && deptRes.ok) { const j = await deptRes.json(); setDepartments(parse(j)); }
@@ -847,7 +861,7 @@ export default function AssessmentMasterPage() {
         setDesignedPapers(papersList);
         // Load previously published exams from backend papers (status-based or with scheduled date)
         const published = papersList
-          .filter((p: any) => p.status === 'Published' || p.is_active || p.exam_date)
+          .filter((p: any) => p.status === 'Published' || p.status === 'PUBLISHED' || p.is_active || p.exam_date)
           .map((p: any) => ({
             ...p,
             id: p.id,
@@ -1933,10 +1947,17 @@ export default function AssessmentMasterPage() {
       };
       // Find selected paper
       const selectedPaper = designedPapers.find(p => p.code === paperCode || p.id === paperCode);
-      if (selectedPaper && selectedPaper.status !== 'HOD_APPROVED' && selectedPaper.status !== 'PUBLISHED') {
+      const isApprovedStatus = selectedPaper && (
+        selectedPaper.status === 'HOD_APPROVED' ||
+        selectedPaper.status === 'DQAC_APPROVED' ||
+        selectedPaper.status === 'APPROVED' ||
+        selectedPaper.status === 'PUBLISHED' ||
+        selectedPaper.dqac_status === 'DQAC_APPROVED'
+      );
+      if (selectedPaper && !isApprovedStatus) {
         setAlert({
           type: 'error',
-          message: `🔒 Cannot publish: HOD approval is mandatory before publishing. Current status: ${selectedPaper.status || 'DRAFT'}.`,
+          message: `🔒 Cannot publish: HOD or DQAC approval is mandatory before publishing. Current status: ${selectedPaper.status || 'DRAFT'}.`,
         });
         setSaving(false);
         return;
@@ -3604,7 +3625,13 @@ export default function AssessmentMasterPage() {
 
                   {(() => {
                     const targetPaper = designedPapers.find(p => p.code === paperCode || p.id === paperCode);
-                    const isApproved = targetPaper ? (targetPaper.status === 'HOD_APPROVED' || targetPaper.status === 'PUBLISHED') : false;
+                    const isApproved = targetPaper ? (
+                      targetPaper.status === 'HOD_APPROVED' ||
+                      targetPaper.status === 'DQAC_APPROVED' ||
+                      targetPaper.status === 'APPROVED' ||
+                      targetPaper.status === 'PUBLISHED' ||
+                      targetPaper.dqac_status === 'DQAC_APPROVED'
+                    ) : false;
 
                     return (
                       <>

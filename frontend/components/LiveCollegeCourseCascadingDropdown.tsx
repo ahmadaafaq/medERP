@@ -105,7 +105,8 @@ export default function LiveCollegeCourseCascadingDropdown({
       }
 
       const data = await res.json();
-      const list: LiveCourse[] = Array.isArray(data) ? data : data.data || [];
+      const rawCourses: LiveCourse[] = Array.isArray(data) ? data : data.data || [];
+      const list = rawCourses.filter((c: any) => c.is_active !== false);
       setCourses(list);
     } catch (err: any) {
       console.error('[CascadingDropdown] Fetch Courses Error:', err);
@@ -172,6 +173,7 @@ export default function LiveCollegeCourseCascadingDropdown({
           return !name.includes('srms') && !s.includes('srms') && !name.includes('shri ram murti');
         });
       }
+      finalCols = finalCols.filter((c: any) => c.is_active !== false);
       setColleges(finalCols);
 
       const targetColg = selectedCollegeCode || colg;

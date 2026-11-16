@@ -23,6 +23,9 @@ export class SubjectEntity {
   @Column({ type: 'varchar', length: 20, nullable: true })
   type: string; // THEORY, PRACTICAL
 
+  @Column({ type: 'varchar', length: 30, default: 'NO_LONGITUDINAL' })
+  attendance_status: string; // NO_LONGITUDINAL, IS_LONGITUDINAL, COMBINED
+
   @Column({ type: 'boolean', default: true })
   is_active: boolean;
 }

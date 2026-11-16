@@ -10,6 +10,10 @@ export class QueryMenuRegistryDto {
   @IsEnum(ApplicableFirmMode)
   @IsOptional()
   firm_mode?: ApplicableFirmMode;
+
+  @IsString()
+  @IsOptional()
+  _t?: string;
 }
 
 export class MenuManifestItemDto {

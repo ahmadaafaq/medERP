@@ -4,6 +4,7 @@ import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, UpdateDateCol
 @Index(['rollno'])
 @Index(['department_id'])
 @Index(['batch_id'])
+@Index(['section_id'])
 export class StudentEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
@@ -28,6 +29,9 @@ export class StudentEntity {
 
   @Column({ type: 'uuid', nullable: true })
   batch_id: string;
+
+  @Column({ type: 'uuid', nullable: true })
+  section_id: string;
 
   @Column({ type: 'int', nullable: true })
   admission_year: number;

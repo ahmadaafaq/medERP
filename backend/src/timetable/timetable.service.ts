@@ -1036,6 +1036,7 @@ export class TimetableService implements OnModuleInit {
              ts.effective_from, ts.effective_until,
              ts.faculty_id, ts.batch_id, ts.department_id, ts.subject_id,
              ts.course_cd, ts.branch_cd, ts.batch_cd, ts.semester, ts.section, ts.topic, ts.description,
+             ts.group_name, ts.group_id, ts.section_id,
              COALESCE(f.name, '') AS faculty_name, f.emp_id AS faculty_code, f.id AS faculty_uuid,
              COALESCE(sub.name, '') AS subject_name,
              COALESCE(d.name, '') AS department_name,
@@ -1090,7 +1091,7 @@ export class TimetableService implements OnModuleInit {
         }
       }
 
-      // 2. Batch conflict check
+      // 2. Batch conflict check (Parallel Practical & Sub-Group aware)
       for (const conflict of conflicts) {
         const isSameClassSlot = (
           (dto.batchCd && conflict.batch_cd && String(dto.batchCd) === String(conflict.batch_cd)) ||
@@ -1099,7 +1100,13 @@ export class TimetableService implements OnModuleInit {
           !dto.section || !conflict.section || String(dto.section) === String(conflict.section)
         );
 
-        const isBatchConflict = !isSameClassSlot && (
+        // If both slots specify distinct practical/clinical groups (e.g. Group A vs Group B), they run in parallel!
+        const hasDistinctGroups = Boolean(
+          (dto.groupName && conflict.group_name && dto.groupName.trim().toLowerCase() !== conflict.group_name.trim().toLowerCase() && dto.groupName.trim().toLowerCase() !== 'whole batch' && conflict.group_name.trim().toLowerCase() !== 'whole batch') ||
+          (dto.groupId && conflict.group_id && String(dto.groupId) !== String(conflict.group_id))
+        );
+
+        const isBatchConflict = !isSameClassSlot && !hasDistinctGroups && (
           (dto.batchId && String(conflict.batch_id) === String(dto.batchId)) ||
           (dto.batchCd && String(conflict.batch_cd) === String(dto.batchCd))
         ) && (

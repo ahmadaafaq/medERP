@@ -217,6 +217,48 @@ export class CreateBatchDto {
 }
 
 export class UpdateBatchDto extends PartialType(CreateBatchDto) {
+  @ApiPropertyOptional({ example: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  durationMonths?: number;
+
+  @ApiPropertyOptional({ example: 12 })
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  duration_months?: number;
+
+  @ApiPropertyOptional({ example: '2025-08-01' })
+  @IsOptional()
+  @IsDateString()
+  startDate?: string;
+
+  @ApiPropertyOptional({ example: '2025-08-01' })
+  @IsOptional()
+  @IsDateString()
+  start_date?: string;
+
+  @ApiPropertyOptional({ example: '2026-07-31' })
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+
+  @ApiPropertyOptional({ example: '2026-07-31' })
+  @IsOptional()
+  @IsDateString()
+  end_date?: string;
+
+  @ApiPropertyOptional({ example: 'PHASE-1' })
+  @IsOptional()
+  @IsString()
+  phaseCode?: string;
+
+  @ApiPropertyOptional({ example: 'PHASE-1' })
+  @IsOptional()
+  @IsString()
+  phase_code?: string;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsBoolean()
@@ -472,6 +514,103 @@ export class CreateGroupDto {
   @IsOptional()
   @IsNumber()
   capacity?: number;
+
+  @ApiPropertyOptional({ example: 'PRACTICAL', enum: ['PRACTICAL', 'CLINICAL', 'COMMUNITY', 'TUTORIAL'] })
+  @IsOptional()
+  @IsString()
+  groupType?: string;
+
+  @ApiPropertyOptional({ example: 'PRACTICAL', enum: ['PRACTICAL', 'CLINICAL', 'COMMUNITY', 'TUTORIAL'] })
+  @IsOptional()
+  @IsString()
+  group_type?: string;
+
+  @ApiPropertyOptional({ description: 'Optional subject ID if group is for a specific subject (e.g. Lab, PSM posting)' })
+  @IsOptional()
+  @IsString()
+  subjectId?: string;
+
+  @ApiPropertyOptional({ description: 'Optional subject ID if group is for a specific subject' })
+  @IsOptional()
+  @IsString()
+  subject_id?: string;
+
+  @ApiPropertyOptional({ description: 'Professional Phase ID if applicable' })
+  @IsOptional()
+  @IsString()
+  phaseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phase_id?: string;
+
+  @ApiPropertyOptional({ example: '1st Semester' })
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  sem_cd?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  branchCd?: string;
+
+  @ApiPropertyOptional({ description: 'Section ID from Section Master' })
+  @IsOptional()
+  @IsString()
+  sectionId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  section_id?: string;
+
+  @ApiPropertyOptional({ type: [String], description: 'Student IDs to allocate immediately upon creation/update' })
+  @IsOptional()
+  @IsArray()
+  studentIds?: string[];
+
+  @ApiPropertyOptional({ description: 'When updating group, replace existing members with provided studentIds' })
+  @IsOptional()
+  @IsBoolean()
+  replaceMembers?: boolean;
+}
+
+export class AssignGroupMembersDto {
+  @ApiPropertyOptional({ type: [String], description: 'Array of student UUIDs to enroll' })
+  @IsOptional()
+  @IsArray()
+  studentIds?: string[];
+
+  @ApiPropertyOptional({ example: '1', description: 'Start Roll Number for bulk range assignment' })
+  @IsOptional()
+  @IsString()
+  startRollNo?: string;
+
+  @ApiPropertyOptional({ example: '35', description: 'End Roll Number for bulk range assignment' })
+  @IsOptional()
+  @IsString()
+  endRollNo?: string;
+
+  @ApiPropertyOptional({ example: 'PRACTICAL', enum: ['PRACTICAL', 'CLINICAL', 'COMMUNITY', 'TUTORIAL'] })
+  @IsOptional()
+  @IsString()
+  groupType?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  fromDate?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  toDate?: string;
 }
 
 export class UpdateGroupDto extends PartialType(CreateGroupDto) {
@@ -542,4 +681,63 @@ export class UpdateHodScopeDto {
   @IsArray()
   @IsString({ each: true })
   departmentIds: string[];
+}
+
+// ─── 9. SECTIONS MASTER ────────────────────────────────────────────────────
+export class CreateSectionDto {
+  @ApiProperty({ example: '1' })
+  @IsString()
+  @MaxLength(20)
+  code: string;
+
+  @ApiProperty({ example: 'Section 1' })
+  @IsString()
+  @MaxLength(100)
+  name: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  collegeId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  courseId?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  departmentId?: string;
+
+  @ApiProperty({ example: 'batch-uuid' })
+  @IsString()
+  batchId: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  phaseId?: string;
+
+  @ApiPropertyOptional({ example: '5th Semester' })
+  @IsOptional()
+  @IsString()
+  semester?: string;
+
+  @ApiPropertyOptional({ example: 60 })
+  @IsOptional()
+  @IsNumber()
+  capacity?: number;
+
+  @ApiPropertyOptional({ example: false })
+  @IsOptional()
+  @IsBoolean()
+  isDefault?: boolean;
+}
+
+export class UpdateSectionDto extends PartialType(CreateSectionDto) {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }

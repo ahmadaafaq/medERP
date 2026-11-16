@@ -571,6 +571,9 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
     if (rawSlug === 'apex-tech' || rawSlug.includes('apex')) {
       return userColgName || fallbackStored || 'Apex Institute of Technology & Management';
     }
+    if (rawSlug === 'mdis' || rawSlug.includes('mdis')) {
+      return userColgName || fallbackStored || 'MDIS';
+    }
     if (rawSlug === 'unicamp-med') {
       return userColgName || fallbackStored || 'UniCampus Medical College & Hospital';
     }

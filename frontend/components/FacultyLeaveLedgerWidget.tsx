@@ -120,8 +120,23 @@ export default function FacultyLeaveLedgerWidget() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pageSize, setPageSize] = useState<number>(10);
 
+  // Strictly isolate SRMS portal leave ledger to tenants containing 'srms' keyword
+  const isSrms = useMemo(() => {
+    if (typeof window === 'undefined') return true;
+    try {
+      const u = JSON.parse(localStorage.getItem('user') || '{}');
+      const s = String(u?.tenantSlug || u?.tenant || u?.slug || '').toLowerCase();
+      const n = String(u?.collegeName || u?.tenantName || '').toLowerCase();
+      if (s || n) return s.includes('srms') || n.includes('srms');
+    } catch (e) {}
+    const s = String(localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || '').toLowerCase();
+    const n = String(localStorage.getItem('collegeName') || '').toLowerCase();
+    return s.includes('srms') || n.includes('srms');
+  }, []);
+
   // Fetch Leave Data
   const fetchLeaveData = async () => {
+    if (!isSrms) return;
     try {
       setLoading(true);
       setError(null);
@@ -156,8 +171,9 @@ export default function FacultyLeaveLedgerWidget() {
   };
 
   useEffect(() => {
+    if (!isSrms) return;
     fetchLeaveData();
-  }, [selectedLocId, selectedYear]);
+  }, [selectedLocId, selectedYear, isSrms]);
 
   // Extract dynamic filters (Departments, Categories, Available Months)
   const { departmentList, categoryList, availableMonths } = useMemo(() => {
@@ -397,6 +413,8 @@ export default function FacultyLeaveLedgerWidget() {
     link.click();
     document.body.removeChild(link);
   };
+
+  if (!isSrms) return null;
 
   return (
     <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] p-4 shadow-soft hover:shadow-md transition-all space-y-3.5">

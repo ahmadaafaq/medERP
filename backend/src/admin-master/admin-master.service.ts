@@ -298,6 +298,11 @@ export class AdminMasterService {
         ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS hours_allotted INT;
         ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS is_elective BOOLEAN DEFAULT false;
         ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT true;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS section_id UUID;
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS section_code VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS sec_cd VARCHAR(50);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS section VARCHAR(100);
+        ALTER TABLE "${schema}".subject_offerings ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
       `);
 
       // 7. program_outcomes (POs / PSOs)
@@ -982,6 +987,7 @@ export class AdminMasterService {
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS semester VARCHAR(50);
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS sub_addinfo VARCHAR(100);
           ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS mst_sub_name VARCHAR(200);
+      ALTER TABLE "${schema}".subjects ADD COLUMN IF NOT EXISTS attendance_status VARCHAR(30) DEFAULT 'NO_LONGITUDINAL';
         `).catch(() => {});
 
         const queryParams: any[] = [];
@@ -1219,6 +1225,8 @@ export class AdminMasterService {
       }
     }
 
+    const attendanceStatus = dto.attendance_status || dto.attendanceStatus || (dto.is_longitudinal ? 'IS_LONGITUDINAL' : 'NO_LONGITUDINAL');
+
     if (existing.length > 0) {
       const updated = await this.tenantSchemaService.queryInTenant(
         slug,
@@ -1237,8 +1245,9 @@ export class AdminMasterService {
              semester = COALESCE($12, semester),
              sub_addinfo = COALESCE($13, sub_addinfo),
              mst_sub_name = COALESCE($14, mst_sub_name),
+             attendance_status = COALESCE($15, attendance_status),
              is_active = true
-         WHERE id = $15
+         WHERE id = $16
          RETURNING *`,
         [
           dto.name,
@@ -1255,6 +1264,7 @@ export class AdminMasterService {
           dto.semester || null,
           dto.sub_addinfo || null,
           dto.mst_sub_name || null,
+          attendanceStatus,
           existing[0].id,
         ],
       );
@@ -1263,8 +1273,8 @@ export class AdminMasterService {
 
     const rows = await this.tenantSchemaService.queryInTenant(
       slug,
-      `INSERT INTO subjects (code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd, batch_cd, sem_cd, semester, sub_addinfo, mst_sub_name)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12, $13, $14, $15)
+      `INSERT INTO subjects (code, name, department_id, batch_id, credits, type, is_longitudinal, is_active, course_cd, course_name, branch_cd, batch_cd, sem_cd, semester, sub_addinfo, mst_sub_name, attendance_status)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, true, $8, $9, $10, $11, $12, $13, $14, $15, $16)
        RETURNING *`,
       [
         dto.code.toUpperCase(),
@@ -1282,6 +1292,7 @@ export class AdminMasterService {
         dto.semester || null,
         dto.sub_addinfo || null,
         dto.mst_sub_name || null,
+        attendanceStatus,
       ],
     );
     return rows[0];
@@ -1324,8 +1335,9 @@ export class AdminMasterService {
            is_active = COALESCE($8, is_active),
            course_cd = COALESCE($9, course_cd),
            course_name = COALESCE($10, course_name),
-           branch_cd = COALESCE($11, branch_cd)
-       WHERE id = $12
+           branch_cd = COALESCE($11, branch_cd),
+           attendance_status = COALESCE($12, attendance_status)
+       WHERE id = $13
        RETURNING *`,
       [
         dto.code?.toUpperCase(),
@@ -1339,6 +1351,7 @@ export class AdminMasterService {
         courseCd,
         courseName,
         branchCd,
+        dto.attendance_status || dto.attendanceStatus,
         id,
       ],
     );
@@ -2514,11 +2527,24 @@ export class AdminMasterService {
           SELECT DISTINCT ON (so.id)
             so.*, 
             s.name AS subject_name, s.code AS subject_code,
-            p.name AS prof_name,
-            dt.name AS dtype_name,
+            COALESCE(c.name, s.course_name, so.course_cd) AS course_name,
+            COALESCE(so.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+            COALESCE(d.name, so.branch_cd, s.branch_cd) AS branch_name,
+            COALESCE(so.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+            COALESCE(so.section, sec.name, so.section_code) AS section_name,
+            CASE
+              WHEN so.semester IS NOT NULL AND p.name IS NOT NULL AND p.name ILIKE '%Semester%' AND p.phase_order IS NOT NULL AND p.phase_order::text != so.semester::text THEN 'Semester ' || so.semester
+              ELSE COALESCE(p.name, CASE WHEN so.semester IS NOT NULL THEN 'Semester ' || so.semester ELSE NULL END, 'Academic Phase')
+            END AS prof_name,
+            COALESCE(dt.name, CASE WHEN so.dtype_code = 'PR' THEN 'Practical' WHEN so.dtype_code = 'TU' THEN 'Tutorial' ELSE 'Theory' END) AS dtype_name,
+            COALESCE(so.dtype_code, dt.code, CASE WHEN dt.name ILIKE '%Practical%' THEN 'PR' WHEN dt.name ILIKE '%Tutorial%' THEN 'TU' ELSE 'TH' END) AS dtype_code,
             (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
           FROM subject_offerings so
           LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+          LEFT JOIN courses c ON (c.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR c.code::text = COALESCE(so.course_cd, s.course_cd)::text)
+          LEFT JOIN departments d ON (d.branch_cd::text = COALESCE(so.branch_cd, s.branch_cd)::text OR d.code::text = COALESCE(so.branch_cd, s.branch_cd)::text)
+            AND (d.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR COALESCE(so.course_cd, s.course_cd) IS NULL)
+          LEFT JOIN sections sec ON sec.id::text = so.section_id::text
           LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
           LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
           ORDER BY so.id
@@ -2549,11 +2575,24 @@ export class AdminMasterService {
             SELECT DISTINCT ON (so.id)
               so.*, 
               s.name AS subject_name, s.code AS subject_code,
-              p.name AS prof_name,
-              dt.name AS dtype_name,
+              COALESCE(c.name, s.course_name, so.course_cd) AS course_name,
+              COALESCE(so.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+              COALESCE(d.name, so.branch_cd, s.branch_cd) AS branch_name,
+              COALESCE(so.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+              COALESCE(so.section, sec.name, so.section_code) AS section_name,
+              CASE
+                WHEN so.semester IS NOT NULL AND p.name IS NOT NULL AND p.name ILIKE '%Semester%' AND p.phase_order IS NOT NULL AND p.phase_order::text != so.semester::text THEN 'Semester ' || so.semester
+                ELSE COALESCE(p.name, CASE WHEN so.semester IS NOT NULL THEN 'Semester ' || so.semester ELSE NULL END, 'Academic Phase')
+              END AS prof_name,
+              COALESCE(dt.name, CASE WHEN so.dtype_code = 'PR' THEN 'Practical' WHEN so.dtype_code = 'TU' THEN 'Tutorial' ELSE 'Theory' END) AS dtype_name,
+              COALESCE(so.dtype_code, dt.code, CASE WHEN dt.name ILIKE '%Practical%' THEN 'PR' WHEN dt.name ILIKE '%Tutorial%' THEN 'TU' ELSE 'TH' END) AS dtype_code,
               (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
             FROM subject_offerings so
             LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+            LEFT JOIN courses c ON (c.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR c.code::text = COALESCE(so.course_cd, s.course_cd)::text)
+            LEFT JOIN departments d ON (d.branch_cd::text = COALESCE(so.branch_cd, s.branch_cd)::text OR d.code::text = COALESCE(so.branch_cd, s.branch_cd)::text)
+              AND (d.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR COALESCE(so.course_cd, s.course_cd) IS NULL)
+            LEFT JOIN sections sec ON sec.id::text = so.section_id::text
             LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
             LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
             ORDER BY so.id
@@ -2585,33 +2624,79 @@ export class AdminMasterService {
 
     // 1. Resolve Subject
     let subjectId = dto.subject_id || dto.subjectId;
-    const subjectSearch = dto.subject_code || dto.subjectCode || dto.subject_id || dto.subjectId;
+    let subCode = dto.subject_code || dto.subjectCode;
+    let subCourseCd = dto.course_cd || dto.courseCd;
+    let subBranchCd = dto.branch_cd || dto.branchCd;
+
+    const subjectSearch = subCode || subjectId;
     if (subjectSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
+        `SELECT id, code, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
         [subjectSearch],
       ).catch(() => []);
-      if (subRows.length > 0) subjectId = subRows[0].id;
+      if (subRows.length > 0) {
+        subjectId = subRows[0].id;
+        subCode = subRows[0].code;
+        if (!subCourseCd && subRows[0].course_cd) subCourseCd = subRows[0].course_cd;
+        if (!subBranchCd && subRows[0].branch_cd) subBranchCd = subRows[0].branch_cd;
+      }
     }
     if (!subjectId) {
-      const subFallback = await this.tenantSchemaService.queryInTenant(slug, `SELECT id FROM subjects LIMIT 1`).catch(() => []);
-      if (subFallback.length > 0) subjectId = subFallback[0].id;
+      const subFallback = await this.tenantSchemaService.queryInTenant(slug, `SELECT id, code, course_cd, branch_cd FROM subjects LIMIT 1`).catch(() => []);
+      if (subFallback.length > 0) {
+        subjectId = subFallback[0].id;
+        subCode = subFallback[0].code;
+        if (!subCourseCd && subFallback[0].course_cd) subCourseCd = subFallback[0].course_cd;
+        if (!subBranchCd && subFallback[0].branch_cd) subBranchCd = subFallback[0].branch_cd;
+      }
     }
 
-    // 2. Resolve Professional Phase
+    // 2. Resolve Professional Phase scoped by course
+    const courseCdVal = subCourseCd || dto.course_cd || dto.courseCd || null;
+    const branchCdVal = subBranchCd || dto.branch_cd || dto.branchCd || null;
+    const semVal = Number(dto.semester) || (dto.phase_order ? Number(dto.phase_order) : 5);
+    const phaseOrderVal = dto.phase_order !== undefined ? Number(dto.phase_order) : semVal;
+
     let profId = dto.prof_id || dto.profId;
-    const profSearch = dto.phase_order !== undefined ? String(dto.phase_order) : (dto.prof_id || dto.profId);
-    if (profSearch) {
+    // If profId was provided, verify it actually matches this course
+    if (profId && courseCdVal) {
+      const checkRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM professional_phases WHERE id::text = $1 AND (course_cd = $2 OR course_cd IS NULL) LIMIT 1`,
+        [profId, String(courseCdVal)],
+      ).catch(() => []);
+      if (checkRows.length === 0) {
+        profId = undefined; // Belonged to another course, reset to resolve correctly below
+      }
+    }
+
+    if (!profId && phaseOrderVal) {
       const profRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM professional_phases WHERE id::text = $1 OR phase_order::text = $1 LIMIT 1`,
-        [profSearch],
+        `SELECT id FROM professional_phases 
+         WHERE phase_order = $1 AND (course_cd = $2 OR course_cd IS NULL) 
+         ORDER BY (CASE WHEN course_cd = $2 THEN 0 ELSE 1 END) ASC LIMIT 1`,
+        [phaseOrderVal, String(courseCdVal || '')],
       ).catch(() => []);
       if (profRows.length > 0) profId = profRows[0].id;
     }
+
+    if (!profId && phaseOrderVal) {
+      const profRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM professional_phases WHERE phase_order = $1 LIMIT 1`,
+        [phaseOrderVal],
+      ).catch(() => []);
+      if (profRows.length > 0) profId = profRows[0].id;
+    }
+
     if (!profId) {
-      const profFallback = await this.tenantSchemaService.queryInTenant(slug, `SELECT id FROM professional_phases LIMIT 1`).catch(() => []);
+      const profFallback = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM professional_phases WHERE (course_cd = $1 OR course_cd IS NULL) ORDER BY (CASE WHEN course_cd = $1 THEN 0 ELSE 1 END) ASC LIMIT 1`,
+        [String(courseCdVal || '')],
+      ).catch(() => []);
       if (profFallback.length > 0) {
         profId = profFallback[0].id;
       } else {
@@ -2622,11 +2707,12 @@ export class AdminMasterService {
 
     // 3. Resolve (or auto-create) Delivery Type
     let dtypeId = dto.dtype_id || dto.dtypeId;
-    const dtypeSearch = dto.dtype_code || dto.dtypeCode || dto.dtype_id || dto.dtypeId || 'TH';
+    let dtypeCodeVal = dto.dtype_code || dto.dtypeCode || 'TH';
+    const dtypeSearch = dtypeCodeVal || dtypeId;
     if (dtypeSearch) {
       let dtRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM delivery_types WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
+        `SELECT id, code FROM delivery_types WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
         [dtypeSearch],
       ).catch(() => []);
       if (dtRows.length === 0) {
@@ -2634,26 +2720,166 @@ export class AdminMasterService {
           slug,
           `INSERT INTO delivery_types (code, name, is_active)
            VALUES ($1, $2, true)
-           RETURNING id`,
+           RETURNING id, code`,
           [dtypeSearch.toUpperCase(), dtypeSearch.toUpperCase() === 'TH' ? 'Theory' : (dtypeSearch.toUpperCase() === 'PR' ? 'Practical' : dtypeSearch)],
         ).catch(() => []);
-        if (inserted.length > 0) dtypeId = inserted[0].id;
+        if (inserted.length > 0) {
+          dtypeId = inserted[0].id;
+          dtypeCodeVal = inserted[0].code;
+        }
       } else {
         dtypeId = dtRows[0].id;
+        dtypeCodeVal = dtRows[0].code;
       }
     }
 
     const batchYearVal = dto.batch_year || dto.batchYear || 2024;
     const hoursVal = dto.hours_allotted ?? dto.hoursAllotted ?? 0;
     const academicYearVal = dto.academic_year || dto.academicYear || '2024-2025';
-    const semVal = Number(dto.semester) || 1;
     const isElectiveVal = dto.is_elective ?? dto.isElective ?? false;
+    const batchIdVal = dto.batch_id || dto.batchId || null;
+    const sectionIdVal = dto.section_id || dto.sectionId || null;
+    const sectionCodeVal = dto.section_code || dto.sectionCode || dto.sec_cd || null;
+    const secCdVal = dto.sec_cd || dto.secCd || (sectionCodeVal ? String(sectionCodeVal) : null);
+    const sectionVal = dto.section || (secCdVal ? `Section ${secCdVal}` : null);
 
+    // Support multiple delivery types under the same subject in one batch
+    if (dto.items && Array.isArray(dto.items) && dto.items.length > 0) {
+      let lastOfferingId: string = '';
+      for (const it of dto.items) {
+        let itDtypeId: string | null = null;
+        let itDtypeCode: string = it.dtype_code || it.dtypeCode || it.dtype_id || it.dtypeId || 'TH';
+        let dtRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id, code FROM delivery_types WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
+          [itDtypeCode],
+        ).catch(() => []);
+        if (dtRows.length === 0) {
+          const inserted = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `INSERT INTO delivery_types (code, name, is_active)
+             VALUES ($1, $2, true)
+             RETURNING id, code`,
+            [itDtypeCode.toUpperCase(), itDtypeCode.toUpperCase() === 'TH' ? 'Theory' : (itDtypeCode.toUpperCase() === 'PR' ? 'Practical' : itDtypeCode)],
+          ).catch(() => []);
+          if (inserted.length > 0) {
+            itDtypeId = inserted[0].id;
+            itDtypeCode = inserted[0].code;
+          }
+        } else {
+          itDtypeId = dtRows[0].id;
+          itDtypeCode = dtRows[0].code;
+        }
+        if (!itDtypeId) continue;
+
+        const itHours = it.hours_allotted ?? it.hoursAllotted ?? hoursVal;
+        const existingIt = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT id FROM subject_offerings 
+           WHERE subject_id = $1 AND dtype_id = $2 AND batch_year = $3 
+             AND (prof_id = $4 OR semester = $5)
+             AND (section_code = $6 OR sec_cd = $6 OR $6 IS NULL)`,
+          [subjectId, itDtypeId, batchYearVal, profId, semVal, secCdVal],
+        ).catch(() => []);
+
+        let itOfferingId: string;
+        if (existingIt && existingIt.length > 0) {
+          itOfferingId = existingIt[0].id;
+          await this.tenantSchemaService.queryInTenant(
+            slug,
+            `UPDATE subject_offerings 
+             SET hours_allotted = $1, academic_year = $2, semester = $3, is_elective = $4,
+                 prof_id = COALESCE($5, prof_id),
+                 phase_order = COALESCE($6, phase_order),
+                 course_cd = COALESCE($7, course_cd),
+                 branch_cd = COALESCE($8, branch_cd),
+                 batch_id = COALESCE($9, batch_id),
+                 section_id = COALESCE($10, section_id),
+                 section_code = COALESCE($11, section_code),
+                 sec_cd = COALESCE($12, sec_cd),
+                 section = COALESCE($13, section),
+                 dtype_code = COALESCE($14, dtype_code),
+                 subject_code = COALESCE($15, subject_code),
+                 is_active = true
+             WHERE id = $16`,
+            [itHours, academicYearVal, semVal, isElectiveVal, profId, phaseOrderVal, courseCdVal, branchCdVal, batchIdVal, sectionIdVal, sectionCodeVal, secCdVal, sectionVal, itDtypeCode, subCode, itOfferingId],
+          );
+        } else {
+          const rows = await this.tenantSchemaService.queryInTenant(
+            slug,
+            `INSERT INTO subject_offerings (
+              subject_id, subject_code, prof_id, phase_order, dtype_id, dtype_code,
+              batch_year, academic_year, semester, batch_id, course_cd, branch_cd,
+              section_id, section_code, sec_cd, section, hours_allotted, is_elective, is_active
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, true)
+            RETURNING *`,
+            [subjectId, subCode, profId, phaseOrderVal, itDtypeId, itDtypeCode, batchYearVal, academicYearVal, semVal, batchIdVal, courseCdVal, branchCdVal, sectionIdVal, sectionCodeVal, secCdVal, sectionVal, itHours, isElectiveVal],
+          );
+          itOfferingId = rows[0]?.id;
+        }
+
+        if (subjectId && itOfferingId) {
+          await this.tenantSchemaService.queryInTenant(
+            slug,
+            `UPDATE attendance_sessions 
+             SET offering_id = $1 
+             WHERE subject_id = $2 AND (offering_id IS NULL OR offering_id != $1)`,
+            [itOfferingId, subjectId],
+          ).catch(() => {});
+        }
+        lastOfferingId = itOfferingId;
+      }
+
+      if (lastOfferingId) {
+        const resultRows = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `SELECT so.*, 
+                  s.name AS subject_name, s.code AS subject_code,
+                  COALESCE(c.name, s.course_name, so.course_cd) AS course_name,
+                  COALESCE(so.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+                  COALESCE(d.name, so.branch_cd, s.branch_cd) AS branch_name,
+                  COALESCE(so.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+                  COALESCE(so.section, sec.name, so.section_code) AS section_name,
+                  CASE
+                    WHEN so.semester IS NOT NULL AND p.name IS NOT NULL AND p.name ILIKE '%Semester%' AND p.phase_order IS NOT NULL AND p.phase_order::text != so.semester::text THEN 'Semester ' || so.semester
+                    ELSE COALESCE(p.name, CASE WHEN so.semester IS NOT NULL THEN 'Semester ' || so.semester ELSE NULL END, 'Academic Phase')
+                  END AS prof_name,
+                  dt.name AS dtype_name, dt.code AS dtype_code,
+                  (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
+           FROM subject_offerings so
+           LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+           LEFT JOIN courses c ON (c.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR c.code::text = COALESCE(so.course_cd, s.course_cd)::text)
+           LEFT JOIN departments d ON (d.branch_cd::text = COALESCE(so.branch_cd, s.branch_cd)::text OR d.code::text = COALESCE(so.branch_cd, s.branch_cd)::text)
+             AND (d.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR COALESCE(so.course_cd, s.course_cd) IS NULL)
+           LEFT JOIN sections sec ON sec.id::text = so.section_id::text
+           LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
+           LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
+           WHERE so.id::text = $1::text`,
+          [lastOfferingId],
+        ).catch(() => []);
+
+        const colleges = await this.listColleges();
+        const currentCollege = colleges.find((c: any) => c.slug === slug || c.id === dto.college_id || c.code === dto.college_id);
+
+        return {
+          ...resultRows[0],
+          college_id: currentCollege?.id,
+          college_name: currentCollege?.name,
+          college_code: currentCollege?.code,
+          college_slug: slug,
+        };
+      }
+    }
+
+    // Single item branch
     const existing = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT id FROM subject_offerings 
-       WHERE subject_id = $1 AND prof_id = $2 AND dtype_id = $3 AND batch_year = $4`,
-      [subjectId, profId, dtypeId, batchYearVal],
+       WHERE subject_id = $1 AND dtype_id = $2 AND batch_year = $3
+         AND (prof_id = $4 OR semester = $5)
+         AND (section_code = $6 OR sec_cd = $6 OR $6 IS NULL)`,
+      [subjectId, dtypeId, batchYearVal, profId, semVal, secCdVal],
     ).catch(() => []);
 
     let offeringId: string;
@@ -2661,22 +2887,40 @@ export class AdminMasterService {
       offeringId = existing[0].id;
       await this.tenantSchemaService.queryInTenant(
         slug,
-        `UPDATE subject_offerings SET hours_allotted = $1, academic_year = $2, semester = $3, is_elective = $4, is_active = true WHERE id = $5`,
-        [hoursVal, academicYearVal, semVal, isElectiveVal, offeringId],
+        `UPDATE subject_offerings 
+         SET hours_allotted = $1, academic_year = $2, semester = $3, is_elective = $4,
+             prof_id = COALESCE($5, prof_id),
+             phase_order = COALESCE($6, phase_order),
+             course_cd = COALESCE($7, course_cd),
+             branch_cd = COALESCE($8, branch_cd),
+             batch_id = COALESCE($9, batch_id),
+             section_id = COALESCE($10, section_id),
+             section_code = COALESCE($11, section_code),
+             sec_cd = COALESCE($12, sec_cd),
+             section = COALESCE($13, section),
+             dtype_code = COALESCE($14, dtype_code),
+             subject_code = COALESCE($15, subject_code),
+             is_active = true
+         WHERE id = $16`,
+        [hoursVal, academicYearVal, semVal, isElectiveVal, profId, phaseOrderVal, courseCdVal, branchCdVal, batchIdVal, sectionIdVal, sectionCodeVal, secCdVal, sectionVal, dtypeCodeVal, subCode, offeringId],
       );
     } else {
       const rows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `INSERT INTO subject_offerings (subject_id, prof_id, dtype_id, batch_year, academic_year, semester, hours_allotted, is_elective, is_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, true)
-         RETURNING *`,
-        [subjectId, profId, dtypeId, batchYearVal, academicYearVal, semVal, hoursVal, isElectiveVal],
+        `INSERT INTO subject_offerings (
+          subject_id, subject_code, prof_id, phase_order, dtype_id, dtype_code,
+          batch_year, academic_year, semester, batch_id, course_cd, branch_cd,
+          section_id, section_code, sec_cd, section, hours_allotted, is_elective, is_active
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, true)
+        RETURNING *`,
+        [subjectId, subCode, profId, phaseOrderVal, dtypeId, dtypeCodeVal, batchYearVal, academicYearVal, semVal, batchIdVal, courseCdVal, branchCdVal, sectionIdVal, sectionCodeVal, secCdVal, sectionVal, hoursVal, isElectiveVal],
       );
-      offeringId = rows[0].id;
+      offeringId = rows[0]?.id;
     }
 
     // Auto-link any existing unlinked attendance sessions for this subject without modifying marks/dates
-    if (subjectId) {
+    if (subjectId && offeringId) {
       await this.tenantSchemaService.queryInTenant(
         slug,
         `UPDATE attendance_sessions 
@@ -2689,12 +2933,24 @@ export class AdminMasterService {
     const resultRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT so.*, 
-              s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
-              p.name AS prof_name, p.phase_order, p.academic_year,
+              s.name AS subject_name, s.code AS subject_code,
+              COALESCE(c.name, s.course_name, so.course_cd) AS course_name,
+              COALESCE(so.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+              COALESCE(d.name, so.branch_cd, s.branch_cd) AS branch_name,
+              COALESCE(so.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+              COALESCE(so.section, sec.name, so.section_code) AS section_name,
+              CASE
+                WHEN so.semester IS NOT NULL AND p.name IS NOT NULL AND p.name ILIKE '%Semester%' AND p.phase_order IS NOT NULL AND p.phase_order::text != so.semester::text THEN 'Semester ' || so.semester
+                ELSE COALESCE(p.name, CASE WHEN so.semester IS NOT NULL THEN 'Semester ' || so.semester ELSE NULL END, 'Academic Phase')
+              END AS prof_name,
               dt.name AS dtype_name, dt.code AS dtype_code,
               (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
        FROM subject_offerings so
        LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+       LEFT JOIN courses c ON (c.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR c.code::text = COALESCE(so.course_cd, s.course_cd)::text)
+       LEFT JOIN departments d ON (d.branch_cd::text = COALESCE(so.branch_cd, s.branch_cd)::text OR d.code::text = COALESCE(so.branch_cd, s.branch_cd)::text)
+         AND (d.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR COALESCE(so.course_cd, s.course_cd) IS NULL)
+       LEFT JOIN sections sec ON sec.id::text = so.section_id::text
        LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
        LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
        WHERE so.id::text = $1::text`,
@@ -2718,38 +2974,66 @@ export class AdminMasterService {
 
     // 1. Resolve Subject if provided
     let subjectId = dto.subject_id;
+    let subCode = dto.subject_code;
+    let subCourseCd = dto.course_cd || dto.courseCd;
+    let subBranchCd = dto.branch_cd || dto.branchCd;
+
     const subjectSearch = dto.subject_code || dto.subject_id;
     if (subjectSearch) {
       const subRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
+        `SELECT id, code, course_cd, branch_cd FROM subjects WHERE id::text = $1 OR code = $1 LIMIT 1`,
         [subjectSearch],
       ).catch(() => []);
-      if (subRows.length > 0) subjectId = subRows[0].id;
+      if (subRows.length > 0) {
+        subjectId = subRows[0].id;
+        subCode = subRows[0].code;
+        if (!subCourseCd && subRows[0].course_cd) subCourseCd = subRows[0].course_cd;
+        if (!subBranchCd && subRows[0].branch_cd) subBranchCd = subRows[0].branch_cd;
+      }
     }
 
     // 2. Resolve Professional Phase if provided
+    const courseCdVal = subCourseCd || dto.course_cd || dto.courseCd || null;
+    const branchCdVal = subBranchCd || dto.branch_cd || dto.branchCd || null;
+    const semVal = dto.semester !== undefined ? Number(dto.semester) : undefined;
+    const phaseOrderVal = dto.phase_order !== undefined ? Number(dto.phase_order) : semVal;
+
     let profId = dto.prof_id;
-    const profSearch = dto.phase_order !== undefined ? String(dto.phase_order) : dto.prof_id;
-    if (profSearch) {
+    if (profId && courseCdVal) {
+      const checkRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT id FROM professional_phases WHERE id::text = $1 AND (course_cd = $2 OR course_cd IS NULL) LIMIT 1`,
+        [profId, String(courseCdVal)],
+      ).catch(() => []);
+      if (checkRows.length === 0) profId = undefined;
+    }
+
+    if (!profId && phaseOrderVal) {
       const profRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM professional_phases WHERE id::text = $1 OR phase_order::text = $1 LIMIT 1`,
-        [profSearch],
+        `SELECT id FROM professional_phases 
+         WHERE phase_order = $1 AND (course_cd = $2 OR course_cd IS NULL) 
+         ORDER BY (CASE WHEN course_cd = $2 THEN 0 ELSE 1 END) ASC LIMIT 1`,
+        [phaseOrderVal, String(courseCdVal || '')],
       ).catch(() => []);
       if (profRows.length > 0) profId = profRows[0].id;
     }
 
     // 3. Resolve Delivery Type if provided
     let dtypeId = dto.dtype_id;
+    let dtypeCodeVal = dto.dtype_code;
     const dtypeSearch = dto.dtype_code || dto.dtype_id;
     if (dtypeSearch) {
       const dtRows = await this.tenantSchemaService.queryInTenant(
         slug,
-        `SELECT id FROM delivery_types WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
+        `SELECT id, code FROM delivery_types WHERE id::text = $1 OR code ILIKE $1 LIMIT 1`,
         [dtypeSearch],
       ).catch(() => []);
-      if (dtRows.length > 0) dtypeId = dtRows[0].id;
+      if (dtRows.length > 0) {
+        dtypeId = dtRows[0].id;
+        dtypeCodeVal = dtRows[0].code;
+      }
     }
 
     const rows = await this.tenantSchemaService.queryInTenant(
@@ -2760,22 +3044,66 @@ export class AdminMasterService {
            dtype_id = COALESCE($3, dtype_id),
            batch_year = COALESCE($4, batch_year),
            hours_allotted = COALESCE($5, hours_allotted),
-           is_active = COALESCE($6, is_active)
-       WHERE id = $7
+           is_active = COALESCE($6, is_active),
+           semester = COALESCE($7, semester),
+           academic_year = COALESCE($8, academic_year),
+           course_cd = COALESCE($9, course_cd),
+           branch_cd = COALESCE($10, branch_cd),
+           batch_id = COALESCE($11, batch_id),
+           section_id = COALESCE($12, section_id),
+           section_code = COALESCE($13, section_code),
+           sec_cd = COALESCE($14, sec_cd),
+           section = COALESCE($15, section),
+           phase_order = COALESCE($16, phase_order),
+           dtype_code = COALESCE($17, dtype_code),
+           subject_code = COALESCE($18, subject_code)
+       WHERE id = $19
        RETURNING *`,
-      [subjectId, profId, dtypeId, dto.batch_year, dto.hours_allotted, dto.is_active, id],
+      [
+        subjectId || null,
+        profId || null,
+        dtypeId || null,
+        dto.batch_year || null,
+        dto.hours_allotted !== undefined ? dto.hours_allotted : null,
+        dto.is_active !== undefined ? dto.is_active : null,
+        semVal || null,
+        dto.academic_year || null,
+        courseCdVal || null,
+        branchCdVal || null,
+        dto.batch_id || null,
+        dto.section_id || null,
+        dto.section_code || null,
+        dto.sec_cd || null,
+        dto.section || null,
+        phaseOrderVal || null,
+        dtypeCodeVal || null,
+        subCode || null,
+        id,
+      ],
     );
     if (rows.length === 0) throw new NotFoundException('Subject offering not found');
 
     const resultRows = await this.tenantSchemaService.queryInTenant(
       slug,
       `SELECT so.*, 
-              s.name AS subject_name, s.code AS subject_code, s.course_cd, s.course_name, s.branch_cd,
-              p.name AS prof_name, p.phase_order, p.academic_year,
+              s.name AS subject_name, s.code AS subject_code,
+              COALESCE(c.name, s.course_name, so.course_cd) AS course_name,
+              COALESCE(so.course_cd, s.course_cd, c.course_cd, c.code) AS course_cd,
+              COALESCE(d.name, so.branch_cd, s.branch_cd) AS branch_name,
+              COALESCE(so.branch_cd, s.branch_cd, d.branch_cd, d.code) AS branch_cd,
+              COALESCE(so.section, sec.name, so.section_code) AS section_name,
+              CASE
+                WHEN so.semester IS NOT NULL AND p.name IS NOT NULL AND p.name ILIKE '%Semester%' AND p.phase_order IS NOT NULL AND p.phase_order::text != so.semester::text THEN 'Semester ' || so.semester
+                ELSE COALESCE(p.name, CASE WHEN so.semester IS NOT NULL THEN 'Semester ' || so.semester ELSE NULL END, 'Academic Phase')
+              END AS prof_name,
               dt.name AS dtype_name, dt.code AS dtype_code,
               (SELECT COUNT(*) FROM attendance_sessions ass WHERE ass.offering_id::text = so.id::text OR (ass.subject_id::text = so.subject_id::text AND ass.offering_id IS NULL)) AS attendance_sessions_count
        FROM subject_offerings so
        LEFT JOIN subjects s ON s.id::text = so.subject_id::text
+       LEFT JOIN courses c ON (c.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR c.code::text = COALESCE(so.course_cd, s.course_cd)::text)
+       LEFT JOIN departments d ON (d.branch_cd::text = COALESCE(so.branch_cd, s.branch_cd)::text OR d.code::text = COALESCE(so.branch_cd, s.branch_cd)::text)
+         AND (d.course_cd::text = COALESCE(so.course_cd, s.course_cd)::text OR COALESCE(so.course_cd, s.course_cd) IS NULL)
+       LEFT JOIN sections sec ON sec.id::text = so.section_id::text
        LEFT JOIN professional_phases p ON p.id::text = so.prof_id::text
        LEFT JOIN delivery_types dt ON dt.id::text = so.dtype_id::text
        WHERE so.id::text = $1::text`,
@@ -4604,6 +4932,262 @@ export class AdminMasterService {
         ...savedRow,
         section: this.normalizeSectionCode(savedRow.section),
       },
+    };
+  }
+
+  // ─── ATTENDANCE POLICY SERVICE ─────────────────────────────────────────────
+  async getAttendancePolicy(courseCd: string, academicSystem: string = 'semester', tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT * FROM attendance_policies 
+       WHERE (LOWER(course_cd) = LOWER($1) OR course_cd = 'DEFAULT')
+         AND (academic_system = $2 OR $2 IS NULL)
+       ORDER BY CASE WHEN LOWER(course_cd) = LOWER($1) THEN 0 ELSE 1 END ASC
+       LIMIT 1`,
+      [courseCd, academicSystem],
+    ).catch(() => []);
+
+    if (rows.length > 0) return rows[0];
+
+    // Fallback default policy if none found in DB
+    return {
+      course_cd: courseCd,
+      academic_system: academicSystem,
+      regulator: 'AICTE',
+      min_theory_pct: 75.00,
+      min_practical_pct: 80.00,
+      min_clinical_pct: 80.00,
+      min_aggregate_pct: 75.00,
+      eval_mode: 'SEPARATE',
+      condonation_floor_pct: 65.00,
+      condonation_max_pct: 75.00,
+      excuse_leaves_mode: 'EXCLUDE_DENOMINATOR',
+      is_active: true,
+    };
+  }
+
+  async upsertAttendancePolicy(dto: any, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const academicSystem = dto.academicSystem || 'semester';
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO attendance_policies 
+         (course_cd, academic_system, regulator, min_theory_pct, min_practical_pct, min_clinical_pct, min_aggregate_pct, eval_mode, condonation_floor_pct, condonation_max_pct, excuse_leaves_mode, is_active)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, true)
+       ON CONFLICT (course_cd, academic_system) DO UPDATE
+       SET regulator = EXCLUDED.regulator,
+           min_theory_pct = EXCLUDED.min_theory_pct,
+           min_practical_pct = EXCLUDED.min_practical_pct,
+           min_clinical_pct = EXCLUDED.min_clinical_pct,
+           min_aggregate_pct = EXCLUDED.min_aggregate_pct,
+           eval_mode = EXCLUDED.eval_mode,
+           condonation_floor_pct = EXCLUDED.condonation_floor_pct,
+           condonation_max_pct = EXCLUDED.condonation_max_pct,
+           excuse_leaves_mode = EXCLUDED.excuse_leaves_mode,
+           updated_at = NOW()
+       RETURNING *`,
+      [
+        dto.courseCd,
+        academicSystem,
+        dto.regulator || 'AICTE',
+        dto.minTheoryPct || 75.00,
+        dto.minPracticalPct || 80.00,
+        dto.minClinicalPct || 80.00,
+        dto.minAggregatePct || 75.00,
+        dto.evalMode || 'SEPARATE',
+        dto.condonationFloorPct || 65.00,
+        dto.condonationMaxPct || 75.00,
+        dto.excuseLeavesMode || 'EXCLUDE_DENOMINATOR',
+      ],
+    );
+    return rows[0];
+  }
+
+  // ─── SUBJECT MERGE MAPPINGS (MBBS & INTERDISCIPLINARY) ─────────────────────
+  async listSubjectMergeMappings(filter?: any, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    let phaseId: string | undefined;
+    let colgCd: string | undefined;
+    let courseCd: string | undefined;
+    let branchCd: string | undefined;
+    let batchCd: string | undefined;
+    let semesterCd: string | undefined;
+    let phaseCd: string | undefined;
+
+    if (typeof filter === 'string') {
+      phaseId = filter;
+    } else if (filter && typeof filter === 'object') {
+      phaseId = filter.phaseId;
+      colgCd = filter.colgCd;
+      courseCd = filter.courseCd;
+      branchCd = filter.branchCd;
+      batchCd = filter.batchCd;
+      semesterCd = filter.semesterCd;
+      phaseCd = filter.phaseCd;
+    }
+
+    let sql = `
+      SELECT sm.*,
+             COALESCE(p.name, sm.phase_cd) AS phase_name, p.phase_order,
+             COALESCE(m.code, sm.major_subject_id) AS major_subject_code,
+             COALESCE(m.name, sm.major_subject_id) AS major_subject_name,
+             COALESCE(c.code, sm.child_subject_id) AS child_subject_code,
+             COALESCE(c.name, sm.child_subject_id) AS child_subject_name
+      FROM subject_merge_mappings sm
+      LEFT JOIN professional_phases p ON p.id::text = sm.phase_id OR p.name = sm.phase_cd
+      LEFT JOIN subjects m ON m.id::text = sm.major_subject_id OR m.code = sm.major_subject_id
+      LEFT JOIN subjects c ON c.id::text = sm.child_subject_id OR c.code = sm.child_subject_id
+      WHERE sm.is_active = true
+    `;
+    const params: any[] = [];
+    if (phaseId) {
+      params.push(String(phaseId));
+      sql += ` AND (sm.phase_id::text = $${params.length} OR sm.phase_cd = $${params.length})`;
+    }
+    if (colgCd) {
+      params.push(String(colgCd));
+      sql += ` AND sm.colg_cd = $${params.length}`;
+    }
+    if (courseCd) {
+      params.push(String(courseCd));
+      sql += ` AND sm.course_cd = $${params.length}`;
+    }
+    if (branchCd) {
+      params.push(String(branchCd));
+      sql += ` AND sm.branch_cd = $${params.length}`;
+    }
+    if (batchCd) {
+      params.push(String(batchCd));
+      sql += ` AND sm.batch_cd = $${params.length}`;
+    }
+    if (semesterCd) {
+      params.push(String(semesterCd));
+      sql += ` AND sm.semester_cd = $${params.length}`;
+    }
+    if (phaseCd) {
+      params.push(String(phaseCd));
+      sql += ` AND sm.phase_cd = $${params.length}`;
+    }
+    sql += ` ORDER BY p.phase_order ASC NULLS LAST, sm.semester_cd ASC NULLS LAST, m.name ASC, c.name ASC`;
+    return await this.tenantSchemaService.queryInTenant(slug, sql, params);
+  }
+
+  async createSubjectMergeMapping(dto: any, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `INSERT INTO subject_merge_mappings (
+        phase_id, major_subject_id, child_subject_id, merge_mode,
+        colg_cd, course_cd, branch_cd, batch_cd, semester_cd, phase_cd, is_active,
+        sec_cd, child_batch_cd, child_semester_cd, child_sec_cd
+      )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, COALESCE($11, true), $12, $13, $14, $15)
+       RETURNING *`,
+      [
+        dto.phaseId || null,
+        dto.majorSubjectId,
+        dto.childSubjectId,
+        dto.mergeMode || 'COMBINE',
+        dto.colg_cd || null,
+        dto.course_cd || null,
+        dto.branch_cd || null,
+        dto.batch_cd || null,
+        dto.semester_cd || null,
+        dto.phase_cd || null,
+        dto.isActive !== undefined ? dto.isActive : true,
+        dto.sec_cd || null,
+        dto.child_batch_cd || null,
+        dto.child_semester_cd || null,
+        dto.child_sec_cd || null,
+      ],
+    );
+    return rows[0];
+  }
+
+  async updateSubjectMergeMapping(id: string, dto: any, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    const rows = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `UPDATE subject_merge_mappings
+       SET major_subject_id = COALESCE($1, major_subject_id),
+           child_subject_id = COALESCE($2, child_subject_id),
+           merge_mode = COALESCE($3, merge_mode),
+           is_active = COALESCE($4, is_active),
+           colg_cd = COALESCE($5, colg_cd),
+           course_cd = COALESCE($6, course_cd),
+           branch_cd = COALESCE($7, branch_cd),
+           batch_cd = COALESCE($8, batch_cd),
+           semester_cd = COALESCE($9, semester_cd),
+           sec_cd = COALESCE($10, sec_cd),
+           child_batch_cd = COALESCE($11, child_batch_cd),
+           child_semester_cd = COALESCE($12, child_semester_cd),
+           child_sec_cd = COALESCE($13, child_sec_cd),
+           updated_at = NOW()
+       WHERE id = $14
+       RETURNING *`,
+      [
+        dto.majorSubjectId,
+        dto.childSubjectId,
+        dto.mergeMode,
+        dto.isActive,
+        dto.colg_cd,
+        dto.course_cd,
+        dto.branch_cd,
+        dto.batch_cd,
+        dto.semester_cd,
+        dto.sec_cd,
+        dto.child_batch_cd,
+        dto.child_semester_cd,
+        dto.child_sec_cd,
+        id,
+      ],
+    );
+    if (rows.length === 0) throw new NotFoundException('Merge mapping not found');
+    return rows[0];
+  }
+
+  async deleteSubjectMergeMapping(id: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+    await this.tenantSchemaService.queryInTenant(
+      slug,
+      `DELETE FROM subject_merge_mappings WHERE id = $1`,
+      [id],
+    );
+    return { success: true, message: 'Subject merge mapping removed successfully' };
+  }
+
+  // ─── MERGE PROMPT CHECK (Audit Unmapped Subjects in Phase) ─────────────────
+  async checkUnresolvedPhaseSubjects(phaseId: string, tenantSlug?: string) {
+    const slug = await this.resolveTenantSlug(tenantSlug);
+
+    // Find all subjects that have recorded attendance sessions in this phase
+    // but are NOT a major subject in mappings, NOT a child in mappings, and NOT marked 'SEPARATE'
+    const unresolved = await this.tenantSchemaService.queryInTenant(
+      slug,
+      `SELECT DISTINCT sub.id AS subject_id, sub.code AS subject_code, sub.name AS subject_name,
+              COUNT(DISTINCT s.id) AS session_count
+       FROM attendance_sessions s
+       JOIN subjects sub ON sub.id = s.subject_id
+       WHERE s.phase_id = $1
+         AND sub.attendance_status != 'SEPARATE'
+         AND sub.id NOT IN (
+           SELECT major_subject_id FROM subject_merge_mappings WHERE phase_id = $1 AND is_active = true
+           UNION
+           SELECT child_subject_id FROM subject_merge_mappings WHERE phase_id = $1 AND is_active = true
+         )
+       GROUP BY sub.id, sub.code, sub.name`,
+      [phaseId],
+    ).catch(() => []);
+
+    return {
+      phaseId,
+      hasUnresolved: unresolved.length > 0,
+      unresolvedCount: unresolved.length,
+      unresolvedSubjects: unresolved,
+      message: unresolved.length > 0 
+        ? `There are ${unresolved.length} unmapped subjects with attendance sessions in this phase. Admin must configure them as Combined or Separate before final eligibility can be calculated.`
+        : 'All phase subjects are properly mapped.',
     };
   }
 }
