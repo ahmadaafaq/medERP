@@ -28,11 +28,17 @@ if (backendBase.includes('localhost:8081')) {
 }
 
 const isStandalone = process.env.NODE_ENV === 'production' && (process.env.NEXT_OUTPUT_STANDALONE === 'true' || process.env.STANDALONE === 'true');
+const isDockerBuild = process.env.DOCKER_BUILD === 'true' || process.env.NEXT_OUTPUT_STANDALONE === 'true';
 
 const nextConfig = {
   ...(isStandalone ? { output: 'standalone' } : {}),
   reactStrictMode: true,
   swcMinify: true,
+  productionBrowserSourceMaps: false,
+  experimental: {
+    webpackBuildWorker: true,
+    ...(isDockerBuild ? { workerThreads: false, cpus: 1 } : {}),
+  },
   webpack: (config) => {
     const fs = require('fs');
     const localShared = path.resolve(__dirname, 'shared/index.ts');
@@ -44,6 +50,9 @@ const nextConfig = {
       '@mederp/shared$': resolvedShared,
       '@mederp/shared': fs.existsSync(localShared) ? path.resolve(__dirname, 'shared') : path.resolve(__dirname, '../shared/dist'),
     };
+    if (isDockerBuild) {
+      config.cache = false;
+    }
     return config;
   },
   async rewrites() {
