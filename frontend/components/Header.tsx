@@ -380,6 +380,7 @@ export default function Header({ title = 'MedERP Portal' }: HeaderProps = {}) {
         localStorage.getItem('college_logo') ||
         localStorage.getItem('tenant_logo') ||
         localStorage.getItem('logo_url') ||
+        (currentSlug === 'mdis' ? '/images/mdis-logo.png' : '') ||
         (currentSlug === 'team-university' ? '/images/team-university-logo.png' : '');
 
       // Remove sensitive authentication credentials only

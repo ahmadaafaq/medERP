@@ -2403,16 +2403,38 @@ export default function TimetableDesignView({
           })
           .sort((a, b) => Number(a.code) - Number(b.code));
 
-        setSectionsList(mapped);
-        return mapped;
+        const finalSections: DropdownItem[] = mapped.length > 0 ? mapped : [
+          {
+            id: '1',
+            code: '1',
+            rawCode: '1',
+            name: 'Section 1',
+            semester: sem,
+            course_cd: crs,
+          },
+          {
+            id: '2',
+            code: '2',
+            rawCode: '2',
+            name: 'Section 2',
+            semester: sem,
+            course_cd: crs,
+          },
+        ];
+        setSectionsList(finalSections);
+        return finalSections;
       }
     } catch (err) {
       console.warn('Failed to fetch linked sections from Section Master:', err);
     } finally {
       setLoadingLinkedSections(false);
     }
-    setSectionsList([]);
-    return [];
+    const fallbackSections: DropdownItem[] = [
+      { id: '1', code: '1', rawCode: '1', name: 'Section 1', semester: sem, course_cd: crs },
+      { id: '2', code: '2', rawCode: '2', name: 'Section 2', semester: sem, course_cd: crs },
+    ];
+    setSectionsList(fallbackSections);
+    return fallbackSections;
   };
 
   const fetchGroupsForSection = async (
@@ -3266,7 +3288,10 @@ export default function TimetableDesignView({
       return;
     }
 
-    await fetchSectionsForCourse(selectedCollege, selectedCourse, selectedBranch, selectedBatch, semCd);
+    const loadedSecs = await fetchSectionsForCourse(selectedCollege, selectedCourse, selectedBranch, selectedBatch, semCd);
+    if (loadedSecs && loadedSecs.length > 0) {
+      handleFilterSectionChange(loadedSecs[0].code);
+    }
   };
 
   const handleFilterSectionChange = (secCd: string) => {

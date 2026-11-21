@@ -102,17 +102,24 @@ export default function HodScopeManager({
   const [searchHod, setSearchHod] = useState('');
   const [tableSearch, setTableSearch] = useState('');
 
-  // Resolve active tenant
+  // Resolve active tenant — NEVER fall back to 'srms-cet-bareilly' for non-SRMS tenants
   const activeTenant = useMemo(() => {
-    if (typeof window === 'undefined') return 'srms-cet-bareilly';
+    if (typeof window === 'undefined') return ''; // SSR: return empty; actual value resolved client-side
     const userStr = localStorage.getItem('user');
     if (userStr) {
       try {
         const u = JSON.parse(userStr);
         if (u.tenantSlug) return u.tenantSlug;
+        if (u.tenantId) return u.tenantId;
       } catch {}
     }
-    return localStorage.getItem('tenant') || 'srms-cet-bareilly';
+    return (
+      localStorage.getItem('tenantSlug') ||
+      localStorage.getItem('selectedTenant') ||
+      localStorage.getItem('institutionSlug') ||
+      localStorage.getItem('tenant') ||
+      '' // empty string — guard in fetchData prevents cross-tenant leakage
+    );
   }, []);
 
   // Fetch HOD Scope data
@@ -121,6 +128,12 @@ export default function HodScopeManager({
     setError(null);
     try {
       const effectiveSlug = targetCollegeSlug || activeTenant;
+      // Guard: never fetch without a valid tenant — prevents cross-tenant data leakage
+      if (!effectiveSlug) {
+        setError('Session expired or tenant not identified. Please log in again.');
+        setLoading(false);
+        return;
+      }
       const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
       const queryParams = new URLSearchParams({
         tenant: effectiveSlug,
@@ -221,25 +234,30 @@ export default function HodScopeManager({
 
   // Helper to filter HODs by selected college
   const filterHodsByCollege = (hodList: HodUser[], col?: HodCollege | null): HodUser[] => {
-    if (!col) return hodList;
-    const colCode = String(col.code || col.colg_cd || '').trim();
+    if (!col || colleges.length <= 1) return hodList;
+    const colCode = String(col.code || col.colg_cd || '').trim().toLowerCase();
     const colSlug = (col.slug || '').toLowerCase().trim();
+    const colId = String(col.id || '').trim();
 
     return hodList.filter((h) => {
-      // If HOD has explicit college code
-      const hColCode = String(h.colg_cd || h.college_code || '').trim();
-      if (hColCode && colCode && hColCode === colCode) return true;
+      // If HOD has explicit college code or college ID
+      const hColCode = String(h.colg_cd || h.college_code || '').trim().toLowerCase();
+      const hColId = String(h.college_id || '').trim();
+
+      if (hColCode && colCode && (hColCode === colCode || hColCode === colSlug)) return true;
+      if (hColId && colId && hColId === colId) return true;
 
       // If HOD has linked departments that belong to this college
       if (h.linkedDepartments && h.linkedDepartments.length > 0) {
         const matchesLinked = h.linkedDepartments.some(
-          (ld) => !ld.colg_cd || String(ld.colg_cd) === colCode
+          (ld) => !ld.colg_cd || String(ld.colg_cd).toLowerCase() === colCode || String(ld.colg_cd).toLowerCase() === colSlug
         );
         if (matchesLinked) return true;
       }
 
-      // If no explicit college tag, allow in college if there are no other colleges or single tenant
-      if (!hColCode && (!colCode || colCode === '1')) return true;
+      // If no explicit college tag on the user, they are an institutional-level faculty/staff,
+      // so allow them to be visible and linked in the active college
+      if (!hColCode && !hColId) return true;
 
       return false;
     });

@@ -90,7 +90,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
         }
       } catch {}
       const rawSlug = (localStorage.getItem('tenantSlug') || '').toLowerCase();
-      if (rawSlug.includes('mdis')) return '/icon.png';
+      if (rawSlug.includes('mdis')) return '/images/mdis-logo.png';
       if (rawSlug.includes('srms')) return '/srms-logo.png';
     }
     return null;
@@ -298,7 +298,7 @@ export default function Sidebar({ role: propRole }: SidebarProps) {
 
     // Default MDIS institutional logo
     if (!logoUrl && (slug.startsWith('mdis') || slug.includes('mdis'))) {
-      logoUrl = '/icon.png';
+      logoUrl = '/images/mdis-logo.png';
     }
 
     // Default SRMS institutional logo ONLY for actual SRMS institutions

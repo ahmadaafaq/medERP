@@ -3921,6 +3921,8 @@ export class CollegeMasterService implements OnApplicationBootstrap {
          )`
       : `WHERE u.role ILIKE '%hod%'
          OR u.assigned_roles ILIKE '%hod%'
+         OR f.designation ILIKE '%hod%'
+         OR f.designation ILIKE '%head of department%'
          OR u.id::text IN (
            SELECT DISTINCT hod_user_id::text 
            FROM "${schema}".departments 
@@ -3930,19 +3932,19 @@ export class CollegeMasterService implements OnApplicationBootstrap {
     const hodQuery = `
       SELECT DISTINCT ON (u.id)
         u.id,
-        u.name,
+        COALESCE(NULLIF(f.name, ''), NULLIF(u.name, ''), 'Staff Member') AS name,
         u.email,
         u.role,
         u.assigned_roles,
         f.emp_id,
         f.designation,
-        f.colg_cd,
+        COALESCE(f.colg_cd, f.college_code) AS colg_cd,
         f.college_id,
-        f.college_code
+        COALESCE(f.college_code, f.colg_cd) AS college_code
       FROM "${schema}".users u
-      LEFT JOIN "${schema}".faculty f ON f.email = u.email OR f.id::text = u.id::text
+      LEFT JOIN "${schema}".faculty f ON f.user_id::text = u.id::text OR LOWER(f.email) = LOWER(u.email) OR f.id::text = u.id::text
       ${roleFilter}
-      ORDER BY u.id, u.name ASC
+      ORDER BY u.id, name ASC
     `;
     const hodRows = await this.ds.query(hodQuery).catch(() => []);
 
@@ -4249,7 +4251,44 @@ export class CollegeMasterService implements OnApplicationBootstrap {
       ).catch(() => []);
     });
 
-    return rows.map((r: any) => ({
+    let finalRows = rows;
+    // Fallback: If no sections matched with strict filters, check for batch-level sections
+    if (finalRows.length === 0 && resolvedBatchId) {
+      const batchRows = await this.tenantSchemaService.queryInTenant(
+        slug,
+        `SELECT s.*, b.code AS batch_code, b.year AS batch_year,
+                c.code AS course_code, c.name AS course_name, c.course_cd AS course_cd,
+                d.name AS department_name, d.code AS department_code
+         FROM sections s
+         LEFT JOIN batches b ON b.id = s.batch_id
+         LEFT JOIN courses c ON (c.id = s.course_id OR (s.course_id IS NULL AND (c.course_cd = b.course_cd OR c.code = b.course_cd)))
+         LEFT JOIN departments d ON d.id = s.department_id
+         WHERE s.is_active = true AND s.batch_id = $1
+         ORDER BY (CASE WHEN s.code ~ '^[0-9]+$' THEN s.code::int ELSE 999 END) ASC, s.code ASC, s.name ASC`,
+        [resolvedBatchId],
+      ).catch(() => []);
+
+      if (batchRows.length > 0) {
+        finalRows = batchRows;
+      } else {
+        // Auto-provision standard Section 1 for this batch/course/department/semester so timetable design is never blocked
+        const crsId = resolvedCourse?.id || null;
+        const deptId = resolvedDept?.id || null;
+        const semVal = semester ? String(semester).trim() : '1';
+        const newSec = await this.tenantSchemaService.queryInTenant(
+          slug,
+          `INSERT INTO sections (id, code, name, college_id, course_id, department_id, batch_id, semester, capacity, is_default, is_active)
+           VALUES (gen_random_uuid(), '1', 'Section 1', $1, $2, $3, $4, $5, 60, true, true)
+           RETURNING *`,
+          [collegeId, crsId, deptId, resolvedBatchId, semVal],
+        ).catch(() => []);
+        if (newSec.length > 0) {
+          finalRows = newSec;
+        }
+      }
+    }
+
+    return finalRows.map((r: any) => ({
       ...r,
       college_id: r.college_id || collegeId,
       college_name: collegeName || '',

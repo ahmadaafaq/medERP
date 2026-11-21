@@ -238,9 +238,9 @@ const DEFAULT_COLLEGES: College[] = [
     domain: 'mdis.mederp.app',
     plan: 'enterprise',
     primary_color: '#5B4BFF',
-    logo_url: '/icon.png',
+    logo_url: '/images/mdis-logo.png',
     theme_config: {
-      logo_url: '/icon.png',
+      logo_url: '/images/mdis-logo.png',
       primary_color: '#5B4BFF',
       secondary_color: '#7867FF',
       accent_color: '#F36C21',
@@ -287,18 +287,21 @@ export default function LoginPage() {
 
   const getCollegeLogoUrl = (colg?: College | null): string | null => {
     if (!colg) return null;
+    // 1. Direct known mappings take absolute priority — prevents stale localStorage from overriding
+    if (colg.slug === 'mdis') return '/images/mdis-logo.png';
+    if (colg.slug === 'team-university') return '/images/team-university-logo.png';
+    if (colg.slug && colg.slug.startsWith('srms')) return '/srms-logo.png';
+    // 2. Data-driven logo_url from college object
     if (colg.logo_url) return colg.logo_url;
     if (colg.theme_config?.logo_url) return colg.theme_config.logo_url;
+    // 3. localStorage fallback only for unknown tenants where colg.logo_url is missing
     if (typeof window !== 'undefined') {
       const savedSlug = localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant');
       if (savedSlug && colg.slug && savedSlug.toLowerCase() === colg.slug.toLowerCase()) {
         const stored = localStorage.getItem('college_logo') || localStorage.getItem('tenant_logo') || localStorage.getItem('logo_url');
-        if (stored) return stored;
+        if (stored && !stored.includes('icon.png') && !stored.includes('favicon')) return stored;
       }
     }
-    if (colg.slug === 'mdis') return '/icon.png';
-    if (colg.slug === 'team-university') return '/images/team-university-logo.png';
-    if (colg.slug && colg.slug.startsWith('srms')) return '/srms-logo.png';
     return null;
   };
 
@@ -656,6 +659,10 @@ export default function LoginPage() {
       localStorage.setItem('tenant', slug);
       localStorage.setItem('collegeName', college.name);
       localStorage.setItem('colg_name', college.name);
+      // Always clear stale logo cache before writing new one to prevent old `/icon.png` persisting
+      localStorage.removeItem('college_logo');
+      localStorage.removeItem('tenant_logo');
+      localStorage.removeItem('logo_url');
       const logo = getCollegeLogoUrl(college);
       if (logo) {
         localStorage.setItem('college_logo', logo);
