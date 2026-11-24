@@ -3487,20 +3487,31 @@ export default function TimetableDesignView({
     }
 
     // 6. Section Match (Numeric Code / Letter / Full Name)
+    // In academic ERP, offerings without a specific section (NULL, empty, 'ALL', or '0') apply to ALL sections.
+    // If an offering specifies a section, it must match the active section.
     const secVal = String(targetSectionValue || formData.sectionValue || selectedSection || '1').trim().toUpperCase();
-    if (secVal && secVal !== '0' && secVal !== 'ALL') {
+    const soSecCd = String(so.sec_cd || '').trim().toUpperCase();
+    const soSecCode = String(so.section_code || '').trim().toUpperCase();
+    const soSection = String(so.section || so.section_name || '').trim().toUpperCase();
+    const soSecId = String(so.section_id || '').trim().toUpperCase();
+
+    const hasSpecificSection = Boolean(
+      (soSecCd && soSecCd !== 'ALL' && soSecCd !== '0') ||
+      (soSecCode && soSecCode !== 'ALL' && soSecCode !== '0') ||
+      (soSection && soSection !== 'ALL' && soSection !== '0') ||
+      (soSecId && soSecId !== 'ALL' && soSecId !== '0')
+    );
+
+    if (hasSpecificSection && secVal && secVal !== '0' && secVal !== 'ALL') {
       const numMatch = secVal.match(/\d+/)?.[0];
       const letterMatch = secVal.match(/\b([A-Z])\b/)?.[1] ||
         (secVal.includes('SECTION A') ? 'A' : secVal.includes('SECTION B') ? 'B' : secVal.includes('SECTION C') ? 'C' : null);
-
-      const soSecCd = String(so.sec_cd || '').trim().toUpperCase();
-      const soSecCode = String(so.section_code || '').trim().toUpperCase();
-      const soSection = String(so.section || '').trim().toUpperCase();
 
       const secMatch = (
         (soSecCd && (soSecCd === secVal || (numMatch && soSecCd === numMatch))) ||
         (soSecCode && (soSecCode === secVal || (letterMatch && soSecCode === letterMatch))) ||
         (soSection && (soSection === secVal || soSection.includes(secVal) || (letterMatch && soSection.includes(letterMatch)))) ||
+        (soSecId && soSecId === secVal) ||
         ((secVal === '1' || numMatch === '1') && (soSecCode === 'A' || soSection.includes('A') || soSecCd === '1')) ||
         ((secVal === 'A' || letterMatch === 'A') && (soSecCd === '1' || soSecCode === 'A' || soSection.includes('1') || soSection.includes('A'))) ||
         ((secVal === '2' || numMatch === '2') && (soSecCode === 'B' || soSection.includes('B') || soSecCd === '2')) ||
@@ -3514,6 +3525,7 @@ export default function TimetableDesignView({
     // 7. Subject Match (Code / ID / Cleaned Title)
     const subTarget = String(targetSubjectIdOrCode || formData.subjectCode || formData.subjectId || '').trim();
     if (subTarget) {
+      const bracketCode = subTarget.match(/\[(.*?)\]/)?.[1]?.trim();
       const subNum = subTarget.match(/\d+/)?.[0];
       const rawTitle = String(targetSubjectName || formData.subjectTitle || '').trim().toLowerCase().replace(/\(.*?\)/g, '');
       const soCode = String(so.subject_code || '').trim();
@@ -3523,6 +3535,7 @@ export default function TimetableDesignView({
       const codeMatch = (
         soCode === subTarget ||
         soSubId === subTarget ||
+        (bracketCode && (soCode === bracketCode || soSubId === bracketCode)) ||
         (subNum && soCode === subNum)
       );
       const nameMatch = Boolean(
@@ -3549,11 +3562,27 @@ export default function TimetableDesignView({
     const activeSub = String(subjectVal || formData.subjectId || formData.subjectCode || '').trim();
     if (!activeSub) return [];
 
-    const matchedOfferings = subjectOfferingsList.filter(so =>
+    let matchedOfferings = subjectOfferingsList.filter(so =>
       isOfferingLinkedUnderHierarchy(so, activeSub, subjectTitle || formData.subjectTitle, sectionVal || formData.sectionValue)
     );
 
-    if (matchedOfferings.length === 0) return [];
+    // Fallback 1: If specific section didn't match, check without section constraint ('ALL')
+    if (matchedOfferings.length === 0) {
+      matchedOfferings = subjectOfferingsList.filter(so =>
+        isOfferingLinkedUnderHierarchy(so, activeSub, subjectTitle || formData.subjectTitle, 'ALL')
+      );
+    }
+
+    // Fallback 2: Direct match by subject ID / code within the offerings list
+    if (matchedOfferings.length === 0) {
+      const cleanSub = activeSub.match(/\[(.*?)\]/)?.[1] || activeSub;
+      matchedOfferings = subjectOfferingsList.filter(so => {
+        if (!so || so.is_active === false) return false;
+        const soCode = String(so.subject_code || '').trim();
+        const soSubId = String(so.subject_id || '').trim();
+        return soCode === cleanSub || soSubId === cleanSub || soCode === activeSub || soSubId === activeSub;
+      });
+    }
 
     const activeDeliveryList = deliveryTypesList.filter((dt) => dt && dt.is_active !== false);
     const result: { value: string; label: string; groupTypeKey: string }[] = [];
@@ -3578,6 +3607,21 @@ export default function TimetableDesignView({
           label: `[${optVal}] ${displayName}`,
           groupTypeKey: normalizeGroupPurposeKey(optVal),
         });
+      }
+    }
+
+    // Fallback 3: If offerings list is empty or offline, populate from active delivery types so clerk is never blocked
+    if (result.length === 0 && (subjectOfferingsList.length === 0 || loadingSubjectOfferings) && activeDeliveryList.length > 0) {
+      for (const dt of activeDeliveryList) {
+        const normCode = String(dt.code || 'TH').trim().toUpperCase();
+        if (!seenCodes.has(normCode)) {
+          seenCodes.add(normCode);
+          result.push({
+            value: normCode,
+            label: `[${normCode}] ${dt.name || normCode}`,
+            groupTypeKey: normalizeGroupPurposeKey(normCode),
+          });
+        }
       }
     }
 
@@ -3728,13 +3772,18 @@ export default function TimetableDesignView({
     }
 
     if (!formData.slotType) {
-      const slotTypeErr = 'Please select a valid Group Purpose / Type for this subject.';
-      setModalError(slotTypeErr);
-      showAlert('error', slotTypeErr);
-      if (modalScrollRef.current) {
-        modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+      if (linkedOfferingTypes.length > 0) {
+        const thChoice = linkedOfferingTypes.find(t => t.value === 'TH' || t.groupTypeKey === 'theory');
+        formData.slotType = thChoice ? thChoice.value : linkedOfferingTypes[0].value;
+      } else {
+        const slotTypeErr = 'Please select a valid Group Purpose / Type for this subject.';
+        setModalError(slotTypeErr);
+        showAlert('error', slotTypeErr);
+        if (modalScrollRef.current) {
+          modalScrollRef.current.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+        return;
       }
-      return;
     }
 
     // Validate that a Group (txtG) is selected (value '0' is rejected when groups are available)
