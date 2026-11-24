@@ -18,6 +18,7 @@ import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperH
 import StudentAssessmentMarksCard from '../../../components/dashboard/StudentAssessmentMarksCard';
 import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTimetableCard';
 import AdminApprovedQPCard from '../../../components/dashboard/AdminApprovedQPCard';
+import AcademicComplianceWidget from '../../../components/compliance/AcademicComplianceWidget';
 
 interface CollegeKPIs {
   totalStudents: number;
@@ -771,6 +772,9 @@ export default function AdminDashboard() {
                   <span>{punchMessage}</span>
                 </div>
               )}
+
+              {/* Graphical Academic & Operational Compliance Monitoring Widget */}
+              <AcademicComplianceWidget role="admin" />
 
               {/* 1. Core Academic KPI Cards Grid: Student Enrollments, Faculty, Punches & Exam Papers */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">

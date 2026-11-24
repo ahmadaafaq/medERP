@@ -12,6 +12,7 @@ import FacultyBatchAttendanceAnalytics from '../../../components/faculty/Faculty
 import FacultyTopperHustleBoard from '../../../components/faculty/FacultyTopperHustleBoard';
 import StudentAssessmentMarksCard from '../../../components/dashboard/StudentAssessmentMarksCard';
 import DepartmentTimetableCard from '../../../components/dashboard/DepartmentTimetableCard';
+import AcademicComplianceWidget from '../../../components/compliance/AcademicComplianceWidget';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1';
 
@@ -688,6 +689,7 @@ export default function HODDashboard() {
   }, []);
 
   const quickActions = [
+    { href: '/dashboard/hod/compliance-report', icon: '📊', label: 'Compliance Report', desc: 'Department audits', color: 'indigo' },
     { href: '/dashboard/hod/qp-approvals', icon: '📋', label: 'QP Approvals', desc: 'Review question papers', color: 'orange' },
     { href: '/dashboard/hod/timetable-approvals', icon: '📅', label: 'Timetable Review', desc: 'Approve schedules', color: 'violet' },
     { href: '/dashboard/hod/question-bank', icon: '🗂️', label: 'Question Bank', desc: 'Department questions', color: 'indigo' },
@@ -736,6 +738,9 @@ export default function HODDashboard() {
               </a>
             ))}
           </div>
+
+          {/* Academic & Operational Compliance Monitoring Widget */}
+          <AcademicComplianceWidget role="hod" />
 
           {/* HOD Approval Panels */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

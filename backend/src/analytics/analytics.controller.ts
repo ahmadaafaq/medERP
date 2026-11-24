@@ -18,6 +18,23 @@ export class AnalyticsController {
   }
 
   @Public()
+  @Get('compliance-report')
+  async getComplianceReport(
+    @Tenant() tenantSlug?: string,
+    @Query('tenant') queryTenant?: string,
+    @Query('departmentId') departmentId?: string,
+    @Query('courseCd') courseCd?: string,
+    @Query('hodUserId') hodUserId?: string,
+  ) {
+    const slug = tenantSlug || queryTenant || '';
+    return this.analyticsService.getAcademicComplianceReport(slug, {
+      departmentId,
+      courseCd,
+      hodUserId,
+    });
+  }
+
+  @Public()
   @Post('punch')
   async recordPunch(
     @Body() body: { punchType: 'IN' | 'OUT'; facultyId?: string; time?: string },
