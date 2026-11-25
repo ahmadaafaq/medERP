@@ -262,6 +262,9 @@ export class AnalyticsService {
     filter?: {
       departmentId?: string;
       courseCd?: string;
+      batchId?: string;
+      semester?: string;
+      section?: string;
       hodUserId?: string;
     },
   ) {
@@ -382,35 +385,41 @@ export class AnalyticsService {
 
     // 3. Pre-fetch dataset aggregates for fast computation
     const [
-      allSubjects,
-      allMatrices,
-      allSlots,
-      allDrafts,
-      allQuestions,
-      allPapers,
-      allLessons,
+      rawSubjects,
+      rawMatrices,
+      rawSlots,
+      rawDrafts,
+      rawQuestions,
+      rawPapers,
+      rawLessons,
       chatGroupsCount,
       chatMessagesCount,
       seminarsCount,
       tutorialsCount,
       miniProjectsCount,
-      attendanceSessionsRaw,
+      rawAttendanceSessions,
       attendanceRecordsRaw,
     ] = await Promise.all([
       // Subjects
-      this.ds.query(`SELECT id, code, name, course_cd, branch_cd, department_id FROM "${schema}".subjects WHERE is_active = true`).catch(() => []),
+      this.ds.query(`SELECT id, code, name, course_cd, branch_cd, department_id, semester FROM "${schema}".subjects WHERE is_active = true`).catch(() =>
+        this.ds.query(`SELECT id, code, name, course_cd, branch_cd, department_id FROM "${schema}".subjects WHERE is_active = true`).catch(() => [])
+      ),
       // CO-PO Matrices
-      this.ds.query(`SELECT id, subject_id, subject_code, course_cd, branch_cd, matrix_data FROM "${schema}".co_po_matrices`).catch(() => []),
+      this.ds.query(`SELECT id, subject_id, subject_code, course_cd, branch_cd, sem_cd, section, matrix_data FROM "${schema}".co_po_matrices`).catch(() => []),
       // Timetable Slots
-      this.ds.query(`SELECT id, course_id, department_id, branch_id, semester, section FROM "${schema}".timetable_slots WHERE is_active = true`).catch(() => []),
+      this.ds.query(`SELECT id, course_id, department_id, branch_id, batch_id, semester, section FROM "${schema}".timetable_slots WHERE is_active = true`).catch(() =>
+        this.ds.query(`SELECT id, course_id, department_id, branch_id, semester, section FROM "${schema}".timetable_slots WHERE is_active = true`).catch(() => [])
+      ),
       // Timetable Drafts
-      this.ds.query(`SELECT id, course_cd, branch_cd, department_id, semester, section, status FROM "${schema}".timetable_drafts`).catch(() => []),
+      this.ds.query(`SELECT id, course_cd, branch_cd, department_id, batch_cd, semester, section, status FROM "${schema}".timetable_drafts`).catch(() => []),
       // Question Bank
-      this.ds.query(`SELECT id, course_cd, branch_cd, blooms_level FROM "${schema}".question_bank WHERE is_active = true`).catch(() => []),
+      this.ds.query(`SELECT id, course_cd, branch_cd, batch_cd, semester, section, blooms_level FROM "${schema}".question_bank WHERE is_active = true`).catch(() =>
+        this.ds.query(`SELECT id, course_cd, branch_cd, blooms_level FROM "${schema}".question_bank WHERE is_active = true`).catch(() => [])
+      ),
       // Examination Papers
       this.ds.query(`SELECT id, course_cd, branch_cd, course_id, department_id, status FROM "${schema}".examination_papers`).catch(() => []),
       // Lessons
-      this.ds.query(`SELECT id, course_cd, branch_cd, subject_id FROM "${schema}".lessons WHERE is_active = true`).catch(() => []),
+      this.ds.query(`SELECT id, course_cd, branch_cd, batch_cd, sem_cd, section, subject_id FROM "${schema}".lessons WHERE is_active = true`).catch(() => []),
       // Chat Groups
       this.ds.query(`SELECT count(*) as count FROM "${schema}".chat_groups WHERE is_active = true`).catch(() => [{ count: 0 }]),
       // Chat Messages
@@ -426,6 +435,23 @@ export class AnalyticsService {
       // Attendance Records
       this.ds.query(`SELECT id, session_id, status FROM "${schema}".attendance_records`).catch(() => []),
     ]);
+
+    const semFilter = filter?.semester ? String(filter.semester).replace(/\D/g, '') : '';
+    const batchFilter = filter?.batchId ? String(filter.batchId).trim().toLowerCase() : '';
+    const secFilter = filter?.section ? String(filter.section).trim().toLowerCase() : '';
+
+    const matchSem = (val: any) => !semFilter || !val || String(val).replace(/\D/g, '') === semFilter;
+    const matchBatch = (val: any) => !batchFilter || !val || String(val).trim().toLowerCase() === batchFilter;
+    const matchSec = (val: any) => !secFilter || !val || String(val).trim().toLowerCase() === secFilter;
+
+    const allSubjects = rawSubjects.filter((s: any) => matchSem(s.semester));
+    const allMatrices = rawMatrices.filter((m: any) => matchSem(m.sem_cd) && matchSec(m.section));
+    const allSlots = rawSlots.filter((s: any) => matchSem(s.semester) && matchBatch(s.batch_id) && matchSec(s.section));
+    const allDrafts = rawDrafts.filter((d: any) => matchSem(d.semester) && matchBatch(d.batch_cd) && matchSec(d.section));
+    const allQuestions = rawQuestions.filter((q: any) => matchSem(q.semester) && matchBatch(q.batch_cd) && matchSec(q.section));
+    const allPapers = rawPapers;
+    const allLessons = rawLessons.filter((l: any) => matchSem(l.sem_cd) && matchBatch(l.batch_cd) && matchSec(l.section));
+    const attendanceSessionsRaw = rawAttendanceSessions.filter((a: any) => matchBatch(a.batch_id));
 
     const totalChatGroups = parseInt(chatGroupsCount[0]?.count || 0, 10);
     const totalChatMessages = parseInt(chatMessagesCount[0]?.count || 0, 10);

@@ -24,12 +24,19 @@ export class AnalyticsController {
     @Query('tenant') queryTenant?: string,
     @Query('departmentId') departmentId?: string,
     @Query('courseCd') courseCd?: string,
+    @Query('branchCd') branchCd?: string,
+    @Query('batchId') batchId?: string,
+    @Query('semester') semester?: string,
+    @Query('section') section?: string,
     @Query('hodUserId') hodUserId?: string,
   ) {
     const slug = tenantSlug || queryTenant || '';
     return this.analyticsService.getAcademicComplianceReport(slug, {
-      departmentId,
+      departmentId: departmentId || branchCd,
       courseCd,
+      batchId,
+      semester,
+      section,
       hodUserId,
     });
   }

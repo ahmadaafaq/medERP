@@ -1,46 +1,266 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Sidebar from '../Sidebar';
 import Header from '../Header';
-import { ComplianceReportData } from './AcademicComplianceWidget';
+import { ComplianceReportData, DepartmentCompliance } from './AcademicComplianceWidget';
 
 interface ComplianceReportViewProps {
   role?: 'admin' | 'hod';
 }
 
+interface MasterOption {
+  id: string;
+  code: string;
+  name: string;
+  raw?: any;
+}
+
+const extractArr = (json: any): any[] => {
+  if (Array.isArray(json)) return json;
+  if (Array.isArray(json?.data)) return json.data;
+  if (Array.isArray(json?.data?.data)) return json.data.data;
+  return [];
+};
+
 export default function ComplianceReportView({ role = 'admin' }: ComplianceReportViewProps) {
   const [data, setData] = useState<ComplianceReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedCourseFilter, setSelectedCourseFilter] = useState('ALL');
-  const [selectedDeptFilter, setSelectedDeptFilter] = useState('ALL');
+
+  // Cascading Master Filter States: College -> Course -> Branch -> Batch -> Semester -> Section
+  const [collegesList, setCollegesList] = useState<MasterOption[]>([]);
+  const [coursesList, setCoursesList] = useState<MasterOption[]>([]);
+  const [branchesList, setBranchesList] = useState<MasterOption[]>([]);
+  const [batchesList, setBatchesList] = useState<MasterOption[]>([]);
+  const [semestersList, setSemestersList] = useState<MasterOption[]>([]);
+  const [sectionsList, setSectionsList] = useState<MasterOption[]>([]);
+
+  const [selectedCollege, setSelectedCollege] = useState<string>('');
+  const [selectedCourse, setSelectedCourse] = useState<string>('ALL');
+  const [selectedBranch, setSelectedBranch] = useState<string>('ALL');
+  const [selectedBatch, setSelectedBatch] = useState<string>('ALL');
+  const [selectedSemester, setSelectedSemester] = useState<string>('ALL');
+  const [selectedSection, setSelectedSection] = useState<string>('ALL');
+
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedDeptId, setExpandedDeptId] = useState<string | null>(null);
 
-  const fetchReport = async () => {
+  const getAuthContext = useCallback((overrideSlug?: string) => {
+    const defaultSlug = (
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || ''
+        : '') || 'mdis'
+    ).replace(/^tenant_/, '').replace(/^tenant-/, '');
+    const slug = (overrideSlug || selectedCollege || defaultSlug).replace(/^tenant_/, '').replace(/^tenant-/, '');
+    const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
+    const u = typeof window !== 'undefined' ? (() => { try { return JSON.parse(localStorage.getItem('user') || '{}'); } catch { return {}; } })() : {};
+    const userId = u.id || u.sub || '';
+    const headers: Record<string, string> = {
+      'x-tenant-slug': slug,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    };
+    return { slug, userId, headers };
+  }, [selectedCollege]);
+
+  // 1. Fetch Colleges & Initialize Active College
+  useEffect(() => {
+    const initColleges = async () => {
+      const { slug, headers } = getAuthContext();
+      try {
+        const res = await fetch(`/api/v1/college-master/colleges?tenant=${encodeURIComponent(slug)}`, { headers, cache: 'no-store' }).catch(() => null);
+        if (res && res.ok) {
+          const rows = extractArr(await res.json());
+          if (rows.length > 0) {
+            const mapped: MasterOption[] = rows.map((c: any) => ({
+              id: String(c.slug || c.code || c.id),
+              code: String(c.code || c.slug || c.id),
+              name: String(c.name || c.college_name || c.slug || 'College'),
+              raw: c,
+            }));
+            setCollegesList(mapped);
+            const match = mapped.find(c => c.id.toLowerCase() === slug.toLowerCase() || c.code.toLowerCase() === slug.toLowerCase()) || mapped[0];
+            setSelectedCollege(match.id);
+            return;
+          }
+        }
+      } catch {}
+      setCollegesList([{ id: slug, code: slug, name: slug.toUpperCase() }]);
+      setSelectedCollege(slug);
+    };
+    initColleges();
+  }, []);
+
+  // 2. Fetch Courses when College changes
+  useEffect(() => {
+    if (!selectedCollege) return;
+    const loadCourses = async () => {
+      const { slug, headers } = getAuthContext(selectedCollege);
+      try {
+        const res = await fetch(`/api/v1/college-master/courses?tenant=${encodeURIComponent(slug)}`, { headers, cache: 'no-store' }).catch(() => null);
+        if (res && res.ok) {
+          const rows = extractArr(await res.json());
+          setCoursesList(rows.map((c: any) => ({
+            id: String(c.course_cd || c.code || c.id),
+            code: String(c.course_cd || c.code || c.id),
+            name: String(c.name || c.course_name || c.code),
+            raw: c,
+          })));
+        }
+      } catch {
+        setCoursesList([]);
+      }
+    };
+    loadCourses();
+  }, [selectedCollege, getAuthContext]);
+
+  // 3. Fetch Branches when College or Course changes
+  useEffect(() => {
+    if (!selectedCollege) return;
+    const loadBranches = async () => {
+      const { slug, headers } = getAuthContext(selectedCollege);
+      const qp = new URLSearchParams({ tenant: slug });
+      if (selectedCourse !== 'ALL') qp.set('course_cd', selectedCourse);
+      try {
+        const res = await fetch(`/api/v1/college-master/branches?${qp.toString()}`, { headers, cache: 'no-store' }).catch(() => null);
+        if (res && res.ok) {
+          const rows = extractArr(await res.json());
+          setBranchesList(rows.map((b: any) => ({
+            id: String(b.id || b.branch_cd || b.code),
+            code: String(b.branch_cd || b.code || b.id),
+            name: String(b.name || b.department_name || b.code),
+            raw: b,
+          })));
+        }
+      } catch {
+        setBranchesList([]);
+      }
+    };
+    loadBranches();
+  }, [selectedCollege, selectedCourse, getAuthContext]);
+
+  // 4. Fetch Batches when College, Course, or Branch changes
+  useEffect(() => {
+    if (!selectedCollege) return;
+    const loadBatches = async () => {
+      const { slug, headers } = getAuthContext(selectedCollege);
+      const qp = new URLSearchParams({ tenant: slug });
+      if (selectedCourse !== 'ALL') qp.set('course_cd', selectedCourse);
+      if (selectedBranch !== 'ALL') {
+        const brObj = branchesList.find(b => b.id === selectedBranch || b.code === selectedBranch);
+        qp.set('branch_cd', brObj?.code || selectedBranch);
+      }
+      try {
+        const res = await fetch(`/api/v1/college-master/batches?${qp.toString()}`, { headers, cache: 'no-store' }).catch(() => null);
+        if (res && res.ok) {
+          const rows = extractArr(await res.json());
+          setBatchesList(rows.map((b: any) => ({
+            id: String(b.id || b.batch_cd || b.code),
+            code: String(b.batch_cd || b.year || b.code || b.id),
+            name: String(b.name || `Batch ${b.year || b.code || b.id}`),
+            raw: b,
+          })));
+        }
+      } catch {
+        setBatchesList([]);
+      }
+    };
+    loadBatches();
+  }, [selectedCollege, selectedCourse, selectedBranch, branchesList, getAuthContext]);
+
+  // 5. Fetch Semesters / Phases when College, Course, Branch, or Batch changes
+  useEffect(() => {
+    if (!selectedCollege) return;
+    const loadSemesters = async () => {
+      const { slug, headers } = getAuthContext(selectedCollege);
+      try {
+        const res = await fetch(`/api/v1/college-master/professionals?tenant=${encodeURIComponent(slug)}`, { headers, cache: 'no-store' }).catch(() => null);
+        if (res && res.ok) {
+          let rows = extractArr(await res.json());
+          if (selectedCourse !== 'ALL') {
+            const byCourse = rows.filter((p: any) => !p.course_cd || String(p.course_cd).toLowerCase() === selectedCourse.toLowerCase());
+            if (byCourse.length > 0) rows = byCourse;
+          }
+          if (rows.length > 0) {
+            const seen = new Set<string>();
+            const mapped: MasterOption[] = [];
+            for (const p of rows) {
+              const code = String(p.phase_order || p.code || p.id);
+              if (!seen.has(code)) {
+                seen.add(code);
+                mapped.push({
+                  id: code,
+                  code,
+                  name: String(p.name || `Semester ${code}`),
+                  raw: p,
+                });
+              }
+            }
+            setSemestersList(mapped);
+            return;
+          }
+        }
+      } catch {}
+      setSemestersList([1, 2, 3, 4, 5, 6, 7, 8].map(n => ({
+        id: String(n),
+        code: String(n),
+        name: `Semester ${n}`,
+      })));
+    };
+    loadSemesters();
+  }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, getAuthContext]);
+
+  // 6. Fetch Sections when College, Course, Branch, Batch, or Semester changes
+  useEffect(() => {
+    if (!selectedCollege) return;
+    const loadSections = async () => {
+      const { slug, headers } = getAuthContext(selectedCollege);
+      const qp = new URLSearchParams({ tenant: slug });
+      if (selectedCourse !== 'ALL') qp.set('courseId', selectedCourse);
+      if (selectedBranch !== 'ALL') qp.set('departmentId', selectedBranch);
+      if (selectedBatch !== 'ALL') qp.set('batchId', selectedBatch);
+      if (selectedSemester !== 'ALL') qp.set('semester', selectedSemester);
+      try {
+        const res = await fetch(`/api/v1/college-master/sections?${qp.toString()}`, { headers, cache: 'no-store' }).catch(() => null);
+        if (res && res.ok) {
+          const rows = extractArr(await res.json());
+          const seen = new Set<string>();
+          const mapped: MasterOption[] = [];
+          for (const s of rows) {
+            const code = String(s.code || s.name || s.id);
+            if (!seen.has(code)) {
+              seen.add(code);
+              mapped.push({
+                id: code,
+                code,
+                name: String(s.name || `Section ${code}`),
+                raw: s,
+              });
+            }
+          }
+          setSectionsList(mapped);
+        }
+      } catch {
+        setSectionsList([]);
+      }
+    };
+    loadSections();
+  }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, getAuthContext]);
+
+  // Fetch Compliance Report whenever cascading filters change
+  const fetchReport = useCallback(async () => {
+    if (!selectedCollege) return;
     setLoading(true);
     setError(null);
     try {
-      const slug = (
-        (typeof window !== 'undefined'
-          ? localStorage.getItem('tenantSlug') || localStorage.getItem('selectedTenant') || ''
-          : '') || 'mdis'
-      ).replace(/^tenant_/, '').replace(/^tenant-/, '');
-
-      const token = typeof window !== 'undefined' ? localStorage.getItem('token') || '' : '';
-      const u = typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('user') || '{}') : {};
-      const userId = u.id || u.sub || '';
-
+      const { slug, userId, headers } = getAuthContext(selectedCollege);
       const qp = new URLSearchParams({ tenant: slug });
-      if (role === 'hod' && userId) {
-        qp.set('hodUserId', userId);
-      }
-
-      const headers: Record<string, string> = {
-        'x-tenant-slug': slug,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      };
+      if (role === 'hod' && userId) qp.set('hodUserId', userId);
+      if (selectedCourse !== 'ALL') qp.set('courseCd', selectedCourse);
+      if (selectedBranch !== 'ALL') qp.set('departmentId', selectedBranch);
+      if (selectedBatch !== 'ALL') qp.set('batchId', selectedBatch);
+      if (selectedSemester !== 'ALL') qp.set('semester', selectedSemester);
+      if (selectedSection !== 'ALL') qp.set('section', selectedSection);
 
       let res = await fetch(`/api/v1/analytics/compliance-report?${qp.toString()}`, {
         headers,
@@ -70,58 +290,134 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedCollege, selectedCourse, selectedBranch, selectedBatch, selectedSemester, selectedSection, role, getAuthContext]);
 
   useEffect(() => {
     fetchReport();
-  }, [role]);
+  }, [fetchReport]);
 
-  // Unique Courses & Departments for dropdown filters
-  const coursesList = useMemo(() => {
+  // Filtered department rows (further filtered by instant search query)
+  const filteredDepartments: DepartmentCompliance[] = useMemo(() => {
     if (!data?.departments) return [];
-    const map = new Map<string, string>();
-    for (const d of data.departments) {
-      if (d.courseCd) map.set(d.courseCd, d.courseName);
-    }
-    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
-  }, [data]);
-
-  const deptsList = useMemo(() => {
-    if (!data?.departments) return [];
-    const map = new Map<string, string>();
-    for (const d of data.departments) {
-      if (d.departmentId) map.set(d.departmentId, d.departmentName);
-    }
-    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
-  }, [data]);
-
-  // Filtered department rows
-  const filteredDepartments = useMemo(() => {
-    if (!data?.departments) return [];
+    const q = searchQuery.trim().toLowerCase();
     return data.departments.filter(d => {
-      const matchCourse = selectedCourseFilter === 'ALL' || d.courseCd === selectedCourseFilter;
-      const matchDept = selectedDeptFilter === 'ALL' || d.departmentId === selectedDeptFilter;
-      const q = searchQuery.trim().toLowerCase();
-      const matchSearch = !q || (
+      if (!q) return true;
+      return (
         d.departmentName.toLowerCase().includes(q) ||
         d.departmentCode.toLowerCase().includes(q) ||
         d.courseName.toLowerCase().includes(q) ||
         d.hodName.toLowerCase().includes(q)
       );
-      return matchCourse && matchDept && matchSearch;
     });
-  }, [data, selectedCourseFilter, selectedDeptFilter, searchQuery]);
+  }, [data, searchQuery]);
 
-  // Department compliance counts for Pie chart
-  const compliantCount = data?.departments?.filter(d => d.overallScore >= 80).length || 0;
-  const partialCount = data?.departments?.filter(d => d.overallScore >= 60 && d.overallScore < 80).length || 0;
-  const attentionCount = data?.departments?.filter(d => d.overallScore < 60).length || 0;
-  const totalDepts = data?.departments?.length || 1;
+  // Dynamically recompute Pie Chart & Right-Side 9 Pillars from filteredDepartments!
+  const dynamicStats = useMemo(() => {
+    const active = filteredDepartments;
+    const total = active.length;
+    const compliant = active.filter(d => d.overallScore >= 80).length;
+    const partial = active.filter(d => d.overallScore >= 60 && d.overallScore < 80).length;
+    const attention = active.filter(d => d.overallScore < 60).length;
 
-  // Pie chart slice calculation
-  const p1 = (compliantCount / totalDepts) * 100;
+    if (total === 0) {
+      return {
+        totalDepts: 0,
+        compliantCount: 0,
+        partialCount: 0,
+        attentionCount: 0,
+        overallScore: 0,
+        overallStatus: 'NEEDS_ATTENTION' as const,
+        pillars: data?.pillars || null,
+      };
+    }
 
-  const score = data?.overallScore || 0;
+    const avg = (fn: (d: DepartmentCompliance) => number) =>
+      Math.round(active.reduce((acc, d) => acc + fn(d), 0) / total);
+
+    const pillars = {
+      copoMapping: {
+        score: avg(d => d.copo.percentage),
+        label: '1. CO-PO Matrix Mapping',
+        total: active.reduce((acc, d) => acc + d.copo.totalSubjects, 0),
+        compliant: active.reduce((acc, d) => acc + d.copo.mappedSubjects, 0),
+      },
+      timetable: {
+        score: avg(d => d.timetable.percentage),
+        label: '2. Timetable Up-to-date',
+        total,
+        compliant: active.filter(d => d.timetable.isUpToDate).length,
+      },
+      questionBank: {
+        score: avg(d => d.questionBank.coveragePercentage),
+        label: '3. Question Bank',
+        total: active.reduce((acc, d) => acc + d.questionBank.totalQuestions, 0),
+        compliant: active.filter(d => d.questionBank.coveragePercentage >= 60).length,
+      },
+      questionDesign: {
+        score: avg(d => d.questionPapers.percentage),
+        label: '4. Question Design Papers',
+        total: active.reduce((acc, d) => acc + d.questionPapers.totalPapers, 0),
+        compliant: active.reduce((acc, d) => acc + d.questionPapers.approvedCount, 0),
+      },
+      approvals: {
+        score: avg(d => d.approvals.approvalRate),
+        label: '5. Academic Approvals',
+        total: active.reduce((acc, d) => acc + d.approvals.totalQPs + d.approvals.totalTimetables, 0),
+        compliant: active.reduce((acc, d) => acc + d.approvals.approvedQPs + d.approvals.approvedTimetables, 0),
+      },
+      lessonPlan: {
+        score: avg(d => d.lessons.percentage),
+        label: '6. Lesson Plan Materials',
+        total: active.reduce((acc, d) => acc + d.lessons.totalMaterials, 0),
+        compliant: active.reduce((acc, d) => acc + d.lessons.subjectsWithMaterials, 0),
+      },
+      chats: data?.pillars?.chats || {
+        score: 0,
+        label: '7. Academic Chats',
+        total: 0,
+        compliant: 0,
+      },
+      portfolio: {
+        score: avg(d => d.portfolio.overallScore),
+        label: '8. Academic Portfolio',
+        total: active[0] ? active[0].portfolio.seminarsCount + active[0].portfolio.tutorialsCount + active[0].portfolio.miniProjectsCount : 0,
+        compliant: active[0] ? active[0].portfolio.verifiedSeminars + active[0].portfolio.verifiedTutorials + active[0].portfolio.verifiedMiniProjects : 0,
+      },
+      attendance: {
+        score: avg(d => d.attendance.attendanceRate),
+        label: '9. Attendance Compliance',
+        total: active[0]?.attendance.totalRecords || 0,
+        compliant: active[0]?.attendance.presentRecords || 0,
+      },
+    };
+
+    const overallScore = avg(d => d.overallScore);
+    const overallStatus = overallScore >= 80 ? 'EXCELLENT' : overallScore >= 60 ? 'GOOD' : 'NEEDS_ATTENTION';
+
+    return {
+      totalDepts: total,
+      compliantCount: compliant,
+      partialCount: partial,
+      attentionCount: attention,
+      overallScore,
+      overallStatus,
+      pillars,
+    };
+  }, [filteredDepartments, data]);
+
+  // Multi-segment Donut SVG geometry
+  const radius = 62;
+  const circumference = 2 * Math.PI * radius;
+  const denom = dynamicStats.totalDepts || 1;
+  const pctCompliant = (dynamicStats.compliantCount / denom) * 100;
+  const pctPartial = (dynamicStats.partialCount / denom) * 100;
+  const pctAttention = (dynamicStats.attentionCount / denom) * 100;
+
+  const dashCompliant = (pctCompliant / 100) * circumference;
+  const dashPartial = (pctPartial / 100) * circumference;
+  const dashAttention = (pctAttention / 100) * circumference;
+
+  const score = dynamicStats.overallScore;
 
   return (
     <div className="flex h-screen bg-[#F6F8FC] dark:bg-slate-950 overflow-hidden font-sans">
@@ -173,53 +469,156 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
             </div>
           </div>
 
-          {/* Filtering Bar */}
-          <div className="bg-white dark:bg-slate-900 rounded-[22px] border border-slate-200 dark:border-slate-800 shadow-soft p-4 flex flex-col md:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3 w-full md:w-auto flex-wrap">
-              {/* Course Filter */}
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span>Course:</span>
+          {/* Cascading Master Filtering Bar: College -> Course -> Branch -> Batch -> Semester -> Section */}
+          <div className="bg-white dark:bg-slate-900 rounded-[22px] border border-slate-200 dark:border-slate-800 shadow-soft p-4 space-y-3">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <span className="text-[11px] font-black uppercase tracking-wider text-[#F36C21]">
+                Cascading Academic Filters (College → Course → Branch → Batch → Semester → Section)
+              </span>
+              {(selectedCourse !== 'ALL' || selectedBranch !== 'ALL' || selectedBatch !== 'ALL' || selectedSemester !== 'ALL' || selectedSection !== 'ALL' || searchQuery) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCourse('ALL');
+                    setSelectedBranch('ALL');
+                    setSelectedBatch('ALL');
+                    setSelectedSemester('ALL');
+                    setSelectedSection('ALL');
+                    setSearchQuery('');
+                  }}
+                  className="text-[11px] font-bold text-[#5B4BFF] hover:underline cursor-pointer"
+                >
+                  ↺ Reset Filters
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-2.5 items-end">
+              {/* 1. College */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">1. College</label>
                 <select
-                  value={selectedCourseFilter}
-                  onChange={e => setSelectedCourseFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
+                  value={selectedCollege}
+                  onChange={e => {
+                    setSelectedCollege(e.target.value);
+                    setSelectedCourse('ALL');
+                    setSelectedBranch('ALL');
+                    setSelectedBatch('ALL');
+                    setSelectedSemester('ALL');
+                    setSelectedSection('ALL');
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  {collegesList.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Course */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">2. Course ({coursesList.length})</label>
+                <select
+                  value={selectedCourse}
+                  onChange={e => {
+                    setSelectedCourse(e.target.value);
+                    setSelectedBranch('ALL');
+                    setSelectedBatch('ALL');
+                    setSelectedSemester('ALL');
+                    setSelectedSection('ALL');
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
                 >
                   <option value="ALL">All Courses ({coursesList.length})</option>
                   {coursesList.map(c => (
-                    <option key={c.code} value={c.code}>
-                      {c.name} ({c.code})
-                    </option>
+                    <option key={c.id} value={c.code}>{c.name} ({c.code})</option>
                   ))}
                 </select>
               </div>
 
-              {/* Department Filter */}
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-300">
-                <span>Department / Branch:</span>
+              {/* 3. Branch / Department */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">3. Branch ({branchesList.length})</label>
                 <select
-                  value={selectedDeptFilter}
-                  onChange={e => setSelectedDeptFilter(e.target.value)}
-                  className="px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
+                  value={selectedBranch}
+                  onChange={e => {
+                    setSelectedBranch(e.target.value);
+                    setSelectedBatch('ALL');
+                    setSelectedSemester('ALL');
+                    setSelectedSection('ALL');
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
                 >
-                  <option value="ALL">All Departments ({deptsList.length})</option>
-                  {deptsList.map(d => (
-                    <option key={d.id} value={d.id}>
-                      {d.name}
-                    </option>
+                  <option value="ALL">All Branches ({branchesList.length})</option>
+                  {branchesList.map(b => (
+                    <option key={b.id} value={b.id}>{b.name}</option>
                   ))}
                 </select>
               </div>
-            </div>
 
-            {/* Quick Search */}
-            <div className="w-full md:w-64">
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search department, course, HOD..."
-                className="w-full px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold focus:outline-none focus:border-[#5B4BFF]"
-              />
+              {/* 4. Batch */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">4. Batch ({batchesList.length})</label>
+                <select
+                  value={selectedBatch}
+                  onChange={e => {
+                    setSelectedBatch(e.target.value);
+                    setSelectedSemester('ALL');
+                    setSelectedSection('ALL');
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  <option value="ALL">All Batches ({batchesList.length})</option>
+                  {batchesList.map(b => (
+                    <option key={b.id} value={b.code}>{b.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 5. Semester */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">5. Semester ({semestersList.length})</label>
+                <select
+                  value={selectedSemester}
+                  onChange={e => {
+                    setSelectedSemester(e.target.value);
+                    setSelectedSection('ALL');
+                  }}
+                  className="w-full px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  <option value="ALL">All Semesters ({semestersList.length})</option>
+                  {semestersList.map(s => (
+                    <option key={s.id} value={s.code}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 6. Section */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">6. Section ({sectionsList.length})</label>
+                <select
+                  value={selectedSection}
+                  onChange={e => setSelectedSection(e.target.value)}
+                  className="w-full px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-xs focus:outline-none focus:border-[#5B4BFF]"
+                >
+                  <option value="ALL">All Sections ({sectionsList.length})</option>
+                  {sectionsList.map(sec => (
+                    <option key={sec.id} value={sec.code}>{sec.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Search */}
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 dark:text-slate-400 mb-1">Quick Search</label>
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="Department, course, HOD..."
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-xs font-semibold focus:outline-none focus:border-[#5B4BFF]"
+                />
+              </div>
             </div>
           </div>
 
@@ -241,7 +640,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                 Retry
               </button>
             </div>
-          ) : !data ? null : (
+          ) : !data || !dynamicStats.pillars ? null : (
             <>
               {/* Graphical Overview Card */}
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
@@ -252,29 +651,58 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                       Department Compliance Distribution
                     </h3>
                     <span className="text-[11px] font-bold text-slate-400">
-                      {totalDepts} Department{totalDepts > 1 ? 's' : ''}
+                      {dynamicStats.totalDepts} Department{dynamicStats.totalDepts === 1 ? '' : 's'}
                     </span>
                   </div>
 
-                  {/* Pure React SVG Donut & Segmented Pie */}
-                  <div className="py-6 flex flex-col items-center justify-center">
+                  {/* Pure React SVG Multi-Segment Pie / Donut Chart */}
+                  <div className="py-6 flex flex-col items-center justify-center w-full">
                     <div className="relative w-44 h-44 flex items-center justify-center">
                       <svg className="w-full h-full transform -rotate-90" viewBox="0 0 160 160">
                         {/* Outer base track */}
-                        <circle cx="80" cy="80" r="62" stroke="currentColor" strokeWidth="18" fill="transparent" className="text-slate-100 dark:text-slate-800" />
+                        <circle cx="80" cy="80" r={radius} stroke="currentColor" strokeWidth="18" fill="transparent" className="text-slate-100 dark:text-slate-800" />
+                        {/* Attention Needed Slice (Rose) */}
+                        {dashAttention > 0 && (
+                          <circle
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                            stroke="#F04438"
+                            strokeWidth="18"
+                            strokeDasharray={`${dashAttention} ${circumference}`}
+                            strokeDashoffset={-(dashCompliant + dashPartial)}
+                            fill="transparent"
+                            className="transition-all duration-700"
+                          />
+                        )}
+                        {/* Moderate Slice (Amber) */}
+                        {dashPartial > 0 && (
+                          <circle
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                            stroke="#FFB020"
+                            strokeWidth="18"
+                            strokeDasharray={`${dashPartial} ${circumference}`}
+                            strokeDashoffset={-dashCompliant}
+                            fill="transparent"
+                            className="transition-all duration-700"
+                          />
+                        )}
                         {/* Compliant Slice (Green) */}
-                        <circle
-                          cx="80"
-                          cy="80"
-                          r="62"
-                          stroke="#00C48C"
-                          strokeWidth="18"
-                          strokeDasharray={2 * Math.PI * 62}
-                          strokeDashoffset={(2 * Math.PI * 62) * (1 - (p1 / 100))}
-                          strokeLinecap="round"
-                          fill="transparent"
-                          className="transition-all duration-1000"
-                        />
+                        {dashCompliant > 0 && (
+                          <circle
+                            cx="80"
+                            cy="80"
+                            r={radius}
+                            stroke="#00C48C"
+                            strokeWidth="18"
+                            strokeDasharray={`${dashCompliant} ${circumference}`}
+                            strokeDashoffset={0}
+                            fill="transparent"
+                            className="transition-all duration-700"
+                          />
+                        )}
                       </svg>
                       {/* Center Score */}
                       <div className="absolute flex flex-col items-center justify-center text-center">
@@ -282,7 +710,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                           {score}%
                         </span>
                         <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full mt-1 ${score >= 80 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : score >= 60 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'}`}>
-                          {(data.overallStatus || 'NEEDS_ATTENTION').replace(/_/g, ' ')}
+                          {(dynamicStats.overallStatus || 'NEEDS_ATTENTION').replace(/_/g, ' ')}
                         </span>
                       </div>
                     </div>
@@ -291,15 +719,15 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                     <div className="grid grid-cols-3 gap-2 mt-4 w-full text-center">
                       <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800">
                         <p className="text-[10px] font-bold text-emerald-800 dark:text-emerald-300">Compliant (80%+)</p>
-                        <p className="text-base font-black text-emerald-700 dark:text-emerald-400">{compliantCount}</p>
+                        <p className="text-base font-black text-emerald-700 dark:text-emerald-400">{dynamicStats.compliantCount}</p>
                       </div>
                       <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800">
                         <p className="text-[10px] font-bold text-amber-800 dark:text-amber-300">Moderate (60-79%)</p>
-                        <p className="text-base font-black text-amber-700 dark:text-amber-400">{partialCount}</p>
+                        <p className="text-base font-black text-amber-700 dark:text-amber-400">{dynamicStats.partialCount}</p>
                       </div>
                       <div className="p-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800">
                         <p className="text-[10px] font-bold text-rose-800 dark:text-rose-300">Attention (&lt;60%)</p>
-                        <p className="text-base font-black text-rose-700 dark:text-rose-400">{attentionCount}</p>
+                        <p className="text-base font-black text-rose-700 dark:text-rose-400">{dynamicStats.attentionCount}</p>
                       </div>
                     </div>
                   </div>
@@ -312,21 +740,21 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                       The 9 Institutional Academic Compliance Pillars
                     </h3>
                     <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-                      Standardized Quality Scorecard
+                      {selectedCourse !== 'ALL' ? `Filtered: ${selectedCourse}` : 'Standardized Quality Scorecard'}
                     </span>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {[
-                      { icon: '🎯', label: '1. CO-PO Matrix Mapping', stat: data.pillars.copoMapping },
-                      { icon: '📅', label: '2. Timetable Up-to-date', stat: data.pillars.timetable },
-                      { icon: '📚', label: '3. Question Bank & Bloom\'s', stat: data.pillars.questionBank },
-                      { icon: '📝', label: '4. Question Design Paper', stat: data.pillars.questionDesign },
-                      { icon: '✅', label: '5. Academic Approvals', stat: data.pillars.approvals },
-                      { icon: '📖', label: '6. Lesson Plan Materials', stat: data.pillars.lessonPlan },
-                      { icon: '💬', label: '7. Academic Chats', stat: data.pillars.chats },
-                      { icon: '💼', label: '8. Portfolio (Seminar/MiniProj)', stat: data.pillars.portfolio },
-                      { icon: '👥', label: '9. Student Attendance', stat: data.pillars.attendance },
+                      { icon: '🎯', label: '1. CO-PO Matrix Mapping', stat: dynamicStats.pillars.copoMapping },
+                      { icon: '📅', label: '2. Timetable Up-to-date', stat: dynamicStats.pillars.timetable },
+                      { icon: '📚', label: '3. Question Bank & Bloom\'s', stat: dynamicStats.pillars.questionBank },
+                      { icon: '📝', label: '4. Question Design Paper', stat: dynamicStats.pillars.questionDesign },
+                      { icon: '✅', label: '5. Academic Approvals', stat: dynamicStats.pillars.approvals },
+                      { icon: '📖', label: '6. Lesson Plan Materials', stat: dynamicStats.pillars.lessonPlan },
+                      { icon: '💬', label: '7. Academic Chats', stat: dynamicStats.pillars.chats },
+                      { icon: '💼', label: '8. Portfolio (Seminar/MiniProj)', stat: dynamicStats.pillars.portfolio },
+                      { icon: '👥', label: '9. Student Attendance', stat: dynamicStats.pillars.attendance },
                     ].map(p => (
                       <div key={p.label} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
                         <div className="flex items-center justify-between">
@@ -340,7 +768,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                         </div>
                         <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                           <div
-                            className="h-full rounded-full"
+                            className="h-full rounded-full transition-all duration-500"
                             style={{
                               width: `${Math.min(100, Math.max(0, p.stat.score))}%`,
                               backgroundColor: p.stat.score >= 80 ? '#00C48C' : p.stat.score >= 50 ? '#FFB020' : '#F04438'
@@ -365,7 +793,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                       Department, Course &amp; Branch Compliance Matrix
                     </h3>
                     <p className="text-xs text-[#4E5969] dark:text-slate-400">
-                      Showing {filteredDepartments.length} of {data.departments.length} department branches. Click any row to view subject-level CO-PO mapping checklist.
+                      Showing {filteredDepartments.length} department branch{filteredDepartments.length === 1 ? '' : 'es'}. Click any row to view subject-level CO-PO mapping checklist.
                     </p>
                   </div>
                 </div>
@@ -392,7 +820,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                       {filteredDepartments.length === 0 ? (
                         <tr>
                           <td colSpan={12} className="py-8 text-center text-slate-400 font-bold">
-                            No departments found matching the filter criteria.
+                            No departments found matching the selected filters.
                           </td>
                         </tr>
                       ) : (
@@ -505,7 +933,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                                       <div className="pt-2 border-t border-slate-100 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                                         <div>
                                           <p className="font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1">
-                                            <span>📚</span> Bloom\'s Taxonomy Question Coverage
+                                            <span>📚</span> Bloom&apos;s Taxonomy Question Coverage
                                           </p>
                                           <div className="flex items-center gap-1.5 flex-wrap text-[10px]">
                                             <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 font-bold">L1 Rem: {dept.questionBank.bloomsBreakdown.remembering}</span>
