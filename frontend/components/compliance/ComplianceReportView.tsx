@@ -56,7 +56,12 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
 
       if (res && res.ok) {
         const json = await res.json();
-        setData(json);
+        const payload = json?.data ?? json;
+        if (payload && typeof payload === 'object' && payload.pillars) {
+          setData(payload);
+        } else {
+          throw new Error('Invalid compliance report format.');
+        }
       } else {
         throw new Error('Failed to retrieve academic compliance report.');
       }
@@ -120,9 +125,9 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
 
   return (
     <div className="flex h-screen bg-[#F6F8FC] dark:bg-slate-950 overflow-hidden font-sans">
-      <Sidebar />
+      <Sidebar role={role} />
       <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
-        <Header />
+        <Header title="Academic & Operational Compliance Report" />
 
         <main className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] w-full mx-auto">
           {/* Top Title & Actions Bar */}
@@ -277,7 +282,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
                           {score}%
                         </span>
                         <span className={`text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full mt-1 ${score >= 80 ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : score >= 60 ? 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' : 'bg-rose-100 text-rose-800 dark:bg-rose-950 dark:text-rose-300'}`}>
-                          {data.overallStatus.replace('_', ' ')}
+                          {(data.overallStatus || 'NEEDS_ATTENTION').replace(/_/g, ' ')}
                         </span>
                       </div>
                     </div>

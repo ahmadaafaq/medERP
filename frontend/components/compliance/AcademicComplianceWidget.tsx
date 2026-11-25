@@ -173,7 +173,12 @@ export default function AcademicComplianceWidget({
 
       if (res && res.ok) {
         const json = await res.json();
-        setData(json);
+        const payload = json?.data ?? json;
+        if (payload && typeof payload === 'object' && payload.pillars) {
+          setData(payload);
+        } else {
+          throw new Error('Invalid compliance report format.');
+        }
       } else {
         throw new Error('Failed to load compliance analytics.');
       }
@@ -325,7 +330,7 @@ export default function AcademicComplianceWidget({
                       {score}%
                     </span>
                     <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
-                      {data.overallStatus.replace('_', ' ')}
+                      {(data.overallStatus || 'NEEDS_ATTENTION').replace(/_/g, ' ')}
                     </span>
                   </div>
                 </div>
