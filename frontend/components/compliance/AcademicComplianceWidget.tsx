@@ -51,6 +51,7 @@ export interface DepartmentCompliance {
     draftCount: number;
     submittedCount: number;
     approvedCount: number;
+    evaluatedCount?: number;
     percentage: number;
     status: 'READY' | 'IN_PROGRESS' | 'PENDING';
   };
@@ -133,6 +134,7 @@ export default function AcademicComplianceWidget({
   const [data, setData] = useState<ComplianceReportData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'chart' | 'pillars' | 'departments'>('chart');
+  const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchComplianceData = async () => {
@@ -293,89 +295,142 @@ export default function AcademicComplianceWidget({
         </div>
       ) : !data ? null : (
         <div className="pt-4 space-y-4">
-          {/* TAB 1: CHART OVERVIEW */}
-          {activeTab === 'chart' && (
-            <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
-              {/* Graphical Donut / Gauge View */}
-              <div className="md:col-span-5 flex flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800/60">
-                <div className="relative w-36 h-36 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
-                    {/* Background Track */}
-                    <circle
-                      cx="70"
-                      cy="70"
-                      r={radius}
-                      stroke="currentColor"
-                      strokeWidth="12"
-                      fill="transparent"
-                      className="text-slate-200 dark:text-slate-700"
-                    />
-                    {/* Animated Value Ring */}
-                    <circle
-                      cx="70"
-                      cy="70"
-                      r={radius}
-                      stroke={scoreColor}
-                      strokeWidth="12"
-                      strokeDasharray={circumference}
-                      strokeDashoffset={strokeDashoffset}
-                      strokeLinecap="round"
-                      fill="transparent"
-                      className="transition-all duration-1000 ease-out"
-                    />
-                  </svg>
-                  {/* Center Score Label */}
-                  <div className="absolute flex flex-col items-center justify-center text-center">
-                    <span className="text-2xl font-black text-[#1B1E28] dark:text-white leading-none">
-                      {score}%
-                    </span>
-                    <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 mt-1 uppercase tracking-wider">
-                      {(data.overallStatus || 'NEEDS_ATTENTION').replace(/_/g, ' ')}
-                    </span>
-                  </div>
-                </div>
+          {/* TAB 1: CHART OVERVIEW (Multi-Colored Segmented Donut + Working Courses/Branches) */}
+          {activeTab === 'chart' && (() => {
+            const activeSlices = pillarList.filter(p => p.stat.score > 0);
+            const totalSliceWeight = activeSlices.reduce((acc, p) => acc + p.stat.score, 0) || 1;
+            let cumulativeOffset = 0;
+            const focusedPillar = hoveredSlice ? pillarList.find(p => p.key === hoveredSlice) : null;
+            const totalEvaluations = (data.departments || []).reduce((acc, d) => acc + (d.questionPapers?.evaluatedCount || 0), 0);
+            const topWorkingDepts = [...(data.departments || [])]
+              .sort((a, b) => b.overallScore - a.overallScore)
+              .slice(0, 6);
 
-                <div className="mt-3 text-center">
-                  <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold ${score >= 80 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : score >= 60 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'}`}>
-                    <span>●</span> Overall Score: {score}/100
-                  </span>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                    Based on 9 core academic compliance pillars
-                  </p>
-                </div>
-              </div>
-
-              {/* Pillars Quick Summary List */}
-              <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {pillarList.map(p => (
-                  <div
-                    key={p.key}
-                    className="p-3 rounded-xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-800/60 flex items-center justify-between gap-3 hover:shadow-sm transition-all"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base shrink-0">{p.icon}</span>
-                      <div className="min-w-0">
-                        <p className="text-xs font-bold text-[#1B1E28] dark:text-white truncate">
-                          {p.name}
-                        </p>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          {p.stat.compliant} / {p.stat.total} verified
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span
-                        className="text-xs font-black px-2 py-0.5 rounded-lg text-white"
-                        style={{ backgroundColor: p.stat.score >= 80 ? '#00C48C' : p.stat.score >= 50 ? '#FFB020' : '#F04438' }}
-                      >
-                        {p.stat.score}%
+            return (
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-start">
+                {/* Multi-Colored Graphical Donut View */}
+                <div className="md:col-span-5 flex flex-col items-center justify-center p-4 bg-slate-50 dark:bg-slate-800/40 rounded-2xl border border-slate-100 dark:border-slate-800/60">
+                  <div className="relative w-44 h-44 flex items-center justify-center">
+                    <svg className="w-full h-full transform -rotate-90" viewBox="0 0 140 140">
+                      {/* Background Track */}
+                      <circle
+                        cx="70"
+                        cy="70"
+                        r={radius}
+                        stroke="currentColor"
+                        strokeWidth="16"
+                        fill="transparent"
+                        className="text-slate-200 dark:text-slate-700"
+                      />
+                      {/* Distinct Colored Slices for Active Pillars */}
+                      {activeSlices.map((p) => {
+                        const segLength = (p.stat.score / totalSliceWeight) * circumference;
+                        const offset = -cumulativeOffset;
+                        cumulativeOffset += segLength;
+                        const isHovered = hoveredSlice === p.key;
+                        return (
+                          <circle
+                            key={p.key}
+                            cx="70"
+                            cy="70"
+                            r={radius}
+                            stroke={p.color}
+                            strokeWidth={isHovered ? 20 : 16}
+                            strokeDasharray={`${segLength} ${circumference}`}
+                            strokeDashoffset={offset}
+                            fill="transparent"
+                            className="transition-all duration-300 cursor-pointer"
+                            onMouseEnter={() => setHoveredSlice(p.key)}
+                            onMouseLeave={() => setHoveredSlice(null)}
+                          />
+                        );
+                      })}
+                    </svg>
+                    {/* Center Score / Focused Slice Label */}
+                    <div className="absolute flex flex-col items-center justify-center text-center px-3 pointer-events-none">
+                      <span className="text-2xl font-black text-[#1B1E28] dark:text-white leading-none">
+                        {focusedPillar ? `${focusedPillar.stat.score}%` : `${score}%`}
+                      </span>
+                      <span className="text-[9px] font-extrabold text-slate-600 dark:text-slate-300 mt-1 uppercase tracking-wider leading-tight max-w-[90px] truncate">
+                        {focusedPillar ? focusedPillar.name.replace(/^\d+\.\s*/, '') : (data.overallStatus || 'NEEDS_ATTENTION').replace(/_/g, ' ')}
                       </span>
                     </div>
                   </div>
-                ))}
+
+                  {/* Overall Score Pill + Theory Evaluation Counter */}
+                  <div className="mt-3 text-center space-y-1.5">
+                    <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                      <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold ${score >= 80 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300' : score >= 60 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300' : 'bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300'}`}>
+                        <span>●</span> Overall: {score}/100
+                      </span>
+                      {totalEvaluations > 0 && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-[#5B4BFF]">
+                          ✍️ {totalEvaluations} Theory Evaluated
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Working Courses & Branches Compliance Strip */}
+                  {topWorkingDepts.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-200/70 dark:border-slate-700/60 w-full">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 mb-1.5 text-center">
+                        Courses &amp; Branches Working Status
+                      </p>
+                      <div className="flex flex-wrap justify-center gap-1.5">
+                        {topWorkingDepts.map((d) => (
+                          <span
+                            key={d.departmentId}
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border ${d.overallScore >= 60 ? 'bg-emerald-50 border-emerald-200 text-emerald-800 dark:bg-emerald-950/40 dark:border-emerald-800 dark:text-emerald-300' : d.overallScore > 0 ? 'bg-amber-50 border-amber-200 text-amber-800 dark:bg-amber-950/40 dark:border-amber-800 dark:text-amber-300' : 'bg-slate-100 border-slate-200 text-slate-600 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-400'}`}
+                          >
+                            {d.courseName} ({d.departmentName}): <b>{d.overallScore}%</b>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Pillars Quick Summary List with Slice Color Dots */}
+                <div className="md:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {pillarList.map(p => (
+                    <div
+                      key={p.key}
+                      onMouseEnter={() => setHoveredSlice(p.key)}
+                      onMouseLeave={() => setHoveredSlice(null)}
+                      className={`p-3 rounded-xl border bg-white dark:bg-slate-800/60 flex items-center justify-between gap-3 transition-all cursor-pointer ${hoveredSlice === p.key ? 'border-[#5B4BFF] shadow-md ring-1 ring-[#5B4BFF]/30' : 'border-slate-200/80 dark:border-slate-800 hover:shadow-sm'}`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <span
+                          className="w-2.5 h-2.5 rounded-full shrink-0"
+                          style={{ backgroundColor: p.color }}
+                        />
+                        <span className="text-base shrink-0">{p.icon}</span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[#1B1E28] dark:text-white truncate">
+                            {p.name}
+                          </p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            {p.key === 'qp' && totalEvaluations > 0
+                              ? `${p.stat.compliant} / ${p.stat.total} • ${totalEvaluations} eval`
+                              : `${p.stat.compliant} / ${p.stat.total} verified`}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span
+                          className="text-xs font-black px-2 py-0.5 rounded-lg text-white"
+                          style={{ backgroundColor: p.stat.score >= 80 ? '#00C48C' : p.stat.score >= 50 ? '#FFB020' : p.stat.score > 0 ? p.color : '#F04438' }}
+                        >
+                          {p.stat.score}%
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* TAB 2: DETAILED 9 PILLARS PROGRESS */}
           {activeTab === 'pillars' && (

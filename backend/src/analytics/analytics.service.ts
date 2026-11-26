@@ -301,16 +301,17 @@ export class AnalyticsService {
     ).catch(() => []);
     const college = tenantInfo[0] || { code: '1', name: slug.toUpperCase(), slug };
 
-    // 2. Fetch all departments and courses
+    // 2. Fetch all academic departments and courses (exclude non-academic admin cells like SPORTS/SECURITY)
     let deptQuery = `
       SELECT d.id as department_id, d.code as department_code, d.name as department_name,
              COALESCE(d.branch_cd, d.code) as branch_cd,
              COALESCE(d.course_cd, c.course_cd, c.code) as course_cd,
              COALESCE(c.name, d.course_name, d.name) as course_name,
-             d.hod_user_id, d.hod_name
+             d.hod_user_id, u.name as hod_name
       FROM "${schema}".departments d
       LEFT JOIN "${schema}".courses c ON (c.course_cd = d.course_cd OR c.code = d.course_cd OR c.id::text = d.course_cd)
-      WHERE d.is_active = true
+      LEFT JOIN "${schema}".users u ON u.id::text = d.hod_user_id::text
+      WHERE d.is_active = true AND (d.course_cd IS NOT NULL OR d.branch_cd IS NOT NULL)
     `;
     const deptsRaw = await this.ds.query(deptQuery).catch(() => []);
 
@@ -355,9 +356,11 @@ export class AnalyticsService {
       );
     }
 
-    // If no active departments found, synthesize default row from courses to ensure visualization displays
+    // If no active departments found, synthesize from matching course (or all courses if no course filter)
     if (filteredDepts.length === 0) {
-      const coursesRes = await this.ds.query(`SELECT code, course_cd, name FROM "${schema}".courses WHERE is_active = true LIMIT 5`).catch(() => []);
+      const coursesRes = filter?.courseCd
+        ? await this.ds.query(`SELECT code, course_cd, name FROM "${schema}".courses WHERE is_active = true AND (LOWER(course_cd) = LOWER($1) OR LOWER(code) = LOWER($1)) LIMIT 1`, [filter.courseCd]).catch(() => [])
+        : await this.ds.query(`SELECT code, course_cd, name FROM "${schema}".courses WHERE is_active = true LIMIT 10`).catch(() => []);
       if (coursesRes.length > 0) {
         filteredDepts = coursesRes.map((c: any) => ({
           department_id: c.code || '1',
@@ -369,17 +372,6 @@ export class AnalyticsService {
           hod_user_id: null,
           hod_name: 'Head of Department',
         }));
-      } else {
-        filteredDepts = [{
-          department_id: 'default',
-          department_code: 'MAIN',
-          department_name: 'Academic Affairs',
-          branch_cd: 'MAIN',
-          course_cd: 'MAIN',
-          course_name: 'Primary Academic Course',
-          hod_user_id: null,
-          hod_name: 'HOD Administration',
-        }];
       }
     }
 
@@ -399,6 +391,7 @@ export class AnalyticsService {
       miniProjectsCount,
       rawAttendanceSessions,
       attendanceRecordsRaw,
+      rawEvaluations,
     ] = await Promise.all([
       // Subjects
       this.ds.query(`SELECT id, code, name, course_cd, branch_cd, department_id, semester FROM "${schema}".subjects WHERE is_active = true`).catch(() =>
@@ -406,65 +399,133 @@ export class AnalyticsService {
       ),
       // CO-PO Matrices
       this.ds.query(`SELECT id, subject_id, subject_code, course_cd, branch_cd, sem_cd, section, matrix_data FROM "${schema}".co_po_matrices`).catch(() => []),
-      // Timetable Slots
-      this.ds.query(`SELECT id, course_id, department_id, branch_id, batch_id, semester, section FROM "${schema}".timetable_slots WHERE is_active = true`).catch(() =>
-        this.ds.query(`SELECT id, course_id, department_id, branch_id, semester, section FROM "${schema}".timetable_slots WHERE is_active = true`).catch(() => [])
+      // Timetable Slots (supports both course_cd/branch_cd and course_id/branch_id schemas)
+      this.ds.query(`SELECT id, course_cd, branch_cd, department_id, batch_id, batch_cd, semester, section FROM "${schema}".timetable_slots`).catch(() =>
+        this.ds.query(`SELECT id, department_id, batch_id, semester, section FROM "${schema}".timetable_slots`).catch(() => [])
       ),
       // Timetable Drafts
       this.ds.query(`SELECT id, course_cd, branch_cd, department_id, batch_cd, semester, section, status FROM "${schema}".timetable_drafts`).catch(() => []),
-      // Question Bank
-      this.ds.query(`SELECT id, course_cd, branch_cd, batch_cd, semester, section, blooms_level FROM "${schema}".question_bank WHERE is_active = true`).catch(() =>
-        this.ds.query(`SELECT id, course_cd, branch_cd, blooms_level FROM "${schema}".question_bank WHERE is_active = true`).catch(() => [])
+      // Question Bank (use difficulty_level/mode; blooms_level may not exist in all tenant schemas)
+      this.ds.query(`SELECT id, subject_id, course_cd, branch_cd, batch_cd, semester, sem_cd, section, difficulty_level, mode FROM "${schema}".question_bank WHERE is_active = true`).catch(() =>
+        this.ds.query(`SELECT id, subject_id, course_cd, branch_cd, semester, section, difficulty_level FROM "${schema}".question_bank WHERE is_active = true`).catch(() => [])
       ),
       // Examination Papers
-      this.ds.query(`SELECT id, course_cd, branch_cd, course_id, department_id, status FROM "${schema}".examination_papers`).catch(() => []),
+      this.ds.query(`SELECT id, name, code, subject_id, course_cd, branch_cd, department_id, batch_id, batch_cd, semester, sem_cd, section, status FROM "${schema}".examination_papers`).catch(() =>
+        this.ds.query(`SELECT id, name, code, subject_id, course_cd, branch_cd, department_id, status FROM "${schema}".examination_papers`).catch(() => [])
+      ),
       // Lessons
       this.ds.query(`SELECT id, course_cd, branch_cd, batch_cd, sem_cd, section, subject_id FROM "${schema}".lessons WHERE is_active = true`).catch(() => []),
       // Chat Groups
       this.ds.query(`SELECT count(*) as count FROM "${schema}".chat_groups WHERE is_active = true`).catch(() => [{ count: 0 }]),
       // Chat Messages
       this.ds.query(`SELECT count(*) as count FROM "${schema}".chat_messages`).catch(() => [{ count: 0 }]),
-      // Logbook Seminars
-      this.ds.query(`SELECT count(*) as total, count(CASE WHEN status = 'VERIFIED' OR verified_at IS NOT NULL THEN 1 END) as verified FROM "${schema}".logbook_seminars`).catch(() => [{ total: 0, verified: 0 }]),
-      // Logbook Tutorials
-      this.ds.query(`SELECT count(*) as total, count(CASE WHEN status = 'VERIFIED' OR verified_at IS NOT NULL THEN 1 END) as verified FROM "${schema}".logbook_tutorials`).catch(() => [{ total: 0, verified: 0 }]),
-      // Logbook Mini Projects
-      this.ds.query(`SELECT count(*) as total, count(CASE WHEN status = 'VERIFIED' OR verified_at IS NOT NULL THEN 1 END) as verified FROM "${schema}".logbook_mini_projects`).catch(() => [{ total: 0, verified: 0 }]),
-      // Attendance Sessions
-      this.ds.query(`SELECT id, faculty_id, subject_id, batch_id, session_date FROM "${schema}".attendance_sessions`).catch(() => []),
+      // Logbook Seminars (with student course/dept join)
+      this.ds.query(`
+        SELECT sm.status, sm.verified_at, st.course_cd, st.branch_id as branch_cd, st.department_id
+        FROM "${schema}".logbook_seminars sm
+        LEFT JOIN "${schema}".students st ON st.id::text = sm.student_id::text
+      `).catch(() => []),
+      // Logbook Tutorials (with student course/dept join)
+      this.ds.query(`
+        SELECT lt.status, lt.verified_at, st.course_cd, st.branch_id as branch_cd, st.department_id
+        FROM "${schema}".logbook_tutorials lt
+        LEFT JOIN "${schema}".students st ON st.id::text = lt.student_id::text
+      `).catch(() => []),
+      // Logbook Mini Projects (with student course/dept join)
+      this.ds.query(`
+        SELECT mp.project_status as status, mp.approved_at as verified_at, st.course_cd, COALESCE(mp.branch_id::text, st.branch_id::text) as branch_cd, st.department_id
+        FROM "${schema}".logbook_mini_projects mp
+        LEFT JOIN "${schema}".students st ON st.id::text = mp.student_id::text
+      `).catch(() => []),
+      // Attendance Sessions (with subject/batch course/dept join)
+      this.ds.query(`
+        SELECT a.id, a.faculty_id, a.subject_id, a.batch_id, a.session_date,
+               COALESCE(sub.course_cd, b.course_cd) as course_cd,
+               sub.branch_cd as branch_cd,
+               sub.department_id
+        FROM "${schema}".attendance_sessions a
+        LEFT JOIN "${schema}".subjects sub ON sub.id::text = a.subject_id::text
+        LEFT JOIN "${schema}".batches b ON b.id::text = a.batch_id::text
+      `).catch(() => []),
       // Attendance Records
       this.ds.query(`SELECT id, session_id, status FROM "${schema}".attendance_records`).catch(() => []),
+      // Theory Evaluations (student_results joined with examination_papers)
+      this.ds.query(`
+        SELECT sr.id, sr.paper_id, sr.eval_status, sr.marks_obtained,
+               ep.course_cd, ep.branch_cd, ep.department_id, ep.batch_cd, ep.semester, ep.sem_cd, ep.section
+        FROM "${schema}".student_results sr
+        LEFT JOIN "${schema}".examination_papers ep ON ep.id::text = sr.paper_id::text
+        WHERE sr.eval_status = 'EVALUATED' OR sr.marks_obtained IS NOT NULL
+      `).catch(() => []),
     ]);
 
     const semFilter = filter?.semester ? String(filter.semester).replace(/\D/g, '') : '';
-    const batchFilter = filter?.batchId ? String(filter.batchId).trim().toLowerCase() : '';
-    const secFilter = filter?.section ? String(filter.section).trim().toLowerCase() : '';
+    const batchFilterRaw = filter?.batchId ? String(filter.batchId).trim().toLowerCase() : '';
+    const batchAliases = new Set<string>();
+    if (batchFilterRaw) {
+      batchAliases.add(batchFilterRaw);
+      const batchRows = await this.ds.query(
+        `SELECT id, code, batch_cd, year FROM "${schema}".batches WHERE id::text = $1 OR LOWER(code) = $1 OR LOWER(batch_cd) = $1 OR LOWER(year::text) = $1 LIMIT 3`,
+        [batchFilterRaw],
+      ).catch(() => []);
+      for (const b of batchRows) {
+        if (b.id) batchAliases.add(String(b.id).trim().toLowerCase());
+        if (b.code) batchAliases.add(String(b.code).trim().toLowerCase());
+        if (b.batch_cd) batchAliases.add(String(b.batch_cd).trim().toLowerCase());
+        if (b.year) batchAliases.add(String(b.year).trim().toLowerCase());
+      }
+    }
+
+    const normSec = (val: any): string => {
+      const s = String(val || '').trim().toUpperCase();
+      if (!s || s === 'ALL' || s === '0') return '';
+      if (s === '1' || s === 'A' || s === 'SECTION A' || s === 'SECTION 1' || s === 'SEC A') return '1';
+      if (s === '2' || s === 'B' || s === 'SECTION B' || s === 'SECTION 2' || s === 'SEC B') return '2';
+      if (s === '3' || s === 'C' || s === 'SECTION C' || s === 'SECTION 3' || s === 'SEC C') return '3';
+      if (s === '4' || s === 'D' || s === 'SECTION D' || s === 'SECTION 4' || s === 'SEC D') return '4';
+      const num = s.match(/\d+/)?.[0];
+      return num || s;
+    };
+    const secFilterNorm = filter?.section ? normSec(filter.section) : '';
 
     const matchSem = (val: any) => !semFilter || !val || String(val).replace(/\D/g, '') === semFilter;
-    const matchBatch = (val: any) => !batchFilter || !val || String(val).trim().toLowerCase() === batchFilter;
-    const matchSec = (val: any) => !secFilter || !val || String(val).trim().toLowerCase() === secFilter;
+    const matchBatch = (val: any) => batchAliases.size === 0 || !val || batchAliases.has(String(val).trim().toLowerCase());
+    const matchSec = (val: any) => !secFilterNorm || !val || normSec(val) === secFilterNorm;
 
     const allSubjects = rawSubjects.filter((s: any) => matchSem(s.semester));
     const allMatrices = rawMatrices.filter((m: any) => matchSem(m.sem_cd) && matchSec(m.section));
-    const allSlots = rawSlots.filter((s: any) => matchSem(s.semester) && matchBatch(s.batch_id) && matchSec(s.section));
+    const allSlots = rawSlots.filter((s: any) => matchSem(s.semester) && matchBatch(s.batch_cd || s.batch_id) && matchSec(s.section));
     const allDrafts = rawDrafts.filter((d: any) => matchSem(d.semester) && matchBatch(d.batch_cd) && matchSec(d.section));
-    const allQuestions = rawQuestions.filter((q: any) => matchSem(q.semester) && matchBatch(q.batch_cd) && matchSec(q.section));
-    const allPapers = rawPapers;
+    const allQuestions = rawQuestions.filter((q: any) => matchSem(q.semester || q.sem_cd) && matchBatch(q.batch_cd) && matchSec(q.section));
+    const allPapers = rawPapers.filter((p: any) => matchSem(p.semester || p.sem_cd) && matchBatch(p.batch_cd || p.batch_id) && matchSec(p.section));
     const allLessons = rawLessons.filter((l: any) => matchSem(l.sem_cd) && matchBatch(l.batch_cd) && matchSec(l.section));
     const attendanceSessionsRaw = rawAttendanceSessions.filter((a: any) => matchBatch(a.batch_id));
+    const allEvaluations = (Array.isArray(rawEvaluations) ? rawEvaluations : []).filter((ev: any) =>
+      matchSem(ev.semester || ev.sem_cd) && matchBatch(ev.batch_cd) && matchSec(ev.section)
+    );
 
     const totalChatGroups = parseInt(chatGroupsCount[0]?.count || 0, 10);
     const totalChatMessages = parseInt(chatMessagesCount[0]?.count || 0, 10);
-    const totalSeminars = parseInt(seminarsCount[0]?.total || 0, 10);
-    const verifiedSeminars = parseInt(seminarsCount[0]?.verified || 0, 10);
-    const totalTutorials = parseInt(tutorialsCount[0]?.total || 0, 10);
-    const verifiedTutorials = parseInt(tutorialsCount[0]?.verified || 0, 10);
-    const totalMiniProjects = parseInt(miniProjectsCount[0]?.total || 0, 10);
-    const verifiedMiniProjects = parseInt(miniProjectsCount[0]?.verified || 0, 10);
 
-    const totalAttendanceSessions = attendanceSessionsRaw.length;
-    const totalAttendanceRecords = attendanceRecordsRaw.length;
-    const presentAttendanceRecords = attendanceRecordsRaw.filter((r: any) => String(r.status).toUpperCase() === 'PRESENT').length;
+    const seminarsRows = Array.isArray(seminarsCount) ? seminarsCount : [];
+    const tutorialsRows = Array.isArray(tutorialsCount) ? tutorialsCount : [];
+    const miniProjectsRows = Array.isArray(miniProjectsCount) ? miniProjectsCount : [];
+
+    // Helper to match a record strictly to a department/course/branch
+    const matchesDept = (rec: any, crsCd: string, brCd: string, deptIdStr: string) => {
+      const rCrs = String(rec.course_cd || rec.course_id || '').trim().toLowerCase();
+      const rBr = String(rec.branch_cd || rec.branch_id || '').trim().toLowerCase();
+      const rDept = String(rec.department_id || '').trim().toLowerCase();
+      if (deptIdStr && rDept && rDept === deptIdStr) return true;
+      if (crsCd && rCrs) {
+        if (rCrs !== crsCd) return false;
+        // If branch is also specified on the record and dept has a branch code, check branch match when distinct
+        if (brCd && rBr && rBr !== brCd && rBr !== crsCd) return false;
+        return true;
+      }
+      if (brCd && rBr && rBr === brCd) return true;
+      return false;
+    };
 
     // 4. Compute Department-wise Metrics
     const departmentResults = filteredDepts.map((dept: any) => {
@@ -473,24 +534,10 @@ export class AnalyticsService {
       const deptIdStr = String(dept.department_id || '').trim().toLowerCase();
 
       // Filter subjects for this department/branch
-      const deptSubjects = allSubjects.filter((s: any) => {
-        const sCrs = String(s.course_cd || '').trim().toLowerCase();
-        const sBr = String(s.branch_cd || '').trim().toLowerCase();
-        const sDept = String(s.department_id || '').trim().toLowerCase();
-        return (
-          (crsCd && sCrs === crsCd) ||
-          (brCd && (sBr === brCd || sBr === crsCd)) ||
-          (deptIdStr && sDept === deptIdStr)
-        );
-      });
-
-      // If no subjects mapped directly to branch, fallback to all subjects under the course
-      const effectiveSubjects = deptSubjects.length > 0 ? deptSubjects : (
-        allSubjects.filter((s: any) => String(s.course_cd || '').trim().toLowerCase() === crsCd)
-      );
+      const effectiveSubjects = allSubjects.filter((s: any) => matchesDept(s, crsCd, brCd, deptIdStr));
 
       // ── 1. CO-PO Matrix Mapping ──
-      const subjectMappingList = (effectiveSubjects.length > 0 ? effectiveSubjects : allSubjects.slice(0, 5)).map((s: any) => {
+      const subjectMappingList = effectiveSubjects.map((s: any) => {
         const subIdStr = String(s.id || '').trim().toLowerCase();
         const subCodeStr = String(s.code || '').trim().toLowerCase();
         const foundMatrix = allMatrices.find((m: any) => {
@@ -508,23 +555,12 @@ export class AnalyticsService {
 
       const totalDeptSubjects = subjectMappingList.length;
       const mappedDeptSubjects = subjectMappingList.filter((s: any) => s.isMapped).length;
-      const copoScore = totalDeptSubjects > 0 ? Math.round((mappedDeptSubjects / totalDeptSubjects) * 100) : (allMatrices.length > 0 ? 100 : 0);
+      const copoScore = totalDeptSubjects > 0 ? Math.round((mappedDeptSubjects / totalDeptSubjects) * 100) : 0;
       const copoStatus: 'COMPLIANT' | 'PARTIAL' | 'PENDING' = copoScore >= 80 ? 'COMPLIANT' : copoScore >= 40 ? 'PARTIAL' : 'PENDING';
 
       // ── 2. Timetable Up-to-date ──
-      const deptSlots = allSlots.filter((slot: any) => {
-        const slotCrs = String(slot.course_id || '').trim().toLowerCase();
-        const slotDept = String(slot.department_id || '').trim().toLowerCase();
-        const slotBr = String(slot.branch_id || '').trim().toLowerCase();
-        return slotCrs === crsCd || slotDept === deptIdStr || slotBr === brCd;
-      });
-
-      const deptDrafts = allDrafts.filter((draft: any) => {
-        const dCrs = String(draft.course_cd || '').trim().toLowerCase();
-        const dBr = String(draft.branch_cd || '').trim().toLowerCase();
-        const dDept = String(draft.department_id || '').trim().toLowerCase();
-        return dCrs === crsCd || dBr === brCd || dDept === deptIdStr;
-      });
+      const deptSlots = allSlots.filter((slot: any) => matchesDept(slot, crsCd, brCd, deptIdStr));
+      const deptDrafts = allDrafts.filter((draft: any) => matchesDept(draft, crsCd, brCd, deptIdStr));
 
       const approvedDraftsCount = deptDrafts.filter((d: any) => d.status === 'HOD_APPROVED').length;
       const hasActiveSlots = deptSlots.length > 0;
@@ -532,11 +568,7 @@ export class AnalyticsService {
       const timetableStatus: 'UP_TO_DATE' | 'PARTIAL' | 'NEEDS_UPDATE' = timetableScore >= 80 ? 'UP_TO_DATE' : timetableScore >= 50 ? 'PARTIAL' : 'NEEDS_UPDATE';
 
       // ── 3. Question Bank & Blooms ──
-      const deptQuestions = allQuestions.filter((q: any) => {
-        const qCrs = String(q.course_cd || '').trim().toLowerCase();
-        const qBr = String(q.branch_cd || '').trim().toLowerCase();
-        return qCrs === crsCd || qBr === brCd || (qCrs === '' && qBr === '');
-      });
+      const deptQuestions = allQuestions.filter((q: any) => matchesDept(q, crsCd, brCd, deptIdStr));
 
       const blooms = {
         remembering: 0,
@@ -548,67 +580,71 @@ export class AnalyticsService {
       };
 
       for (const q of deptQuestions) {
-        const lvl = String(q.blooms_level || '').toLowerCase();
-        if (lvl.includes('rememb') || lvl.includes('l1')) blooms.remembering++;
+        const lvl = String(q.blooms_level || q.difficulty_level || '').toLowerCase();
+        if (lvl.includes('rememb') || lvl.includes('l1') || lvl === 'easy') blooms.remembering++;
         else if (lvl.includes('understand') || lvl.includes('l2')) blooms.understanding++;
-        else if (lvl.includes('appl') || lvl.includes('l3')) blooms.applying++;
-        else if (lvl.includes('analy') || lvl.includes('l4')) blooms.analyzing++;
+        else if (lvl.includes('appl') || lvl.includes('l3') || lvl === 'medium') blooms.applying++;
+        else if (lvl.includes('analy') || lvl.includes('l4') || lvl === 'hard') blooms.analyzing++;
         else if (lvl.includes('eval') || lvl.includes('l5')) blooms.evaluating++;
         else if (lvl.includes('creat') || lvl.includes('l6')) blooms.creating++;
         else blooms.understanding++;
       }
 
-      const qbCount = deptQuestions.length > 0 ? deptQuestions.length : allQuestions.length;
-      const qbScore = Math.min(100, Math.round((qbCount / 10) * 100));
+      const qbCount = deptQuestions.length;
+      const qbScore = qbCount > 0 ? Math.min(100, Math.round((qbCount / 10) * 100)) : 0;
       const qbStatus: 'EXCELLENT' | 'ADEQUATE' | 'NEEDS_QUESTIONS' = qbScore >= 80 ? 'EXCELLENT' : qbScore >= 40 ? 'ADEQUATE' : 'NEEDS_QUESTIONS';
 
-      // ── 4. Question Design Paper ──
-      const deptPapers = allPapers.filter((p: any) => {
-        const pCrs = String(p.course_cd || p.course_id || '').trim().toLowerCase();
-        const pBr = String(p.branch_cd || p.department_id || '').trim().toLowerCase();
-        return pCrs === crsCd || pBr === brCd || (pCrs === '' && pBr === '');
-      });
-
-      const effectivePapers = deptPapers.length > 0 ? deptPapers : allPapers;
+      // ── 4. Question Design Paper & Theory Evaluation ──
+      const effectivePapers = allPapers.filter((p: any) => matchesDept(p, crsCd, brCd, deptIdStr));
+      const deptEvaluations = allEvaluations.filter((ev: any) => matchesDept(ev, crsCd, brCd, deptIdStr));
+      const evaluatedCount = deptEvaluations.length;
       const totalPapersCount = effectivePapers.length;
       const draftPapersCount = effectivePapers.filter((p: any) => p.status === 'DRAFT').length;
-      const submittedPapersCount = effectivePapers.filter((p: any) => p.status === 'SUBMITTED' || p.status === 'PENDING_DQAC' || p.status === 'READY_HOD').length;
-      const approvedPapersCount = effectivePapers.filter((p: any) => p.status === 'APPROVED' || p.status === 'HOD_APPROVED' || p.status === 'DQAC_APPROVED').length;
-      const qpScore = totalPapersCount > 0 ? Math.min(100, totalPapersCount * 40) : 0;
+      const submittedPapersCount = effectivePapers.filter((p: any) => p.status === 'SUBMITTED' || p.status === 'PENDING_DQAC' || p.status === 'READY_HOD' || p.status === 'PENDING_HOD_APPROVAL').length;
+      const approvedPapersCount = effectivePapers.filter((p: any) => p.status === 'APPROVED' || p.status === 'HOD_APPROVED' || p.status === 'DQAC_APPROVED' || p.status === 'PUBLISHED').length;
+      const qpScore = totalPapersCount > 0 ? Math.min(100, totalPapersCount * 40 + (evaluatedCount > 0 ? 20 : 0)) : (evaluatedCount > 0 ? 50 : 0);
       const qpStatus: 'READY' | 'IN_PROGRESS' | 'PENDING' = qpScore >= 80 ? 'READY' : qpScore >= 40 ? 'IN_PROGRESS' : 'PENDING';
 
       // ── 5. Approvals (QP + Timetable) ──
-      const totalItemsToApprove = totalPapersCount + (deptDrafts.length > 0 ? deptDrafts.length : 1);
+      const totalItemsToApprove = totalPapersCount + deptDrafts.length;
       const totalApprovedItems = approvedPapersCount + approvedDraftsCount;
-      const approvalRate = totalItemsToApprove > 0 ? Math.min(100, Math.round((totalApprovedItems / totalItemsToApprove) * 100)) : 100;
+      const approvalRate = totalItemsToApprove > 0 ? Math.min(100, Math.round((totalApprovedItems / totalItemsToApprove) * 100)) : 0;
       const approvalStatus: 'APPROVED' | 'PARTIALLY_APPROVED' | 'PENDING' = approvalRate >= 70 ? 'APPROVED' : approvalRate >= 40 ? 'PARTIALLY_APPROVED' : 'PENDING';
 
       // ── 6. Lesson Plan Material Updating ──
-      const deptLessons = allLessons.filter((l: any) => {
-        const lCrs = String(l.course_cd || '').trim().toLowerCase();
-        const lBr = String(l.branch_cd || '').trim().toLowerCase();
-        return lCrs === crsCd || lBr === brCd || (lCrs === '' && lBr === '');
-      });
-
-      const effectiveLessons = deptLessons.length > 0 ? deptLessons : allLessons;
+      const effectiveLessons = allLessons.filter((l: any) => matchesDept(l, crsCd, brCd, deptIdStr));
       const lessonCount = effectiveLessons.length;
       const lessonScore = lessonCount > 0 ? Math.min(100, lessonCount * 50) : 0;
       const lessonStatus: 'UP_TO_DATE' | 'PARTIAL' | 'BEHIND' = lessonScore >= 70 ? 'UP_TO_DATE' : lessonScore >= 30 ? 'PARTIAL' : 'BEHIND';
 
       // ── 7. Academic Chats ──
-      const chatScore = totalChatGroups > 0 ? 100 : 0;
+      const chatScore = totalChatGroups > 0 && totalChatMessages > 0 ? 100 : (totalChatGroups > 0 ? 50 : 0);
       const chatStatus: 'ACTIVE' | 'QUIET' | 'INACTIVE' = totalChatMessages > 5 ? 'ACTIVE' : totalChatGroups > 0 ? 'QUIET' : 'INACTIVE';
 
-      // ── 8. Academic Portfolio ──
-      const portfolioItems = totalSeminars + totalTutorials + totalMiniProjects;
-      const verifiedItems = verifiedSeminars + verifiedTutorials + verifiedMiniProjects;
-      const portfolioScore = portfolioItems > 0 ? Math.min(100, Math.round((verifiedItems / portfolioItems) * 100) || 75) : 80; // Baseline 80 if fresh term
+      // ── 8. Academic Portfolio (Seminars | Tutorials | Mini Projects) ──
+      const deptSeminars = seminarsRows.filter((r: any) => matchesDept(r, crsCd, brCd, deptIdStr));
+      const deptTutorials = tutorialsRows.filter((r: any) => matchesDept(r, crsCd, brCd, deptIdStr));
+      const deptMiniProjects = miniProjectsRows.filter((r: any) => matchesDept(r, crsCd, brCd, deptIdStr));
+
+      const dSemCount = deptSeminars.length;
+      const dSemVerified = deptSeminars.filter((r: any) => r.status === 'VERIFIED' || r.verified_at != null).length;
+      const dTutCount = deptTutorials.length;
+      const dTutVerified = deptTutorials.filter((r: any) => r.status === 'VERIFIED' || r.verified_at != null).length;
+      const dProjCount = deptMiniProjects.length;
+      const dProjVerified = deptMiniProjects.filter((r: any) => r.status === 'VERIFIED' || r.verified_at != null).length;
+
+      const portfolioItems = dSemCount + dTutCount + dProjCount;
+      const verifiedItems = dSemVerified + dTutVerified + dProjVerified;
+      const portfolioScore = portfolioItems > 0 ? Math.min(100, Math.round((verifiedItems / portfolioItems) * 100) || 50) : 0;
       const portfolioStatus: 'ACTIVE' | 'IN_PROGRESS' | 'PENDING' = portfolioScore >= 70 ? 'ACTIVE' : portfolioScore >= 40 ? 'IN_PROGRESS' : 'PENDING';
 
       // ── 9. Attendance ──
-      const attRate = totalAttendanceRecords > 0 
-        ? Math.round((presentAttendanceRecords / totalAttendanceRecords) * 100) 
-        : (totalAttendanceSessions > 0 ? 82 : 85);
+      const deptAttSessions = attendanceSessionsRaw.filter((a: any) => matchesDept(a, crsCd, brCd, deptIdStr));
+      const deptSessionIds = new Set(deptAttSessions.map((a: any) => String(a.id)));
+      const deptAttRecords = attendanceRecordsRaw.filter((r: any) => deptSessionIds.has(String(r.session_id)));
+      const dTotalAttRecords = deptAttRecords.length;
+      const dPresentAttRecords = deptAttRecords.filter((r: any) => String(r.status).toUpperCase() === 'PRESENT').length;
+      const attRate = dTotalAttRecords > 0 ? Math.round((dPresentAttRecords / dTotalAttRecords) * 100) : 0;
       const attStatus: 'HEALTHY' | 'MODERATE' | 'LOW' = attRate >= 75 ? 'HEALTHY' : attRate >= 50 ? 'MODERATE' : 'LOW';
 
       // Weighted Overall Score (100% max)
@@ -670,6 +706,7 @@ export class AnalyticsService {
           draftCount: draftPapersCount,
           submittedCount: submittedPapersCount,
           approvedCount: approvedPapersCount,
+          evaluatedCount,
           percentage: qpScore,
           status: qpStatus,
         },
@@ -694,19 +731,19 @@ export class AnalyticsService {
           status: chatStatus,
         },
         portfolio: {
-          seminarsCount: totalSeminars,
-          verifiedSeminars,
-          tutorialsCount: totalTutorials,
-          verifiedTutorials,
-          miniProjectsCount: totalMiniProjects,
-          verifiedMiniProjects,
+          seminarsCount: dSemCount,
+          verifiedSeminars: dSemVerified,
+          tutorialsCount: dTutCount,
+          verifiedTutorials: dTutVerified,
+          miniProjectsCount: dProjCount,
+          verifiedMiniProjects: dProjVerified,
           overallScore: portfolioScore,
           status: portfolioStatus,
         },
         attendance: {
-          totalSessions: totalAttendanceSessions,
-          totalRecords: totalAttendanceRecords,
-          presentRecords: presentAttendanceRecords,
+          totalSessions: deptAttSessions.length,
+          totalRecords: dTotalAttRecords,
+          presentRecords: dPresentAttRecords,
           attendanceRate: attRate,
           status: attStatus,
         },
@@ -766,14 +803,14 @@ export class AnalyticsService {
       portfolio: {
         score: avg((d: any) => d.portfolio.overallScore),
         label: '8. Academic Portfolio (Seminars, Tutorials, Projects)',
-        total: totalSeminars + totalTutorials + totalMiniProjects,
-        compliant: verifiedSeminars + verifiedTutorials + verifiedMiniProjects,
+        total: departmentResults.reduce((acc: number, d: any) => acc + d.portfolio.seminarsCount + d.portfolio.tutorialsCount + d.portfolio.miniProjectsCount, 0),
+        compliant: departmentResults.reduce((acc: number, d: any) => acc + d.portfolio.verifiedSeminars + d.portfolio.verifiedTutorials + d.portfolio.verifiedMiniProjects, 0),
       },
       attendance: {
         score: avg((d: any) => d.attendance.attendanceRate),
         label: '9. Attendance Compliance',
-        total: totalAttendanceRecords,
-        compliant: presentAttendanceRecords,
+        total: departmentResults.reduce((acc: number, d: any) => acc + d.attendance.totalRecords, 0),
+        compliant: departmentResults.reduce((acc: number, d: any) => acc + d.attendance.presentRecords, 0),
       },
     };
 

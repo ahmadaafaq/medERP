@@ -156,8 +156,9 @@ export default function MatrixMappingPage() {
     }
   }, []);
 
-  const isFaculty = pathname?.includes('/dashboard/faculty') || userRole === 'FACULTY';
+  const isFaculty = pathname?.includes('/dashboard/faculty') || userRole === 'FACULTY' || userRole === 'HOD' || userRole === 'DQAC';
   const role: 'admin' | 'faculty' = isFaculty ? 'faculty' : 'admin';
+  const isCoPoReadOnly = !isFaculty;
 
   // Active Tab: 1. CO - PO Mapping(Matrix) | 2. PO - PEO Mapping(Matrix)
   const [activeTab, setActiveTab] = useState<'co-po' | 'po-peo'>('co-po');
@@ -1125,6 +1126,7 @@ export default function MatrixMappingPage() {
   };
 
   const handleUpdateCoPoCell = (coCode: string, poCode: string, specificVal?: number) => {
+    if (isCoPoReadOnly) return;
     setCoPoMatrix((prev) => {
       const row = { ...(prev[coCode] || {}) };
       const current = row[poCode] || 0;
@@ -1146,6 +1148,7 @@ export default function MatrixMappingPage() {
 
   // Quick Action Utilities
   const handleBulkSetCoPo = (level: number) => {
+    if (isCoPoReadOnly) return;
     const updated: Record<string, Record<string, number>> = {};
     effectiveUnits.forEach((u) => {
       const code = u.code || u.id;
@@ -1275,6 +1278,10 @@ export default function MatrixMappingPage() {
 
   // Save Handlers
   const handleSaveCoPoMatrix = async () => {
+    if (isCoPoReadOnly) {
+      showToast('CO-PO Matrix is read-only for Admin / Dean. Only PO-PEO Matrix can be edited.', 'error');
+      return;
+    }
     if (!selectedSubject) {
       showToast('Please select a subject first.', 'error');
       return;
@@ -1850,30 +1857,37 @@ export default function MatrixMappingPage() {
                     </button>
                   )}
 
-                  {/* Quick Fill Dropdown / Actions */}
-                  <div className="flex items-center bg-[#F6F8FC] dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <button
-                      onClick={() => handleBulkSetCoPo(2)}
-                      className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all"
-                      title="Set all correlations to 2"
-                    >
-                      Set 2 (Med)
-                    </button>
-                    <button
-                      onClick={() => handleBulkSetCoPo(3)}
-                      className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all"
-                      title="Set all correlations to 3"
-                    >
-                      Set 3 (High)
-                    </button>
-                    <button
-                      onClick={() => handleBulkSetCoPo(0)}
-                      className="px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all"
-                      title="Clear all correlations"
-                    >
-                      Clear
-                    </button>
-                  </div>
+                  {/* Quick Fill Dropdown / Actions (Hidden in Read-Only Admin/Dean mode) */}
+                  {!isCoPoReadOnly ? (
+                    <div className="flex items-center bg-[#F6F8FC] dark:bg-slate-900 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                      <button
+                        onClick={() => handleBulkSetCoPo(2)}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all"
+                        title="Set all correlations to 2"
+                      >
+                        Set 2 (Med)
+                      </button>
+                      <button
+                        onClick={() => handleBulkSetCoPo(3)}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-indigo-600 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all"
+                        title="Set all correlations to 3"
+                      >
+                        Set 3 (High)
+                      </button>
+                      <button
+                        onClick={() => handleBulkSetCoPo(0)}
+                        className="px-2.5 py-1.5 text-[11px] font-bold text-rose-600 hover:text-rose-700 rounded-lg hover:bg-white dark:hover:bg-slate-800 transition-all"
+                        title="Clear all correlations"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  ) : (
+                    <span className="px-3 py-1.5 text-[11px] font-extrabold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-200 dark:border-amber-800 rounded-xl flex items-center gap-1.5">
+                      <span>🔒</span>
+                      <span>Read-Only (Faculty / HOD Managed • Admin can edit PO-PEO)</span>
+                    </span>
+                  )}
 
                   {/* Export CSV */}
                   <button
@@ -1893,15 +1907,17 @@ export default function MatrixMappingPage() {
                     <Printer className="w-4 h-4" />
                   </button>
 
-                  {/* Save Matrix */}
-                  <button
-                    onClick={handleSaveCoPoMatrix}
-                    disabled={savingMatrix}
-                    className="px-5 py-2.5 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-[#4E3FE6] rounded-xl shadow-md shadow-[#5B4BFF]/25 transition-all flex items-center gap-2 disabled:opacity-50"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>{savingMatrix ? 'Saving...' : 'Save CO-PO Matrix'}</span>
-                  </button>
+                  {/* Save Matrix (Only for Faculty / HOD) */}
+                  {!isCoPoReadOnly && (
+                    <button
+                      onClick={handleSaveCoPoMatrix}
+                      disabled={savingMatrix}
+                      className="px-5 py-2.5 text-xs font-bold text-white bg-[#5B4BFF] hover:bg-[#4E3FE6] rounded-xl shadow-md shadow-[#5B4BFF]/25 transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <Save className="w-4 h-4" />
+                      <span>{savingMatrix ? 'Saving...' : 'Save CO-PO Matrix'}</span>
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -2032,8 +2048,9 @@ export default function MatrixMappingPage() {
                                   <div className="flex items-center justify-center">
                                     <select
                                       value={val}
+                                      disabled={isCoPoReadOnly}
                                       onChange={(e) => handleUpdateCoPoCell(coCode, p.code, Number(e.target.value))}
-                                      className={`w-12 h-9 rounded-xl font-black text-xs text-center cursor-pointer transition-all shadow-sm outline-none border focus:ring-2 focus:ring-[#5B4BFF] ${
+                                      className={`w-12 h-9 rounded-xl font-black text-xs text-center transition-all shadow-sm outline-none border focus:ring-2 focus:ring-[#5B4BFF] ${isCoPoReadOnly ? 'cursor-not-allowed opacity-90' : 'cursor-pointer'} ${
                                         val === 3
                                           ? 'bg-[#5B4BFF] text-white border-[#5B4BFF] shadow-[#5B4BFF]/30'
                                           : val === 2

@@ -2469,6 +2469,14 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           rows = await this.tenantSchemaService.queryInTenant(slug, branchQuery).catch(() => []);
         }
 
+        if (courseCd && courseCd !== 'all' && courseCd !== 'ALL' && courseCd !== '0') {
+          const target = String(courseCd).trim().toLowerCase();
+          rows = rows.filter(r =>
+            String(r.course_cd || '').trim().toLowerCase() === target ||
+            String(r.course_code || '').trim().toLowerCase() === target
+          );
+        }
+
         return rows.map(r => ({
           ...r,
           college_id: collegeId,

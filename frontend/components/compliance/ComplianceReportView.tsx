@@ -124,7 +124,15 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
       try {
         const res = await fetch(`/api/v1/college-master/branches?${qp.toString()}`, { headers, cache: 'no-store' }).catch(() => null);
         if (res && res.ok) {
-          const rows = extractArr(await res.json());
+          let rows = extractArr(await res.json());
+          // Filter out non-academic admin cells (e.g. SPORTS, SECURITY) that have no course_cd/branch_cd
+          rows = rows.filter((b: any) => Boolean(b.course_cd || b.course_code || b.branch_cd));
+          if (selectedCourse !== 'ALL') {
+            const targetCrs = selectedCourse.trim().toLowerCase();
+            rows = rows.filter((b: any) =>
+              String(b.course_cd || b.course_code || '').trim().toLowerCase() === targetCrs
+            );
+          }
           setBranchesList(rows.map((b: any) => ({
             id: String(b.id || b.branch_cd || b.code),
             code: String(b.branch_cd || b.code || b.id),
@@ -296,11 +304,22 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
     fetchReport();
   }, [fetchReport]);
 
-  // Filtered department rows (further filtered by instant search query)
+  // Filtered department rows (client-side synced with selectedCourse, selectedBranch & searchQuery)
   const filteredDepartments: DepartmentCompliance[] = useMemo(() => {
     if (!data?.departments) return [];
     const q = searchQuery.trim().toLowerCase();
+    const crsTarget = selectedCourse !== 'ALL' ? selectedCourse.trim().toLowerCase() : '';
+    const brTarget = selectedBranch !== 'ALL' ? selectedBranch.trim().toLowerCase() : '';
+    const brObj = branchesList.find(b => b.id.toLowerCase() === brTarget || b.code.toLowerCase() === brTarget);
+    const brCode = brObj ? brObj.code.toLowerCase() : brTarget;
+
     return data.departments.filter(d => {
+      if (crsTarget && String(d.courseCd || '').trim().toLowerCase() !== crsTarget) return false;
+      if (brTarget) {
+        const dId = String(d.departmentId || '').trim().toLowerCase();
+        const dCd = String(d.departmentCode || '').trim().toLowerCase();
+        if (dId !== brTarget && dCd !== brTarget && dCd !== brCode) return false;
+      }
       if (!q) return true;
       return (
         d.departmentName.toLowerCase().includes(q) ||
@@ -309,7 +328,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
         d.hodName.toLowerCase().includes(q)
       );
     });
-  }, [data, searchQuery]);
+  }, [data, selectedCourse, selectedBranch, branchesList, searchQuery]);
 
   // Dynamically recompute Pie Chart & Right-Side 9 Pillars from filteredDepartments!
   const dynamicStats = useMemo(() => {
@@ -327,7 +346,17 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
         attentionCount: 0,
         overallScore: 0,
         overallStatus: 'NEEDS_ATTENTION' as const,
-        pillars: data?.pillars || null,
+        pillars: {
+          copoMapping: { score: 0, label: '1. CO-PO Matrix Mapping', total: 0, compliant: 0 },
+          timetable: { score: 0, label: '2. Timetable Up-to-date', total: 0, compliant: 0 },
+          questionBank: { score: 0, label: '3. Question Bank', total: 0, compliant: 0 },
+          questionDesign: { score: 0, label: '4. Question Design Papers', total: 0, compliant: 0 },
+          approvals: { score: 0, label: '5. Academic Approvals', total: 0, compliant: 0 },
+          lessonPlan: { score: 0, label: '6. Lesson Plan Materials', total: 0, compliant: 0 },
+          chats: { score: 0, label: '7. Academic Chats', total: 0, compliant: 0 },
+          portfolio: { score: 0, label: '8. Academic Portfolio', total: 0, compliant: 0 },
+          attendance: { score: 0, label: '9. Attendance Compliance', total: 0, compliant: 0 },
+        },
       };
     }
 
@@ -380,14 +409,14 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
       portfolio: {
         score: avg(d => d.portfolio.overallScore),
         label: '8. Academic Portfolio',
-        total: active[0] ? active[0].portfolio.seminarsCount + active[0].portfolio.tutorialsCount + active[0].portfolio.miniProjectsCount : 0,
-        compliant: active[0] ? active[0].portfolio.verifiedSeminars + active[0].portfolio.verifiedTutorials + active[0].portfolio.verifiedMiniProjects : 0,
+        total: active.reduce((acc, d) => acc + d.portfolio.seminarsCount + d.portfolio.tutorialsCount + d.portfolio.miniProjectsCount, 0),
+        compliant: active.reduce((acc, d) => acc + d.portfolio.verifiedSeminars + d.portfolio.verifiedTutorials + d.portfolio.verifiedMiniProjects, 0),
       },
       attendance: {
         score: avg(d => d.attendance.attendanceRate),
         label: '9. Attendance Compliance',
-        total: active[0]?.attendance.totalRecords || 0,
-        compliant: active[0]?.attendance.presentRecords || 0,
+        total: active.reduce((acc, d) => acc + d.attendance.totalRecords, 0),
+        compliant: active.reduce((acc, d) => acc + d.attendance.presentRecords, 0),
       },
     };
 
