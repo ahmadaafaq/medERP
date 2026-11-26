@@ -2462,7 +2462,7 @@ export class CollegeMasterService implements OnApplicationBootstrap {
           ) sub
           ORDER BY CAST(NULLIF(regexp_replace(COALESCE(sub.branch_cd, sub.code), '\\D', '', 'g'), '') AS INTEGER) ASC NULLS LAST, sub.name ASC
         `;
-        let rows = await this.tenantSchemaService.queryInTenant(slug, branchQuery).catch(() => []);
+        let rows: any[] = await this.tenantSchemaService.queryInTenant(slug, branchQuery).catch(() => []);
 
         if (rows.length === 0) {
           await this.syncExternalBranches(slug);
@@ -2471,13 +2471,13 @@ export class CollegeMasterService implements OnApplicationBootstrap {
 
         if (courseCd && courseCd !== 'all' && courseCd !== 'ALL' && courseCd !== '0') {
           const target = String(courseCd).trim().toLowerCase();
-          rows = rows.filter(r =>
+          rows = rows.filter((r: any) =>
             String(r.course_cd || '').trim().toLowerCase() === target ||
             String(r.course_code || '').trim().toLowerCase() === target
           );
         }
 
-        return rows.map(r => ({
+        return rows.map((r: any) => ({
           ...r,
           college_id: collegeId,
           college_name: collegeName,
