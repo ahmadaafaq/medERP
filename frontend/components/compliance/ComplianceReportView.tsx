@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import Sidebar from '../Sidebar';
 import Header from '../Header';
 import { ComplianceReportData, DepartmentCompliance } from './AcademicComplianceWidget';
+import PillarDrilldownModal, { PillarKey } from './PillarDrilldownModal';
 
 interface ComplianceReportViewProps {
   role?: 'admin' | 'hod';
@@ -45,6 +46,7 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedDeptId, setExpandedDeptId] = useState<string | null>(null);
+  const [drilldownPillar, setDrilldownPillar] = useState<PillarKey | null>(null);
 
   const getAuthContext = useCallback((overrideSlug?: string) => {
     const defaultSlug = (
@@ -775,17 +777,22 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
 
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                     {[
-                      { icon: '🎯', label: '1. CO-PO Matrix Mapping', stat: dynamicStats.pillars.copoMapping },
-                      { icon: '📅', label: '2. Timetable Up-to-date', stat: dynamicStats.pillars.timetable },
-                      { icon: '📚', label: '3. Question Bank & Bloom\'s', stat: dynamicStats.pillars.questionBank },
-                      { icon: '📝', label: '4. Question Design Paper', stat: dynamicStats.pillars.questionDesign },
-                      { icon: '✅', label: '5. Academic Approvals', stat: dynamicStats.pillars.approvals },
-                      { icon: '📖', label: '6. Lesson Plan Materials', stat: dynamicStats.pillars.lessonPlan },
-                      { icon: '💬', label: '7. Academic Chats', stat: dynamicStats.pillars.chats },
-                      { icon: '💼', label: '8. Portfolio (Seminar/MiniProj)', stat: dynamicStats.pillars.portfolio },
-                      { icon: '👥', label: '9. Student Attendance', stat: dynamicStats.pillars.attendance },
+                      { key: 'copo' as PillarKey, icon: '🎯', label: '1. CO-PO Matrix Mapping', stat: dynamicStats.pillars.copoMapping },
+                      { key: 'timetable' as PillarKey, icon: '📅', label: '2. Timetable Up-to-date', stat: dynamicStats.pillars.timetable },
+                      { key: 'qb' as PillarKey, icon: '📚', label: '3. Question Bank & Bloom\'s', stat: dynamicStats.pillars.questionBank },
+                      { key: 'qp' as PillarKey, icon: '📝', label: '4. Question Design Paper', stat: dynamicStats.pillars.questionDesign },
+                      { key: 'approvals' as PillarKey, icon: '✅', label: '5. Academic Approvals', stat: dynamicStats.pillars.approvals },
+                      { key: 'lessons' as PillarKey, icon: '📖', label: '6. Lesson Plan Materials', stat: dynamicStats.pillars.lessonPlan },
+                      { key: 'chats' as PillarKey, icon: '💬', label: '7. Academic Chats', stat: dynamicStats.pillars.chats },
+                      { key: 'portfolio' as PillarKey, icon: '💼', label: '8. Portfolio (Seminar/MiniProj)', stat: dynamicStats.pillars.portfolio },
+                      { key: 'attendance' as PillarKey, icon: '👥', label: '9. Student Attendance', stat: dynamicStats.pillars.attendance },
                     ].map(p => (
-                      <div key={p.label} className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 space-y-1.5">
+                      <div
+                        key={p.label}
+                        onClick={() => setDrilldownPillar(p.key)}
+                        title="Click to open detailed Donut & Tabular breakdown"
+                        className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-800 hover:border-[#5B4BFF] hover:shadow-sm transition-all cursor-pointer space-y-1.5"
+                      >
                         <div className="flex items-center justify-between">
                           <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 truncate">
                             <span>{p.icon}</span>
@@ -998,6 +1005,14 @@ export default function ComplianceReportView({ role = 'admin' }: ComplianceRepor
           )}
         </main>
       </div>
+
+      {/* Interactive Pillar Drill-Down Popup Modal */}
+      <PillarDrilldownModal
+        pillarKey={drilldownPillar}
+        collegeName={data?.collegeName || 'Institution'}
+        departments={filteredDepartments}
+        onClose={() => setDrilldownPillar(null)}
+      />
     </div>
   );
 }

@@ -1,7 +1,8 @@
 import {
   Controller, Get, Post, Put, Patch, Body,
-  Param, Query, ParseUUIDPipe, UseGuards,
+  Param, Query, ParseUUIDPipe, UseGuards, Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import { CreateSessionDto, UpdateRecordDto, AttendanceQueryDto } from './dto/attendance.dto';
@@ -302,5 +303,44 @@ export class AttendanceController {
     @TenantSlug() tenant: string,
   ) {
     return this.attendanceService.calculatePhaseAttendanceSummary(phaseId, tenant, studentId);
+  }
+
+  // ─── EXCEL ATTENDANCE FORMAT PREVIEW, TEMPLATE DOWNLOAD & UPLOAD ──────────
+  @Public()
+  @Get('excel-preview')
+  @ApiOperation({ summary: 'Preview students & subjects matrix for Excel attendance template' })
+  async getExcelAttendancePreview(
+    @TenantSlug() tenantSlug: string,
+    @Query() query: any,
+  ) {
+    const slug = query.tenant || tenantSlug;
+    return this.attendanceService.getExcelAttendancePreview(slug, query);
+  }
+
+  @Public()
+  @Get('excel-template')
+  @ApiOperation({ summary: 'Download Excel attendance format matching FORMAT_ATTENDANCE_MDIS.xlsx' })
+  async downloadExcelAttendanceTemplate(
+    @TenantSlug() tenantSlug: string,
+    @Query() query: any,
+    @Res() res: Response,
+  ) {
+    const slug = query.tenant || tenantSlug;
+    const { buffer, filename } = await this.attendanceService.generateExcelAttendanceTemplate(slug, query);
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.send(buffer);
+  }
+
+  @Public()
+  @Post('excel-upload')
+  @ApiOperation({ summary: 'Upload filled Excel attendance (LH & LA) and sync into attendance_sessions & attendance_records' })
+  async uploadExcelAttendance(
+    @TenantSlug() tenantSlug: string,
+    @Body() body: any,
+    @CurrentUser() user?: JwtPayload,
+  ) {
+    const slug = body?.tenant || tenantSlug;
+    return this.attendanceService.uploadExcelAttendance(slug, body, user);
   }
 }

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
+import PillarDrilldownModal, { PillarKey } from './PillarDrilldownModal';
 
 export interface PillarStat {
   score: number;
@@ -135,6 +136,7 @@ export default function AcademicComplianceWidget({
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'chart' | 'pillars' | 'departments'>('chart');
   const [hoveredSlice, setHoveredSlice] = useState<string | null>(null);
+  const [drilldownPillar, setDrilldownPillar] = useState<PillarKey | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const fetchComplianceData = async () => {
@@ -342,6 +344,7 @@ export default function AcademicComplianceWidget({
                             className="transition-all duration-300 cursor-pointer"
                             onMouseEnter={() => setHoveredSlice(p.key)}
                             onMouseLeave={() => setHoveredSlice(null)}
+                            onClick={() => setDrilldownPillar(p.key as PillarKey)}
                           />
                         );
                       })}
@@ -398,6 +401,8 @@ export default function AcademicComplianceWidget({
                       key={p.key}
                       onMouseEnter={() => setHoveredSlice(p.key)}
                       onMouseLeave={() => setHoveredSlice(null)}
+                      onClick={() => setDrilldownPillar(p.key as PillarKey)}
+                      title="Click to inspect course, branch, batch, semester & subject breakdown"
                       className={`p-3 rounded-xl border bg-white dark:bg-slate-800/60 flex items-center justify-between gap-3 transition-all cursor-pointer ${hoveredSlice === p.key ? 'border-[#5B4BFF] shadow-md ring-1 ring-[#5B4BFF]/30' : 'border-slate-200/80 dark:border-slate-800 hover:shadow-sm'}`}
                     >
                       <div className="flex items-center gap-2.5 min-w-0">
@@ -534,7 +539,7 @@ export default function AcademicComplianceWidget({
 
           {/* Quick Footer */}
           <div className="pt-2 flex items-center justify-between text-[11px] text-slate-400">
-            <span>Last refreshed: {new Date(data.generatedAt).toLocaleTimeString()}</span>
+            <span>Last refreshed: {new Date(data.generatedAt).toLocaleTimeString()} • Click any pillar for course &amp; subject popup</span>
             <Link
               href={reportUrl}
               className="text-[#5B4BFF] hover:underline font-bold flex items-center gap-1"
@@ -545,6 +550,14 @@ export default function AcademicComplianceWidget({
           </div>
         </div>
       )}
+
+      {/* Interactive Pillar Drill-Down Popup Modal */}
+      <PillarDrilldownModal
+        pillarKey={drilldownPillar}
+        collegeName={data?.collegeName || 'Institution'}
+        departments={data?.departments || []}
+        onClose={() => setDrilldownPillar(null)}
+      />
     </div>
   );
 }

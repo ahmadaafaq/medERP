@@ -312,6 +312,7 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [errorType, setErrorType] = useState<'INVALID_USER_ID' | 'INVALID_PASSWORD' | 'GENERAL' | ''>('');
 
   // Dynamic theme derived from selected college or Owner custom overrides
   const [ownerThemeOverride, setOwnerThemeOverride] = useState<any>(null);
@@ -682,6 +683,8 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
     setErrorMsg('');
+    setErrorType('');
+    let isRedirecting = false;
 
     const targetSlug = selectedCollege.slug || '';
     const isSrms = targetSlug.toLowerCase().includes('srms');
@@ -827,6 +830,7 @@ export default function LoginPage() {
           }
 
           const effectiveRole = verifiedRole;
+          isRedirecting = true;
           if (effectiveRole === 'ADMIN' || effectiveRole === 'COLLEGE_ADMIN' || effectiveRole === 'SUPER_ADMIN') {
             router.push('/dashboard/admin');
           } else if (effectiveRole === 'HOD') {
@@ -849,11 +853,23 @@ export default function LoginPage() {
       }
 
       const errData = await res.json().catch(() => ({}));
-      setErrorMsg(errData.message || 'Invalid username or password for this institution');
+      const msg = String(errData.message || 'Invalid username or password for this institution');
+      const code = String(errData.errorCode || '');
+      if (code === 'INVALID_USER_ID' || msg.toLowerCase().includes('not registered') || msg.toLowerCase().includes('not found')) {
+        setErrorType('INVALID_USER_ID');
+      } else if (code === 'INVALID_PASSWORD' || msg.toLowerCase().includes('incorrect password') || msg.toLowerCase().includes('wrong password')) {
+        setErrorType('INVALID_PASSWORD');
+      } else {
+        setErrorType('GENERAL');
+      }
+      setErrorMsg(msg);
     } catch {
+      setErrorType('GENERAL');
       setErrorMsg('Cannot connect to backend server. Please verify network or credentials.');
     } finally {
-      setLoading(false);
+      if (!isRedirecting) {
+        setLoading(false);
+      }
     }
   };
 
@@ -1156,10 +1172,48 @@ export default function LoginPage() {
             })}
           </div>
 
-          {/* Error Alert */}
+          {/* Premium Modern Error Alert */}
           {errorMsg && (
-            <div className="p-2.5 rounded-xl border bg-rose-50 border-rose-200 text-rose-700 text-xs font-bold text-center">
-              <p className="text-[11px] leading-tight text-rose-700">{errorMsg}</p>
+            <div
+              role="alert"
+              className={`rounded-2xl border p-3 shadow-sm flex items-start gap-2.5 animate-fadeIn ${
+                errorType === 'INVALID_USER_ID'
+                  ? 'bg-gradient-to-r from-amber-50 to-orange-50/80 border-amber-300/80 text-amber-900'
+                  : 'bg-gradient-to-r from-rose-50 to-red-50/80 border-rose-300/80 text-rose-900'
+              }`}
+            >
+              <div
+                className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 text-sm shadow-xs ${
+                  errorType === 'INVALID_USER_ID'
+                    ? 'bg-amber-500 text-white'
+                    : 'bg-rose-500 text-white'
+                }`}
+              >
+                {errorType === 'INVALID_USER_ID' ? '🪪' : errorType === 'INVALID_PASSWORD' ? '🔐' : '⚠️'}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[11px] font-black uppercase tracking-wider leading-tight">
+                  {errorType === 'INVALID_USER_ID'
+                    ? 'Invalid User ID / Not Registered'
+                    : errorType === 'INVALID_PASSWORD'
+                    ? 'Incorrect Password'
+                    : 'Authentication Failed'}
+                </p>
+                <p className="text-[11px] font-semibold leading-snug mt-0.5 opacity-90 break-words">
+                  {errorMsg}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setErrorMsg('');
+                  setErrorType('');
+                }}
+                className="text-xs font-bold opacity-50 hover:opacity-100 px-1 cursor-pointer"
+                aria-label="Dismiss alert"
+              >
+                ✕
+              </button>
             </div>
           )}
 
@@ -1202,7 +1256,11 @@ export default function LoginPage() {
                       ? 'Enter Warden Username / Email'
                       : 'Enter Username / Email'
                   }
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 transition placeholder-[#94A3B8]"
+                  className={`w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none transition placeholder-[#94A3B8] ${
+                    errorType === 'INVALID_USER_ID'
+                      ? 'border-amber-400 ring-2 ring-amber-500/20 focus:border-amber-500'
+                      : 'border-[#E2E8F0] focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20'
+                  }`}
                   required
                 />
               </div>
@@ -1226,7 +1284,11 @@ export default function LoginPage() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
-                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border border-[#E2E8F0] text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20 transition placeholder-[#94A3B8]"
+                  className={`w-full pl-8 pr-3 py-2 rounded-xl bg-[#F8FAFC] border text-[#0F172A] font-bold text-xs focus:bg-white focus:outline-none transition placeholder-[#94A3B8] ${
+                    errorType === 'INVALID_PASSWORD'
+                      ? 'border-rose-400 ring-2 ring-rose-500/20 focus:border-rose-500'
+                      : 'border-[#E2E8F0] focus:border-[#F36C21] focus:ring-2 focus:ring-[#F36C21]/20'
+                  }`}
                   required
                 />
               </div>
@@ -1240,8 +1302,8 @@ export default function LoginPage() {
             >
               {loading ? (
                 <>
-                  <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  <span>Signing In...</span>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <span>Authenticating &amp; Loading Portal...</span>
                 </>
               ) : (
                 <>

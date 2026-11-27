@@ -398,7 +398,9 @@ export class AnalyticsService {
         this.ds.query(`SELECT id, code, name, course_cd, branch_cd, department_id FROM "${schema}".subjects WHERE is_active = true`).catch(() => [])
       ),
       // CO-PO Matrices
-      this.ds.query(`SELECT id, subject_id, subject_code, course_cd, branch_cd, sem_cd, section, matrix_data FROM "${schema}".co_po_matrices`).catch(() => []),
+      this.ds.query(`SELECT id, subject_id, subject_code, course_cd, branch_cd, batch_year, sem_cd, section, matrix_data FROM "${schema}".co_po_matrices`).catch(() =>
+        this.ds.query(`SELECT id, subject_id, subject_code, course_cd, branch_cd, sem_cd, section, matrix_data FROM "${schema}".co_po_matrices`).catch(() => [])
+      ),
       // Timetable Slots (supports both course_cd/branch_cd and course_id/branch_id schemas)
       this.ds.query(`SELECT id, course_cd, branch_cd, department_id, batch_id, batch_cd, semester, section FROM "${schema}".timetable_slots`).catch(() =>
         this.ds.query(`SELECT id, department_id, batch_id, semester, section FROM "${schema}".timetable_slots`).catch(() => [])
@@ -549,6 +551,9 @@ export class AnalyticsService {
         return {
           code: s.code || 'SUBJ',
           name: s.name || 'Subject',
+          semester: foundMatrix?.sem_cd || s.semester || '-',
+          section: foundMatrix?.section || '-',
+          batchYear: foundMatrix?.batch_year ? String(foundMatrix.batch_year) : '-',
           isMapped: Boolean(foundMatrix),
         };
       });
@@ -694,6 +699,12 @@ export class AnalyticsService {
           isUpToDate: hasActiveSlots || approvedDraftsCount > 0,
           percentage: timetableScore,
           status: timetableStatus,
+          records: deptDrafts.slice(0, 20).map((d: any) => ({
+            batch: d.batch_cd || '-',
+            semester: d.semester || '-',
+            section: d.section || '-',
+            status: d.status || 'DRAFT',
+          })),
         },
         questionBank: {
           totalQuestions: qbCount,
@@ -709,6 +720,14 @@ export class AnalyticsService {
           evaluatedCount,
           percentage: qpScore,
           status: qpStatus,
+          records: effectivePapers.slice(0, 20).map((p: any) => ({
+            code: p.code || 'PAPER',
+            name: p.name || 'Exam Paper',
+            batch: p.batch_cd || '-',
+            semester: p.semester || p.sem_cd || '-',
+            section: p.section || '-',
+            status: p.status || 'DRAFT',
+          })),
         },
         approvals: {
           approvedQPs: approvedPapersCount,

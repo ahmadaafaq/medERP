@@ -11,6 +11,8 @@ import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { UserRole } from '../common/enums/role.enum';
 
 import { TenantSchemaService } from '../database/tenant-schema.service';
+import * as XLSX from 'xlsx';
+import * as ExcelJS from 'exceljs';
 
 function parseToLocalDateString(dateInput: any): string {
   if (!dateInput) return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Kolkata' }).format(new Date());
@@ -2944,6 +2946,699 @@ export class AttendanceService {
       },
       total_students: studentSummaries.length,
       students: studentSummaries,
+    };
+  }
+
+  // ─── EXCEL ATTENDANCE FORMAT PREVIEW, TEMPLATE & UPLOAD ───────────────────
+  private normSecCode(val: any): string {
+    const s = String(val || '').trim().toUpperCase();
+    if (!s || s === 'ALL' || s === '0') return '';
+    if (s === '1' || s === 'A' || s === 'SECTION A' || s === 'SECTION 1' || s === 'SEC A') return '1';
+    if (s === '2' || s === 'B' || s === 'SECTION B' || s === 'SECTION 2' || s === 'SEC B') return '2';
+    if (s === '3' || s === 'C' || s === 'SECTION C' || s === 'SECTION 3' || s === 'SEC C') return '3';
+    if (s === '4' || s === 'D' || s === 'SECTION D' || s === 'SECTION 4' || s === 'SEC D') return '4';
+    return s.match(/\d+/)?.[0] || s;
+  }
+
+  async getExcelAttendancePreview(tenantSlug: string, query: any) {
+    const schema = this.getSchema(tenantSlug);
+    const cleanSlug = schema.replace(/^tenant_/, '');
+
+    // 1. Resolve College Code
+    const tenantRows = await this.ds.query(
+      `SELECT code, slug, name FROM public.tenants WHERE LOWER(slug) = $1 LIMIT 1`,
+      [cleanSlug.toLowerCase()],
+    ).catch(() => []);
+    const colgCd = String(query.collegeCode || tenantRows[0]?.code || cleanSlug).trim();
+
+    const courseCd = String(query.courseCd || query.course_cd || '').trim();
+    const rawBranch = String(query.branchCd || query.branch_cd || query.departmentId || '').trim();
+    const rawBatch = String(query.batchId || query.batch_cd || '').trim();
+    const semCd = String(query.semester || query.sem_cd || '').replace(/\D/g, '').trim();
+    const secCd = this.normSecCode(query.section || query.sec_cd || '');
+
+    // 2. Resolve Branch / Department
+    let deptId = '';
+    let branchCd = rawBranch;
+    if (rawBranch && rawBranch !== 'ALL') {
+      const deptRows = await this.ds.query(
+        `SELECT id, code, branch_cd FROM "${schema}".departments WHERE id::text = $1 OR LOWER(code) = LOWER($1) OR LOWER(branch_cd) = LOWER($1) LIMIT 1`,
+        [rawBranch],
+      ).catch(() => []);
+      if (deptRows[0]) {
+        deptId = deptRows[0].id;
+        branchCd = deptRows[0].branch_cd || deptRows[0].code || rawBranch;
+      }
+    }
+
+    // 3. Resolve Batch
+    let batchUuid = '';
+    let batchCd = rawBatch;
+    if (rawBatch && rawBatch !== 'ALL') {
+      const bRows = await this.ds.query(
+        `SELECT id, code, batch_cd, year FROM "${schema}".batches WHERE id::text = $1 OR LOWER(code) = LOWER($1) OR LOWER(batch_cd) = LOWER($1) OR year::text = $1 LIMIT 1`,
+        [rawBatch],
+      ).catch(() => []);
+      if (bRows[0]) {
+        batchUuid = bRows[0].id;
+        batchCd = bRows[0].batch_cd || bRows[0].code || rawBatch;
+      }
+    }
+
+    // 4. Resolve Section UUID (if sections table has matching row)
+    let sectionUuid = '';
+    if (secCd) {
+      const secRows = await this.ds.query(
+        `SELECT id, code, name FROM "${schema}".sections WHERE (LOWER(code) = LOWER($1) OR LOWER(name) ILIKE $2) LIMIT 1`,
+        [secCd, `%${secCd}%`],
+      ).catch(() => []);
+      if (secRows[0]) sectionUuid = secRows[0].id;
+    }
+
+    // 5. Fetch Subjects from Subject Master (matching course, branch, semester)
+    const allSubjects = await this.ds.query(
+      `SELECT id, code, name, course_cd, branch_cd, department_id, semester FROM "${schema}".subjects WHERE is_active = true ORDER BY code ASC`,
+    ).catch(() =>
+      this.ds.query(`SELECT id, code, name, course_cd, branch_cd, department_id FROM "${schema}".subjects WHERE is_active = true ORDER BY code ASC`).catch(() => [])
+    );
+
+    const allOfferings = await this.ds.query(
+      `SELECT subject_id, subject_code, course_cd, branch_cd, semester, batch_id FROM "${schema}".subject_offerings WHERE is_active = true`,
+    ).catch(() => []);
+
+    const matchedSubjects = allSubjects.filter((s: any) => {
+      const sCrs = String(s.course_cd || '').trim().toLowerCase();
+      const sBr = String(s.branch_cd || '').trim().toLowerCase();
+      const sDept = String(s.department_id || '').trim().toLowerCase();
+      const sSem = String(s.semester || '').replace(/\D/g, '').trim();
+
+      if (courseCd && courseCd !== 'ALL' && sCrs && sCrs !== courseCd.toLowerCase()) return false;
+      if (branchCd && branchCd !== 'ALL') {
+        const brLow = branchCd.toLowerCase();
+        const deptLow = deptId.toLowerCase();
+        if (sBr && sBr !== brLow && sBr !== courseCd.toLowerCase() && (!deptLow || sDept !== deptLow)) return false;
+      }
+      if (semCd) {
+        if (sSem && sSem !== semCd) return false;
+        // If subject doesn't specify semester directly, check subject_offerings
+        if (!sSem && allOfferings.length > 0) {
+          const hasOffForSub = allOfferings.some((o: any) => String(o.subject_id) === String(s.id) || String(o.subject_code) === String(s.code));
+          if (hasOffForSub) {
+            const matchesOff = allOfferings.some((o: any) =>
+              (String(o.subject_id) === String(s.id) || String(o.subject_code) === String(s.code)) &&
+              (!o.semester || String(o.semester).replace(/\D/g, '') === semCd) &&
+              (!courseCd || !o.course_cd || String(o.course_cd).toLowerCase() === courseCd.toLowerCase())
+            );
+            if (!matchesOff) return false;
+          }
+        }
+      }
+      return true;
+    });
+
+    // 6. Fetch Students (RollNo, or RegNo if RollNo is missing, + Name)
+    const allStudents = await this.ds.query(
+      `SELECT id, rollno, registration_no, name, course_cd, branch_id, department_id, batch_id, batch_cd, section_id
+       FROM "${schema}".students
+       WHERE is_active = true
+       ORDER BY COALESCE(NULLIF(rollno, ''), registration_no, name) ASC`,
+    ).catch(() => []);
+
+    const matchedStudents = allStudents.filter((st: any) => {
+      const stCrs = String(st.course_cd || '').trim().toLowerCase();
+      const stDept = String(st.department_id || '').trim().toLowerCase();
+      const stBr = String(st.branch_id || '').trim().toLowerCase();
+      const stBatchId = String(st.batch_id || '').trim().toLowerCase();
+      const stBatchCd = String(st.batch_cd || '').trim().toLowerCase();
+
+      if (courseCd && courseCd !== 'ALL' && stCrs && stCrs !== courseCd.toLowerCase()) return false;
+      if (branchCd && branchCd !== 'ALL' && (stDept || stBr)) {
+        const brLow = branchCd.toLowerCase();
+        const deptLow = deptId.toLowerCase();
+        if (deptLow && stDept && stDept !== deptLow && stBr !== brLow && stBr !== deptLow) {
+          // Allow if course matches and student's department matches branch code
+          if (stDept !== brLow) return false;
+        }
+      }
+      if (batchCd && batchCd !== 'ALL' && (stBatchId || stBatchCd)) {
+        const matchB = (batchUuid && stBatchId === batchUuid.toLowerCase()) || stBatchCd === batchCd.toLowerCase() || stBatchId === batchCd.toLowerCase();
+        if (!matchB) return false;
+      }
+      if (sectionUuid && st.section_id && String(st.section_id) !== String(sectionUuid)) {
+        return false;
+      }
+      return true;
+    });
+
+    // 7. Fetch existing attendance (LH & LA) per student & subject for preview
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    const fromDateStr = dateRegex.test(String(query.fromDate || '').trim()) ? String(query.fromDate).trim() : '';
+    const toDateStr = dateRegex.test(String(query.toDate || '').trim()) ? String(query.toDate).trim() : '';
+
+    const attMap = new Map<string, { lh: number; la: number }>();
+    if (matchedSubjects.length > 0 && matchedStudents.length > 0) {
+      const subjIds = matchedSubjects.map((s: any) => String(s.id));
+      const studIds = matchedStudents.map((st: any) => String(st.id));
+      const params: any[] = [subjIds, studIds];
+      let dateFilter = '';
+      if (fromDateStr) {
+        params.push(fromDateStr);
+        dateFilter += ` AND s.session_date::date >= $${params.length}::date`;
+      }
+      if (toDateStr) {
+        params.push(toDateStr);
+        dateFilter += ` AND s.session_date::date <= $${params.length}::date`;
+      }
+
+      const attRows = await this.ds.query(
+        `SELECT
+           ar.student_id::text AS student_id,
+           s.subject_id::text AS subject_id,
+           COUNT(DISTINCT s.id)::int AS lh,
+           COUNT(DISTINCT CASE WHEN ar.status = 'PRESENT' THEN s.id END)::int AS la
+         FROM "${schema}".attendance_sessions s
+         JOIN "${schema}".attendance_records ar ON ar.session_id = s.id
+         WHERE s.is_cancelled = false
+           AND s.subject_id::text = ANY($1::text[])
+           AND ar.student_id::text = ANY($2::text[])
+           ${dateFilter}
+         GROUP BY ar.student_id, s.subject_id`,
+        params,
+      ).catch(() => []);
+
+      for (const r of attRows) {
+        attMap.set(`${r.student_id}::${r.subject_id}`, {
+          lh: Number(r.lh || 0),
+          la: Number(r.la || 0),
+        });
+      }
+    }
+
+    const formattedStudents = matchedStudents.map((st: any, idx: number) => {
+      const attendance: Record<string, { lh: number; la: number }> = {};
+      let totalLh = 0;
+      let totalLa = 0;
+      for (const subj of matchedSubjects) {
+        const rec = attMap.get(`${st.id}::${subj.id}`) || { lh: 0, la: 0 };
+        attendance[String(subj.id)] = rec;
+        totalLh += rec.lh;
+        totalLa += rec.la;
+      }
+      const totalAtt = totalLh > 0 ? Number(((totalLa / totalLh) * 100).toFixed(1)) : null;
+
+      return {
+        sl_no: idx + 1,
+        id: st.id,
+        roll_no: (st.rollno && String(st.rollno).trim()) || (st.registration_no && String(st.registration_no).trim()) || '',
+        registration_no: st.registration_no || '',
+        student_name: st.name || 'Student',
+        colg_cd: colgCd,
+        course_cd: courseCd || st.course_cd || '',
+        branch_cd: branchCd || '',
+        batch_cd: batchCd || st.batch_cd || '',
+        sem_cd: semCd || '1',
+        sec_cd: secCd || '1',
+        attendance,
+        total_lh: totalLh,
+        total_la: totalLa,
+        total_att: totalAtt,
+      };
+    });
+
+    return {
+      codes: {
+        colg_cd: colgCd,
+        course_cd: courseCd,
+        branch_cd: branchCd,
+        batch_cd: batchCd,
+        sem_cd: semCd || '1',
+        sec_cd: secCd || '1',
+      },
+      subjects: matchedSubjects.map((s: any) => ({
+        id: s.id,
+        code: s.code || s.id,
+        name: s.name || s.code,
+      })),
+      students: formattedStudents,
+    };
+  }
+
+  async generateExcelAttendanceTemplate(tenantSlug: string, query: any): Promise<{ buffer: Buffer; filename: string }> {
+    const preview = await this.getExcelAttendancePreview(tenantSlug, query);
+    const { codes, subjects, students } = preview;
+
+    const wb = new ExcelJS.Workbook();
+    const sheetTitle = `Attendance_${codes.course_cd || 'Sheet'}`.slice(0, 31);
+    const ws = wb.addWorksheet(sheetTitle, {
+      views: [{ state: 'frozen', xSplit: 3, ySplit: 2 }],
+    });
+
+    const baseHeaders = ['sl_no', 'roll_no', 'student_name', 'colg_cd', 'course_cd', 'branch_cd', 'batch_cd', 'sem_cd', 'sec_cd'];
+    const subjectColors = ['FFF36C21', 'FF5B4BFF', 'FF0D9488', 'FF0284C7', 'FF7C3AED', 'FFDB2777'];
+    const headerBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+      left: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+      bottom: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+      right: { style: 'thin', color: { argb: 'FFFFFFFF' } },
+    };
+    const cellBorder: Partial<ExcelJS.Borders> = {
+      top: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      left: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      bottom: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+      right: { style: 'thin', color: { argb: 'FFE2E8F0' } },
+    };
+
+    const r1 = ws.getRow(1);
+    const r2 = ws.getRow(2);
+    r1.height = 38;
+    r2.height = 22;
+
+    // Columns A..I: vertical merge + deep purple header
+    baseHeaders.forEach((h, idx) => {
+      const colNum = idx + 1;
+      const cell = r1.getCell(colNum);
+      cell.value = h;
+      ws.mergeCells(1, colNum, 2, colNum);
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2D2575' } };
+      cell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      cell.alignment = { horizontal: 'center', vertical: 'middle' };
+      cell.border = headerBorder;
+      r2.getCell(colNum).border = headerBorder;
+    });
+
+    // Subject columns (2 columns each: LH, LA) with lowercase subject name + bold subject code
+    subjects.forEach((subj: any, idx: number) => {
+      const startCol = baseHeaders.length + 1 + idx * 2;
+      const endCol = startCol + 1;
+      const colorArgb = subjectColors[idx % subjectColors.length];
+      const subjNameLower = String(subj.name || subj.code || '').trim().toLowerCase();
+      const subjCode = String(subj.code || '').trim();
+
+      const topCell = r1.getCell(startCol);
+      topCell.value = subjNameLower && subjNameLower !== subjCode.toLowerCase()
+        ? {
+            richText: [
+              { text: `${subjNameLower}\n`, font: { name: 'Calibri', size: 9, bold: false, color: { argb: 'FFF1F5F9' } } },
+              { text: subjCode, font: { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } } },
+            ],
+          }
+        : subjCode;
+
+      ws.mergeCells(1, startCol, 1, endCol);
+      topCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: colorArgb } };
+      topCell.font = { name: 'Calibri', size: 11, bold: true, color: { argb: 'FFFFFFFF' } };
+      topCell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+      topCell.border = headerBorder;
+      r1.getCell(endCol).border = headerBorder;
+
+      const lhCell = r2.getCell(startCol);
+      lhCell.value = 'LH';
+      lhCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF231C5C' } };
+      lhCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      lhCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      lhCell.border = headerBorder;
+
+      const laCell = r2.getCell(endCol);
+      laCell.value = 'LA';
+      laCell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF231C5C' } };
+      laCell.font = { name: 'Calibri', size: 10, bold: true, color: { argb: 'FFFFFFFF' } };
+      laCell.alignment = { horizontal: 'center', vertical: 'middle' };
+      laCell.border = headerBorder;
+    });
+
+    // Student rows (Row 3+)
+    students.forEach((st: any, rowIdx: number) => {
+      const row = ws.getRow(3 + rowIdx);
+      row.height = 20;
+      const isEven = rowIdx % 2 === 1;
+      const rowBg = isEven ? 'FFF8FAFC' : 'FFFFFFFF';
+
+      const vals = [
+        st.sl_no,
+        st.roll_no,
+        st.student_name,
+        st.colg_cd,
+        st.course_cd,
+        st.branch_cd,
+        st.batch_cd,
+        st.sem_cd,
+        st.sec_cd,
+      ];
+      vals.forEach((v, cIdx) => {
+        const c = row.getCell(cIdx + 1);
+        c.value = v;
+        c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: rowBg } };
+        c.font = { name: 'Calibri', size: 10, bold: cIdx === 1 || cIdx === 2, color: { argb: 'FF1E293B' } };
+        c.alignment = { horizontal: cIdx === 2 ? 'left' : 'center', vertical: 'middle' };
+        c.border = cellBorder;
+      });
+
+      subjects.forEach((_subj: any, sIdx: number) => {
+        const startCol = baseHeaders.length + 1 + sIdx * 2;
+        for (const offset of [0, 1]) {
+          const c = row.getCell(startCol + offset);
+          c.value = '';
+          c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: isEven ? 'FFFFFBEB' : 'FFFFFFFF' } };
+          c.font = { name: 'Calibri', size: 10, color: { argb: 'FF0F172A' } };
+          c.alignment = { horizontal: 'center', vertical: 'middle' };
+          c.border = cellBorder;
+        }
+      });
+    });
+
+    // Column widths
+    const baseWidths = [7, 16, 26, 11, 14, 14, 10, 9, 9];
+    baseWidths.forEach((w, idx) => {
+      ws.getColumn(idx + 1).width = w;
+    });
+    subjects.forEach((subj: any, idx: number) => {
+      const startCol = baseHeaders.length + 1 + idx * 2;
+      const nameLen = String(subj.name || '').length;
+      const perColWidth = Math.max(9, Math.min(18, Math.ceil(nameLen / 2) + 2));
+      ws.getColumn(startCol).width = perColWidth;
+      ws.getColumn(startCol + 1).width = perColWidth;
+    });
+
+    const outBuf = await wb.xlsx.writeBuffer();
+    const buffer = Buffer.from(outBuf as ArrayBuffer);
+    const filename = `FORMAT_ATTENDANCE_${codes.course_cd || 'ALL'}_SEM${codes.sem_cd}_SEC${codes.sec_cd}.xlsx`.replace(/[^a-zA-Z0-9_.-]/g, '_');
+    return { buffer, filename };
+  }
+
+  async uploadExcelAttendance(tenantSlug: string, body: any, user?: any) {
+    const schema = this.getSchema(tenantSlug);
+    if (!body?.fileBase64) {
+      throw new BadRequestException('No Excel file data provided.');
+    }
+
+    const base64Data = String(body.fileBase64).replace(/^data:.*?;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+    const wb = XLSX.read(buffer, { type: 'buffer' });
+    const firstSheet = wb.SheetNames[0];
+    if (!firstSheet) {
+      throw new BadRequestException('Uploaded Excel workbook has no sheets.');
+    }
+
+    const ws = wb.Sheets[firstSheet];
+    const rows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    if (rows.length < 3) {
+      throw new BadRequestException('Excel sheet must have header rows (Row 1 & 2) and at least one student row (Row 3+).');
+    }
+
+    const row1 = rows[0] || [];
+    const row2 = rows[1] || [];
+
+    // Locate subject column pairs starting from col 9 (where row2 has LH / LA)
+    const subjectCols: Array<{ code: string; lhCol: number; laCol: number }> = [];
+    for (let c = 9; c < row1.length; c += 2) {
+      const code = String(row1[c] || '').trim();
+      const subH1 = String(row2[c] || '').trim().toUpperCase();
+      const subH2 = String(row2[c + 1] || '').trim().toUpperCase();
+      if (code && (subH1 === 'LH' || subH2 === 'LA' || subH1 === '' || subH2 === '')) {
+        subjectCols.push({ code, lhCol: c, laCol: c + 1 });
+      }
+    }
+
+    if (subjectCols.length === 0) {
+      throw new BadRequestException('No subject columns found starting from column J (index 9). Please use the downloaded Excel format.');
+    }
+
+    // Load master lookups
+    const [allSubjects, allStudents, allBatches] = await Promise.all([
+      this.ds.query(`SELECT id, code, name FROM "${schema}".subjects`).catch(() => []),
+      this.ds.query(`SELECT id, rollno, registration_no, name FROM "${schema}".students`).catch(() => []),
+      this.ds.query(`SELECT id, code, batch_cd, year FROM "${schema}".batches`).catch(() => []),
+    ]);
+
+    const subjectByCode = new Map<string, any>();
+    for (const s of allSubjects) {
+      if (s.code) subjectByCode.set(String(s.code).trim().toUpperCase(), s);
+      if (s.id) subjectByCode.set(String(s.id).trim().toUpperCase(), s);
+    }
+
+    const studentByRoll = new Map<string, any>();
+    const studentByName = new Map<string, any>();
+    for (const st of allStudents) {
+      if (st.rollno) studentByRoll.set(String(st.rollno).trim().toUpperCase(), st);
+      if (st.registration_no) studentByRoll.set(String(st.registration_no).trim().toUpperCase(), st);
+      if (st.name) studentByName.set(String(st.name).trim().toLowerCase(), st);
+    }
+
+    const batchByKey = new Map<string, any>();
+    for (const b of allBatches) {
+      if (b.id) batchByKey.set(String(b.id).trim().toLowerCase(), b);
+      if (b.code) batchByKey.set(String(b.code).trim().toLowerCase(), b);
+      if (b.batch_cd) batchByKey.set(String(b.batch_cd).trim().toLowerCase(), b);
+      if (b.year) batchByKey.set(String(b.year).trim().toLowerCase(), b);
+    }
+
+    const dataRows = rows.slice(2).filter(r => r && (String(r[1] || '').trim() || String(r[2] || '').trim()));
+    if (dataRows.length === 0) {
+      throw new BadRequestException('No student rows found in Excel file.');
+    }
+
+    const sampleRow = dataRows[0];
+    const courseCd = String(sampleRow[4] || body.courseCd || '').trim();
+    const branchCd = String(sampleRow[5] || body.branchCd || '').trim();
+    const batchCdRaw = String(sampleRow[6] || body.batchId || '').trim();
+    const semCd = String(sampleRow[7] || body.semester || '1').replace(/\D/g, '').trim() || '1';
+    const secCd = this.normSecCode(sampleRow[8] || body.section || '1') || '1';
+
+    const matchedBatch = batchByKey.get(batchCdRaw.toLowerCase());
+    const batchId = matchedBatch?.id || null;
+    const batchCd = matchedBatch?.batch_cd || matchedBatch?.code || batchCdRaw;
+    const createdBy = user?.id || user?.sub || null;
+
+    let subjectsProcessed = 0;
+    let subjectsUnchanged = 0;
+    let sessionsCreated = 0;
+    let recordsSaved = 0;
+    const unmatchedRollNos: string[] = [];
+    const matchedStudentIds = new Set<string>();
+
+    const todayStr = parseToLocalDateString(new Date());
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    const rawFrom = String(body?.fromDate || '').trim();
+    const rawTo = String(body?.toDate || '').trim();
+    const fromDateStr = dateRegex.test(rawFrom) ? rawFrom : todayStr;
+    const toDateStr = dateRegex.test(rawTo) ? rawTo : (dateRegex.test(rawFrom) ? rawFrom : todayStr);
+
+    if (fromDateStr > toDateStr) {
+      throw new BadRequestException('From Date cannot be later than To Date.');
+    }
+
+    // Build inclusive list of dates between fromDateStr and toDateStr
+    const dateRangeList: string[] = [];
+    {
+      const [fy, fm, fd] = fromDateStr.split('-').map(Number);
+      const [ty, tm, td] = toDateStr.split('-').map(Number);
+      const cur = new Date(Date.UTC(fy, fm - 1, fd));
+      const end = new Date(Date.UTC(ty, tm - 1, td));
+      while (cur <= end && dateRangeList.length < 3660) {
+        const yyyy = cur.getUTCFullYear();
+        const mm = String(cur.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(cur.getUTCDate()).padStart(2, '0');
+        dateRangeList.push(`${yyyy}-${mm}-${dd}`);
+        cur.setUTCDate(cur.getUTCDate() + 1);
+      }
+    }
+    if (dateRangeList.length === 0) dateRangeList.push(todayStr);
+
+    for (const subjCol of subjectCols) {
+      const headerParts = subjCol.code.split(/[\r\n]+/).map(p => p.trim()).filter(Boolean);
+      let subj = subjectByCode.get(subjCol.code.toUpperCase());
+      if (!subj) {
+        for (const part of headerParts) {
+          subj = subjectByCode.get(part.toUpperCase());
+          if (subj) break;
+        }
+      }
+      if (!subj) continue;
+
+      // Determine max LH across rows for this subject
+      let maxLH = 0;
+      const studentEntries: Array<{ studentId: string; lh: number; la: number }> = [];
+
+      for (const r of dataRows) {
+        const rollStr = String(r[1] || '').trim();
+        const nameStr = String(r[2] || '').trim();
+        const lhVal = parseInt(String(r[subjCol.lhCol] ?? '').trim(), 10);
+        const laVal = parseInt(String(r[subjCol.laCol] ?? '').trim(), 10);
+
+        if (isNaN(lhVal) || lhVal <= 0) continue;
+
+        const st =
+          (rollStr && studentByRoll.get(rollStr.toUpperCase())) ||
+          (nameStr && studentByName.get(nameStr.toLowerCase()));
+
+        if (!st) {
+          if (rollStr && !unmatchedRollNos.includes(rollStr)) {
+            unmatchedRollNos.push(rollStr);
+          }
+          continue;
+        }
+
+        matchedStudentIds.add(st.id);
+        const clampedLA = isNaN(laVal) ? 0 : Math.min(Math.max(0, laVal), lhVal);
+        if (lhVal > maxLH) maxLH = lhVal;
+        studentEntries.push({ studentId: st.id, lh: lhVal, la: clampedLA });
+      }
+
+      if (maxLH <= 0 || studentEntries.length === 0) continue;
+
+      // 1. Check existing EXCEL_IMPORT sessions for this exact college(schema) -> course -> branch -> batch -> sem -> sec -> subject within [fromDateStr .. toDateStr]
+      const existingSessions: Array<{ id: string; session_date: string; session_time: string }> = await this.ds.query(
+        `SELECT id::text AS id, session_date::text AS session_date, session_time::text AS session_time
+         FROM "${schema}".attendance_sessions
+         WHERE subject_id::text = $1::text
+           AND COALESCE(course_cd, '') = COALESCE($2, '')
+           AND COALESCE(branch_cd, '') = COALESCE($3, '')
+           AND (
+             ($4::text <> '' AND batch_id::text = $4::text)
+             OR COALESCE(batch_cd, '') = COALESCE($5, '')
+           )
+           AND COALESCE(sem_cd, '') = COALESCE($6, '')
+           AND COALESCE(section_cd, '') = COALESCE($7, '')
+           AND session_type = 'EXCEL_IMPORT'
+           AND session_date::date >= $8::date
+           AND session_date::date <= $9::date
+         ORDER BY session_date ASC, session_time ASC, created_at ASC`,
+        [subj.id, courseCd || '', branchCd || '', batchId || '', batchCd || '', semCd || '', secCd || '', fromDateStr, toDateStr],
+      ).catch(() => []);
+
+      const existingSessionIds = existingSessions.map(s => s.id);
+      const existingRecMap = new Map<string, string>();
+      const existingStudentCounts = new Map<string, { lh: number; la: number }>();
+
+      if (existingSessionIds.length > 0) {
+        const existingRecs: Array<{ session_id: string; student_id: string; status: string }> = await this.ds.query(
+          `SELECT session_id::text AS session_id, student_id::text AS student_id, status
+           FROM "${schema}".attendance_records
+           WHERE session_id = ANY($1::uuid[])`,
+          [existingSessionIds],
+        ).catch(() => []);
+
+        for (const rec of existingRecs) {
+          existingRecMap.set(`${rec.session_id}::${rec.student_id}`, rec.status);
+          const cur = existingStudentCounts.get(rec.student_id) || { lh: 0, la: 0 };
+          cur.lh += 1;
+          if (rec.status === 'PRESENT') cur.la += 1;
+          existingStudentCounts.set(rec.student_id, cur);
+        }
+      }
+
+      // 2. If identical data is re-imported for the same date range & scope, do nothing (keep as-is)
+      const isIdentical =
+        existingSessions.length === maxLH &&
+        existingStudentCounts.size === studentEntries.length &&
+        studentEntries.every(entry => {
+          const cur = existingStudentCounts.get(String(entry.studentId));
+          return cur && cur.lh === entry.lh && cur.la === entry.la;
+        });
+
+      if (isIdentical) {
+        subjectsUnchanged++;
+        continue;
+      }
+
+      subjectsProcessed++;
+
+      // 3. Reuse existing sessions & update only differences (columns/records only)
+      const sessionIds: string[] = existingSessionIds.slice(0, maxLH);
+
+      // Remove excess trailing sessions if maxLH decreased
+      if (existingSessionIds.length > maxLH) {
+        const excessIds = existingSessionIds.slice(maxLH);
+        await this.ds.query(
+          `DELETE FROM "${schema}".attendance_records WHERE session_id = ANY($1::uuid[])`,
+          [excessIds],
+        ).catch(() => {});
+        await this.ds.query(
+          `DELETE FROM "${schema}".attendance_sessions WHERE id = ANY($1::uuid[])`,
+          [excessIds],
+        ).catch(() => {});
+      }
+
+      // Add only additional sessions if maxLH increased
+      const dayCount = dateRangeList.length;
+      for (let i = existingSessionIds.length; i < maxLH; i++) {
+        const dayIdx = dayCount > 1 ? Math.min(dayCount - 1, Math.floor((i * dayCount) / maxLH)) : 0;
+        const sessDate = dateRangeList[dayIdx] || todayStr;
+        const hh = String(9 + (Math.floor(i / 60) % 12)).padStart(2, '0');
+        const mm = String(i % 60).padStart(2, '0');
+        const sessTime = `${hh}:${mm}:00`;
+
+        const insSess = await this.ds.query(
+          `INSERT INTO "${schema}".attendance_sessions (
+             id, subject_id, batch_id, session_date, session_time, session_type,
+             created_by, topic_covered, is_cancelled, course_cd, branch_cd, batch_cd, sem_cd, section_cd, created_at
+           ) VALUES (
+             gen_random_uuid(), $1, $2, $3::date, $4::time, 'EXCEL_IMPORT',
+             $5, $6, false, $7, $8, $9, $10, $11, NOW()
+           ) RETURNING id`,
+          [
+            subj.id,
+            batchId,
+            sessDate,
+            sessTime,
+            createdBy,
+            `Excel Attendance Import (${subj.code} | ${fromDateStr} to ${toDateStr})`,
+            courseCd || null,
+            branchCd || null,
+            batchCd || null,
+            semCd || null,
+            secCd || null,
+          ],
+        );
+        if (insSess[0]?.id) {
+          sessionIds.push(insSess[0].id);
+          sessionsCreated++;
+        }
+      }
+
+      // 4. Update only changed/missing student attendance records
+      for (const entry of studentEntries) {
+        const limit = Math.min(entry.lh, sessionIds.length);
+        if (sessionIds.length > limit) {
+          const extraSessIds = sessionIds.slice(limit);
+          await this.ds.query(
+            `DELETE FROM "${schema}".attendance_records
+             WHERE student_id::text = $1::text AND session_id = ANY($2::uuid[])`,
+            [entry.studentId, extraSessIds],
+          ).catch(() => {});
+        }
+        for (let idx = 0; idx < limit; idx++) {
+          const desiredStatus = idx < entry.la ? 'PRESENT' : 'ABSENT';
+          const currentStatus = existingRecMap.get(`${sessionIds[idx]}::${entry.studentId}`);
+          if (currentStatus === desiredStatus) continue;
+
+          await this.ds.query(
+            `INSERT INTO "${schema}".attendance_records (id, session_id, student_id, status, marked_by, marked_at)
+             VALUES (gen_random_uuid(), $1, $2, $3, $4, NOW())
+             ON CONFLICT (session_id, student_id) DO UPDATE SET status = EXCLUDED.status, marked_at = NOW()`,
+            [sessionIds[idx], entry.studentId, desiredStatus, createdBy],
+          );
+          recordsSaved++;
+        }
+      }
+    }
+
+    return {
+      success: true,
+      message:
+        subjectsProcessed === 0 && subjectsUnchanged > 0
+          ? `No changes detected — ${subjectsUnchanged} subject(s) already match (${fromDateStr} to ${toDateStr}) and were kept as-is.`
+          : `Excel attendance imported for ${subjectsProcessed} subject(s)${subjectsUnchanged > 0 ? `, ${subjectsUnchanged} unchanged` : ''} (${fromDateStr} to ${toDateStr}).`,
+      summary: {
+        fromDate: fromDateStr,
+        toDate: toDateStr,
+        subjectsProcessed,
+        subjectsUnchanged,
+        sessionsCreated,
+        recordsSaved,
+        studentsMatched: matchedStudentIds.size,
+        unmatchedRollNos,
+      },
     };
   }
 }

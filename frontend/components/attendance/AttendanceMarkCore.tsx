@@ -6,6 +6,7 @@ import Header from '@/components/Header';
 import FacultyAcademicCascadingDropdown, {
   AcademicCascadingState,
 } from '@/components/faculty/FacultyAcademicCascadingDropdown';
+import AttendanceExcelModal from './AttendanceExcelModal';
 
 interface DropdownItem {
   id: string;
@@ -72,6 +73,7 @@ const DAYS_OF_WEEK = [
 ];
 
 export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string }) {
+  const [showExcelModal, setShowExcelModal] = useState(false);
   // Cascading Academic States
   const [collegesList, setCollegesList] = useState<DropdownItem[]>([]);
   const [coursesList, setCoursesList] = useState<DropdownItem[]>([]);
@@ -1288,11 +1290,30 @@ export default function AttendanceMarkCore({ role = 'FACULTY' }: { role?: string
             </div>
 
             <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setShowExcelModal(true)}
+                className="px-4 py-2 rounded-xl bg-[#00C48C] hover:bg-[#00b07d] text-white text-xs font-extrabold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <span>📊</span>
+                <span>Excel Attendance</span>
+              </button>
               <span className="text-xs font-semibold px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#00C48C] animate-pulse"></span>
                 <span>{tenantSlug.toUpperCase()}</span>
               </span>
             </div>
+
+            <AttendanceExcelModal
+              isOpen={showExcelModal}
+              onClose={() => setShowExcelModal(false)}
+              onUploadSuccess={(sum) => {
+                setAlert({
+                  type: 'success',
+                  text: `Excel attendance imported: ${sum?.subjectsProcessed || 0} subject(s), ${sum?.recordsSaved || 0} records saved.`,
+                });
+              }}
+            />
           </div>
 
           {/* ─── SECTION 1: ACADEMIC HIERARCHY SELECTOR & GET SCHEDULED ───── */}

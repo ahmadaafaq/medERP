@@ -584,116 +584,118 @@ export default function AdminDashboard() {
       <div className="flex-1 flex flex-col min-w-0">
         <Header title="College Administration & Analytics KPI" />
 
-        <main className="p-4 sm:p-6 md:p-8 space-y-4 sm:space-y-6 flex-1 max-w-[1600px] w-full mx-auto overflow-x-hidden">
+        <main className="p-2 sm:p-3 lg:p-4 space-y-4 flex-1 w-full overflow-x-hidden">
           {loading ? (
             <AdminDashboardSkeleton />
           ) : (
             <>
-              {/* Top College Banner Header */}
-              <div className="bg-gradient-to-r from-[#11141A] via-[#1E2638] to-[#11141A] border border-slate-800 rounded-[22px] p-6 text-white shadow-lg relative overflow-hidden flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="space-y-1.5 z-10">
-                  <div className="flex items-center gap-2">
-                    <span className="bg-[#F36C21] text-white text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
-                      Active College Portal
-                    </span>
-                    <span className="text-white/70 text-xs font-mono">
-                      colg_cd: #{collegeInfo.code}
-                    </span>
-                  </div>
-                  <h1 className="text-2xl font-black tracking-tight flex items-center gap-2.5">
-                    <span>🏛️</span>
-                    <span>{collegeInfo.name}</span>
-                  </h1>
-                  <p className="text-white/80 text-xs font-medium">
-                    Live KPI metrics, attendance punch status, examination papers, marks results, and department schedules.
-                  </p>
-                </div>
+              {/* Unified Active College Portal & NORNX Institutional License Card */}
+              <div className="bg-gradient-to-br from-[#191544] via-[#2D2575] to-[#1A1D3B] border border-indigo-400/20 rounded-[22px] text-white shadow-xl relative overflow-hidden">
+                {/* Decorative ambient glows */}
+                <div className="absolute -right-16 -top-16 w-72 h-72 bg-[#5B4BFF]/25 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute left-1/3 -bottom-20 w-64 h-64 bg-[#F36C21]/15 rounded-full blur-3xl pointer-events-none" />
 
-                <div className="flex items-center gap-2.5 z-10">
-                  <button
-                    onClick={() => fetchDashboardData(selectedCollegeSlug)}
-                    disabled={loading}
-                    className="px-4 py-2 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50"
-                  >
-                    <span className={loading ? 'animate-spin' : ''}>🔄</span>
-                    <span>{loading ? 'Refreshing...' : 'Refresh KPIs'}</span>
-                  </button>
-                </div>
-
-                {/* Subtle decorative background circles */}
-                <div className="absolute right-0 top-0 w-80 h-80 bg-white/5 rounded-full blur-2xl pointer-events-none" />
-              </div>
-
-              {/* Institutional License & NORNX Renewal Receipt Slip Bar */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                <div className="flex items-center gap-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-[#00C48C] flex items-center justify-center p-2.5 shadow-md shadow-[#00C48C]/20 shrink-0">
-                    <div className="w-full h-full bg-white rounded-lg" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-extrabold text-sm text-[#1B1E28] dark:text-white">
-                        Institutional SaaS License & Renewal Slip
+                {/* Top Portal Header Row */}
+                <div className="p-5 sm:p-6 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 relative z-10">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="bg-[#F36C21] text-white text-[10px] uppercase font-black px-2.5 py-0.5 rounded-full tracking-wider shadow-sm">
+                        Active College Portal
+                      </span>
+                      <span className="px-2.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-white/85 text-[11px] font-mono">
+                        colg_cd: #{collegeInfo.code}
                       </span>
                       <span
-                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider ${licenseInfo.status === 'ACTIVE'
-                            ? 'bg-emerald-50 text-[#00C48C] border border-emerald-200'
-                            : 'bg-amber-50 text-amber-600 border border-amber-200'
-                          }`}
+                        className={`px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider border ${
+                          licenseInfo.status === 'ACTIVE'
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-400/30'
+                            : 'bg-amber-500/20 text-amber-300 border-amber-400/30'
+                        }`}
                       >
                         ● {licenseInfo.status}
                       </span>
                     </div>
-                    <p className="text-xs text-[#4E5969] dark:text-slate-400 mt-0.5">
-                      Authority: <strong className="text-[#1B1E28] dark:text-slate-200">NORNX Technologies</strong> • Valid Until:{' '}
-                      <strong className="text-[#5B4BFF]">
-                        {licenseInfo.trial_ends_at
-                          ? new Date(licenseInfo.trial_ends_at).toLocaleDateString('en-US', {
-                            year: 'numeric',
-                            month: 'short',
-                            day: 'numeric',
-                          })
-                          : 'Active Core Entitlement'}
-                      </strong>
+                    <h1 className="text-2xl sm:text-3xl font-black tracking-tight flex items-center gap-2.5">
+                      <span>🏛️</span>
+                      <span>{collegeInfo.name}</span>
+                    </h1>
+                    <p className="text-white/75 text-xs font-medium max-w-3xl">
+                      Live KPI metrics, attendance punch status, examination papers, marks results, and department schedules.
                     </p>
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <button
+                      onClick={() => fetchDashboardData(selectedCollegeSlug)}
+                      disabled={loading}
+                      className="px-4 py-2.5 bg-white/10 hover:bg-white/20 border border-white/20 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-2 active:scale-95 disabled:opacity-50 cursor-pointer backdrop-blur-sm"
+                    >
+                      <span className={loading ? 'animate-spin' : ''}>🔄</span>
+                      <span>{loading ? 'Refreshing...' : 'Refresh KPIs'}</span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (licenseReceipts.length > 0) {
-                        setSelectedReceiptModal(licenseReceipts[0]);
-                      } else {
-                        // Generate instantaneous slip
-                        setSelectedReceiptModal({
-                          firm_title: collegeInfo.name,
-                          firm_slug: collegeInfo.slug,
-                          tenant_name: 'Shri Ram Murti Smarak Trust Bareilly',
-                          domain: 'srms.ac.in',
-                          amount: 250000,
-                          currency: 'INR',
-                          duration_days: 365,
-                          firm_mode: 'NONMED',
-                          status: 'SUCCESS',
-                          payment_method: 'NORNX Direct Billing / Bank Wire',
-                          paid_at: new Date().toISOString(),
-                        });
-                      }
-                    }}
-                    className="px-4 py-2 rounded-xl bg-[#00C48C] hover:bg-[#00b07d] text-[#1B1E28] text-xs font-black shadow-md shadow-[#00C48C]/20 transition-all flex items-center gap-1.5 active:scale-95"
-                  >
-                    <span>🧾 View Current License Slip</span>
-                  </button>
+                {/* Integrated NORNX SaaS License & Renewal Bar */}
+                <div className="px-5 sm:px-6 py-3.5 bg-black/25 border-t border-white/10 backdrop-blur-md flex flex-col md:flex-row items-start md:items-center justify-between gap-3 relative z-10">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#00C48C] to-[#059669] flex items-center justify-center p-2 shadow-md shadow-[#00C48C]/25 shrink-0">
+                      <div className="w-full h-full bg-white rounded-md" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-extrabold text-white tracking-tight">
+                        Institutional SaaS License &amp; Renewal Slip
+                      </div>
+                      <p className="text-[11px] text-white/75">
+                        Authority: <strong className="text-white">NORNX Technologies</strong> • Valid Until:{' '}
+                        <strong className="text-emerald-300">
+                          {licenseInfo.trial_ends_at
+                            ? new Date(licenseInfo.trial_ends_at).toLocaleDateString('en-US', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric',
+                              })
+                            : 'Active Core Entitlement'}
+                        </strong>
+                      </p>
+                    </div>
+                  </div>
 
-                  <button
-                    type="button"
-                    onClick={() => setShowReceiptHistoryList(!showReceiptHistoryList)}
-                    className="px-4 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-bold transition-all flex items-center gap-1.5"
-                  >
-                    <span>📜 Renewal History ({licenseReceipts.length})</span>
-                  </button>
+                  <div className="flex items-center gap-2.5 flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (licenseReceipts.length > 0) {
+                          setSelectedReceiptModal(licenseReceipts[0]);
+                        } else {
+                          setSelectedReceiptModal({
+                            firm_title: collegeInfo.name,
+                            firm_slug: collegeInfo.slug,
+                            tenant_name: 'Shri Ram Murti Smarak Trust Bareilly',
+                            domain: 'srms.ac.in',
+                            amount: 250000,
+                            currency: 'INR',
+                            duration_days: 365,
+                            firm_mode: 'NONMED',
+                            status: 'SUCCESS',
+                            payment_method: 'NORNX Direct Billing / Bank Wire',
+                            paid_at: new Date().toISOString(),
+                          });
+                        }
+                      }}
+                      className="px-3.5 py-2 rounded-xl bg-[#00C48C] hover:bg-[#00b07d] text-[#0F172A] text-xs font-black shadow-md shadow-[#00C48C]/20 transition-all flex items-center gap-1.5 active:scale-95 cursor-pointer"
+                    >
+                      <span>🧾 View Current License Slip</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setShowReceiptHistoryList(!showReceiptHistoryList)}
+                      className="px-3.5 py-2 rounded-xl bg-white/10 hover:bg-white/20 border border-white/15 text-white text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <span>📜 Renewal History ({licenseReceipts.length})</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -777,28 +779,34 @@ export default function AdminDashboard() {
               <AcademicComplianceWidget role="admin" />
 
               {/* 1. Core Academic KPI Cards Grid: Student Enrollments, Faculty, Punches & Exam Papers */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5 sm:gap-4">
                 {/* Card 1: Total Enrolled Students */}
                 <Link
                   href="/dashboard/admin/student-master"
-                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-4 sm:p-5 shadow-sm hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-600 transition-all group cursor-pointer block"
+                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5 hover:border-[#5B4BFF]/50 transition-all duration-200 group cursor-pointer flex flex-col justify-between relative"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                      Total Enrolled Students
-                    </span>
-                    <span className="w-9 h-9 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center text-base shadow-sm group-hover:scale-110 transition-transform">
-                      👨‍🎓
-                    </span>
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-                      {loading ? '...' : kpis.totalStudents.toLocaleString()}
-                    </p>
-                    <div className="mt-2 flex items-center gap-1.5 text-xs">
-                      <span className="inline-block w-2 h-2 rounded-full bg-emerald-500"></span>
-                      <span className="text-emerald-600 dark:text-emerald-400 font-bold">
-                        {kpis.activeStudentPercentage} Active in {collegeInfo.name.split(',')[0]}
+                  <div className="h-1.5 w-full bg-gradient-to-r from-[#5B4BFF] via-[#7867FF] to-[#8B5CF6]" />
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[11px] font-extrabold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                          Total Enrolled Students
+                        </span>
+                        <p className="text-3xl sm:text-4xl font-black text-[#1B1E28] dark:text-white tracking-tight mt-2 tabular-nums">
+                          {loading ? '...' : kpis.totalStudents.toLocaleString()}
+                        </p>
+                      </div>
+                      <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#5B4BFF] to-[#7867FF] text-white flex items-center justify-center text-lg shadow-md shadow-[#5B4BFF]/25 group-hover:scale-110 transition-transform shrink-0">
+                        👨‍🎓
+                      </span>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/50 text-[#00C48C] font-bold border border-emerald-200/70 dark:border-emerald-800/60">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C]" />
+                        {kpis.activeStudentPercentage} Active
+                      </span>
+                      <span className="text-[#5B4BFF] dark:text-indigo-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                        Students ➔
                       </span>
                     </div>
                   </div>
@@ -807,72 +815,82 @@ export default function AdminDashboard() {
                 {/* Card 2: Total Faculty */}
                 <Link
                   href="/dashboard/admin/subject-linker"
-                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md hover:border-indigo-400 dark:hover:border-indigo-600 transition-all group cursor-pointer block"
+                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5 hover:border-violet-400/60 transition-all duration-200 group cursor-pointer flex flex-col justify-between relative"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                      Total Faculty (College Roster)
-                    </span>
-                    <span className="w-9 h-9 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center text-base shadow-sm group-hover:scale-110 transition-transform">
-                      👨‍🏫
-                    </span>
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-3xl font-black text-[#5B4BFF] dark:text-indigo-400 tracking-tight">
-                      {loading ? '...' : kpis.totalFaculty.toLocaleString()}
-                    </p>
-                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-                      <span>Across {kpis.totalDepartments} Active Departments</span>
-                      <span className="text-indigo-600 dark:text-indigo-400 font-bold group-hover:underline">Linker ➔</span>
+                  <div className="h-1.5 w-full bg-gradient-to-r from-[#7C3AED] via-[#5B4BFF] to-[#2D2575]" />
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[11px] font-extrabold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                          Total Faculty Roster
+                        </span>
+                        <p className="text-3xl sm:text-4xl font-black text-[#5B4BFF] dark:text-indigo-400 tracking-tight mt-2 tabular-nums">
+                          {loading ? '...' : kpis.totalFaculty.toLocaleString()}
+                        </p>
+                      </div>
+                      <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#7C3AED] to-[#5B4BFF] text-white flex items-center justify-center text-lg shadow-md shadow-violet-500/25 group-hover:scale-110 transition-transform shrink-0">
+                        👨‍🏫
+                      </span>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <span className="px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/50 text-[#5B4BFF] dark:text-indigo-300 font-bold border border-indigo-200/70 dark:border-indigo-800/60">
+                        {kpis.totalDepartments} Departments
+                      </span>
+                      <span className="text-[#5B4BFF] dark:text-indigo-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                        Subject Linker ➔
+                      </span>
                     </div>
                   </div>
                 </Link>
 
-                {/* Card 3: Admin Attendance & Punch IN / OUT (Synced with https://myportal.srms.ac.in/ops/Home/GetEmpInOutTime) */}
-                <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
-                  <div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] font-black uppercase text-[#11141A] dark:text-slate-300 tracking-wider">
-                        ADMIN ATTENDANCE & PUNCH
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => setShowPunchHistoryModal(true)}
-                        className="px-2 py-0.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-[#00875A] dark:text-emerald-300 font-extrabold text-[10px] border border-emerald-200 dark:border-emerald-800/60 transition-all flex items-center gap-1 shadow-2xs cursor-pointer"
-                        title="View all biometric in/out logs"
-                      >
-                        <span>⏱️</span>
-                        <span>History ({punchHistory.length || 1})</span>
-                      </button>
+                {/* Card 3: Admin Attendance & Punch IN / OUT */}
+                <div className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5 hover:border-emerald-400/60 transition-all duration-200 flex flex-col justify-between">
+                  <div className="h-1.5 w-full bg-gradient-to-r from-[#00C48C] via-[#10B981] to-[#0D9488]" />
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-black uppercase text-[#1B1E28] dark:text-slate-300 tracking-wider">
+                          Attendance &amp; Punch
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setShowPunchHistoryModal(true)}
+                          className="px-2.5 py-0.5 rounded-full bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/80 text-[#00875A] dark:text-emerald-300 font-extrabold text-[10px] border border-emerald-200 dark:border-emerald-800/60 transition-all flex items-center gap-1 cursor-pointer"
+                          title="View all biometric in/out logs"
+                        >
+                          <span>⏱️</span>
+                          <span>History ({punchHistory.length || 1})</span>
+                        </button>
+                      </div>
+
+                      <div className="mt-2.5 flex items-center justify-between gap-2">
+                        <span className="text-[11px] text-[#4E5969] dark:text-slate-400 font-semibold">
+                          Today ({punch.date})
+                        </span>
+                        <span className="inline-flex items-center gap-1.5 font-bold text-[#00875A] dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 text-[10px]">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00C48C] animate-pulse" />
+                          <span>{punch.status}</span>
+                        </span>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 font-mono text-xs">
+                        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/60 rounded-xl px-2.5 py-1.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400">IN</span>
+                          <span className="text-[#5B4BFF] dark:text-indigo-300 font-black">{punch.punchIn || '--'}</span>
+                        </div>
+                        <div className="bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/60 rounded-xl px-2.5 py-1.5 flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-slate-400">OUT</span>
+                          <span className="text-[#1B1E28] dark:text-slate-200 font-black">{punch.punchOut || '--'}</span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="mt-3 flex items-center justify-between gap-2">
-                      <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        Today ({punch.date}):
-                      </span>
-                      <span className="inline-flex items-center gap-1 font-bold text-[#00875A] dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-xl border border-emerald-200 dark:border-emerald-800 text-[11px]">
-                        <span className="w-1.5 h-1.5 rounded-full bg-[#00875A] dark:bg-emerald-400 animate-pulse" />
-                        <span>{punch.status}</span>
-                      </span>
-                    </div>
-
-                    <div className="mt-3 flex items-center justify-between font-mono text-xs pt-1 border-t border-slate-100 dark:border-slate-800/80">
-                      <span className="font-extrabold text-slate-900 dark:text-white">
-                        IN: <span className="text-[#5B4BFF] font-black">{punch.punchIn || '--'}</span>
-                      </span>
-                      <span className="font-extrabold text-slate-900 dark:text-white">
-                        OUT: <span className="text-slate-600 dark:text-slate-300 font-black">{punch.punchOut || '--'}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 pt-2 space-y-2">
-                    <div className="flex items-center gap-2.5">
+                    <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center gap-2">
                       <button
                         type="button"
                         onClick={() => handlePunchToggle('IN')}
                         disabled={punching}
-                        className="flex-1 py-2 bg-[#00875A] hover:bg-[#00704A] text-white rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 shadow-sm cursor-pointer"
+                        className="flex-1 py-2 bg-gradient-to-r from-[#00C48C] to-[#059669] hover:opacity-95 text-white rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 shadow-sm shadow-emerald-500/20 cursor-pointer"
                       >
                         {punching ? 'Marking...' : 'Punch In'}
                       </button>
@@ -880,44 +898,41 @@ export default function AdminDashboard() {
                         type="button"
                         onClick={() => handlePunchToggle('OUT')}
                         disabled={punching}
-                        className="flex-1 py-2 bg-[#E2E8F0] hover:bg-[#CBD5E1] dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B1E28] dark:text-slate-200 rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
+                        className="flex-1 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-[#1B1E28] dark:text-slate-200 rounded-xl font-black text-xs transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
                       >
                         {punching ? 'Marking...' : 'Punch Out'}
                       </button>
                     </div>
-
-                    <button
-                      type="button"
-                      onClick={() => setShowPunchHistoryModal(true)}
-                      className="w-full text-center text-[10px] font-bold text-[#5B4BFF] dark:text-indigo-400 hover:underline pt-0.5 block cursor-pointer"
-                    >
-                      View In/Out Biometric History Log ➔
-                    </button>
                   </div>
                 </div>
 
                 {/* Card 4: Total Exam Papers Created */}
                 <Link
                   href="/dashboard/admin/assessment"
-                  className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-[22px] p-5 shadow-sm hover:shadow-md hover:border-amber-400 dark:hover:border-amber-600 transition-all group cursor-pointer block"
+                  className="bg-white dark:bg-slate-900 border border-[#E7EAF3] dark:border-slate-800 rounded-[22px] overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5 hover:border-[#F36C21]/50 transition-all duration-200 group cursor-pointer flex flex-col justify-between relative"
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-[11px] font-extrabold uppercase text-slate-500 dark:text-slate-400 tracking-wider">
-                      Exam Papers Created
-                    </span>
-                    <span className="w-9 h-9 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center text-base shadow-sm group-hover:scale-110 transition-transform">
-                      📝
-                    </span>
-                  </div>
-                  <div className="mt-3">
-                    <p className="text-3xl font-black text-amber-600 dark:text-amber-400 tracking-tight">
-                      {loading ? '...' : kpis.totalExams}
-                    </p>
-                    <div className="mt-2 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400 font-medium">
-                      <span className="truncate max-w-[150px]">
-                        {kpis.totalExams > 0 ? `${kpis.totalExams} Published Papers` : 'No papers created'}
+                  <div className="h-1.5 w-full bg-gradient-to-r from-[#F36C21] via-[#F59E0B] to-[#FB923C]" />
+                  <div className="p-5 flex-1 flex flex-col justify-between">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <span className="text-[11px] font-extrabold uppercase text-[#4E5969] dark:text-slate-400 tracking-wider">
+                          Exam Papers Created
+                        </span>
+                        <p className="text-3xl sm:text-4xl font-black text-[#F36C21] dark:text-amber-400 tracking-tight mt-2 tabular-nums">
+                          {loading ? '...' : kpis.totalExams}
+                        </p>
+                      </div>
+                      <span className="w-11 h-11 rounded-2xl bg-gradient-to-br from-[#F36C21] to-[#F59E0B] text-white flex items-center justify-center text-lg shadow-md shadow-orange-500/25 group-hover:scale-110 transition-transform shrink-0">
+                        📝
                       </span>
-                      <span className="text-amber-600 dark:text-amber-400 font-bold group-hover:underline">Q-Bank ➔</span>
+                    </div>
+                    <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                      <span className="px-2.5 py-0.5 rounded-full bg-orange-50 dark:bg-orange-950/50 text-[#F36C21] dark:text-amber-300 font-bold border border-orange-200/70 dark:border-orange-800/60 truncate max-w-[140px]">
+                        {kpis.totalExams > 0 ? `${kpis.totalExams} Published` : 'No papers yet'}
+                      </span>
+                      <span className="text-[#F36C21] dark:text-amber-400 font-bold group-hover:translate-x-0.5 transition-transform">
+                        Q-Bank Hub ➔
+                      </span>
                     </div>
                   </div>
                 </Link>

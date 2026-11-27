@@ -110,10 +110,11 @@ export class AuthService {
       }
     }
 
-    let resolvedSlug = tenantSlug ? this.tenantSchemaService.resolveTenantSlug(tenantSlug) : null;
+    const explicitTenantProvided = Boolean(tenantSlug && tenantSlug.trim());
+    let resolvedSlug = explicitTenantProvided ? this.tenantSchemaService.resolveTenantSlug(tenantSlug!) : null;
 
     // ── Smart Tenant Auto-Detection by Email Domain & User Scan ──
-    if (searchIdentifier.includes('@')) {
+    if (!explicitTenantProvided && searchIdentifier.includes('@')) {
       const emailDomain = searchIdentifier.split('@')[1].toLowerCase().trim();
       if (emailDomain && !emailDomain.includes('srms.ac.in') && !emailDomain.includes('srms.edu')) {
         try {
@@ -301,7 +302,7 @@ export class AuthService {
       user = rows[0];
 
       // Auto-recovery: If user is not found in the initial schema (e.g. user selected wrong college dropdown on login)
-      if (!user) {
+      if (!user && !explicitTenantProvided) {
         try {
           const schemaRows = await this.ds.query(
             `SELECT schema_name FROM information_schema.schemata WHERE schema_name LIKE 'tenant_%' AND schema_name != $1 ORDER BY schema_name ASC`,
@@ -544,12 +545,12 @@ export class AuthService {
         throw new ForbiddenException(`Account locked. Try again after ${unlockAt}`);
       }
 
-      if (user.password_hash) {
+      const hasExistingPasswordHash = Boolean(user.password_hash && String(user.password_hash).trim().length > 10); if (hasExistingPasswordHash) {
         isValid = await bcrypt.compare(dto.password, user.password_hash);
       }
 
       // Student default password fallback (registration number, roll number, or default)
-      if (!isValid && (user.role === 'STUDENT' || user.role === UserRole.STUDENT || user.registration_no || user.rollno || isStudent)) {
+      if (!isValid && !hasExistingPasswordHash && (user.role === 'STUDENT' || user.role === UserRole.STUDENT || user.registration_no || user.rollno || isStudent)) {
         const cleanPass = dto.password.trim().toLowerCase();
         const regNo = (user.registration_no || '').trim().toLowerCase();
         const rollNo = (user.rollno || '').trim().toLowerCase();
@@ -578,7 +579,7 @@ export class AuthService {
       }
 
       // Staff & Faculty default password fallback (Employee ID, 12345678, 123456, Temp@1234, password123, srms@123, faculty123, etc.)
-      if (!isValid && (user.role === 'FACULTY' || user.role === UserRole.FACULTY || user.faculty_id || user.emp_id || dto.role?.toUpperCase() === 'FACULTY' || dto.role?.toUpperCase() === 'HOD' || dto.role?.toUpperCase() === 'DQAC' || dto.role?.toUpperCase() === 'CLERK' || dto.role?.toUpperCase() === 'WARDEN' || dto.role?.toUpperCase() === 'ADMIN' || dto.role?.toUpperCase() === 'COLLEGE_ADMIN')) {
+      if (!isValid && !hasExistingPasswordHash && (user.role === 'FACULTY' || user.role === UserRole.FACULTY || user.faculty_id || user.emp_id || dto.role?.toUpperCase() === 'FACULTY' || dto.role?.toUpperCase() === 'HOD' || dto.role?.toUpperCase() === 'DQAC' || dto.role?.toUpperCase() === 'CLERK' || dto.role?.toUpperCase() === 'WARDEN' || dto.role?.toUpperCase() === 'ADMIN' || dto.role?.toUpperCase() === 'COLLEGE_ADMIN')) {
         const cleanPass = dto.password.trim().toLowerCase();
         const empId = (user.emp_id || '').trim().toLowerCase();
         const raw = rawInput.trim().toLowerCase();
@@ -641,11 +642,11 @@ export class AuthService {
       }
     }
 
-    if (!user || !isValid) {
+      if (!user) { throw new UnauthorizedException({ statusCode: 401, errorCode: 'INVALID_USER_ID', message: `User ID "${rawInput}" is not registered under "${resolvedSlug ? resolvedSlug.toUpperCase() : 'this institution'}". Please verify your ID or selected college.` }); } if (!isValid) { await this.handleFailedLogin(user.id, schema, user.failed_login_count ?? 0); throw new UnauthorizedException({ statusCode: 401, errorCode: 'INVALID_PASSWORD', message: 'Incorrect password. Please check your password and try again.' }); } /*
       if (user) {
         await this.handleFailedLogin(user.id, schema, user.failed_login_count ?? 0);
       }
-      throw new UnauthorizedException('Invalid credentials. Please check your ID / Username and Password.');
+      throw new UnauthorizedException('Invalid credentials. Please check your ID / Username and Password.'); } */ if (false) {
     }
 
     // ── ROLE CROSS-ACCESS ENFORCEMENT & MULTI-ROLE RIGHTS VALIDATION ──
